@@ -42,6 +42,8 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("Irrelevant", self.html)
         self.assertIn("Undo", self.html)
         self.assertIn("saveManualStatus", self.html)
+        self.assertIn("showUndoToast", self.html)
+        self.assertIn("targetStatus === currentStatus ? \"unreviewed\" : targetStatus", self.html)
         self.assertIn("manual-applied", self.html)
         self.assertIn("manual-irrelevant", self.html)
 

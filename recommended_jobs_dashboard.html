@@ -569,6 +569,50 @@
       opacity: 0.5;
     }
 
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: min(420px, calc(100vw - 28px));
+      padding: 10px 12px;
+      border: 1px solid rgba(23, 32, 42, 0.14);
+      border-radius: 8px;
+      background: #17202a;
+      color: #fff;
+      box-shadow: 0 12px 28px rgba(21, 33, 46, 0.24);
+      font-size: 0.86rem;
+      line-height: 1.35;
+      transform: translate(-50%, 18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translate(-50%, 0);
+      pointer-events: auto;
+    }
+
+    .toast button {
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.34);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .toast button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
     .empty {
       padding: 22px 12px;
       color: var(--muted);
@@ -721,6 +765,7 @@
 
     <section id="compactList" class="compact-list hidden" aria-label="Compact recommended jobs list"></section>
   </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script>
     const DATA_URL = "recommended_jobs_dashboard_data.json";
@@ -743,6 +788,7 @@
       data: emptyData(),
       apiAvailable: false,
       savingJobKey: "",
+      toastTimer: null,
       filters: {
         search: "",
         actionScope: "all",
@@ -789,7 +835,8 @@
       countApply: document.getElementById("countApply"),
       countGood: document.getElementById("countGood"),
       countLow: document.getElementById("countLow"),
-      countRejected: document.getElementById("countRejected")
+      countRejected: document.getElementById("countRejected"),
+      toast: document.getElementById("toast")
     };
 
     function emptyData() {
@@ -1169,8 +1216,7 @@
         openJobButton(job),
         copyLinkButton(job),
         actionButton("Applied", "applied", job, status, "Mark job as applied"),
-        actionButton("Irrelevant", "irrelevant", job, status, "Mark job as irrelevant"),
-        actionButton("Undo", "unreviewed", job, status, "Clear manual status")
+        actionButton("Irrelevant", "irrelevant", job, status, "Mark job as irrelevant")
       );
       return row;
     }
@@ -1205,9 +1251,12 @@
       button.type = "button";
       button.className = "job-action" + (targetStatus === currentStatus ? " active" : "") + (targetStatus === "irrelevant" ? " danger" : "");
       button.textContent = label;
-      button.title = state.apiAvailable ? title : "Run python serve_dashboard.py to save status";
+      const nextStatus = targetStatus === currentStatus ? "unreviewed" : targetStatus;
+      button.title = state.apiAvailable
+        ? (nextStatus === "unreviewed" ? "Click again to remove this status" : title)
+        : "Run python serve_dashboard.py to save status";
       button.disabled = !state.apiAvailable || state.savingJobKey === (safe(job.job_key) || jobIdentity(job));
-      button.addEventListener("click", () => saveManualStatus(job, targetStatus));
+      button.addEventListener("click", () => saveManualStatus(job, nextStatus, { previousStatus: currentStatus }));
       return button;
     }
 
@@ -1222,8 +1271,9 @@
       }
     }
 
-    async function saveManualStatus(job, status) {
+    async function saveManualStatus(job, status, options = {}) {
       const key = safe(job.job_key) || jobIdentity(job);
+      const previousStatus = options.previousStatus || manualStatus(job);
       state.savingJobKey = key;
       renderJobs();
       try {
@@ -1240,12 +1290,43 @@
         state.savingJobKey = "";
         state.apiAvailable = true;
         setStatus(state.data.active_run_id ? "live" : "", status === "unreviewed" ? "Status cleared" : "Status saved");
+        if (!options.silent) {
+          showUndoToast(job, previousStatus, status);
+        }
         render();
       } catch (error) {
         state.savingJobKey = "";
         setStatus("error", "Run python serve_dashboard.py to save status");
         renderJobs();
       }
+    }
+
+    function showUndoToast(job, previousStatus, newStatus) {
+      if (!els.toast) return;
+      window.clearTimeout(state.toastTimer);
+      els.toast.textContent = "";
+      const message = document.createElement("span");
+      const nextLabel = newStatus === "unreviewed" ? "Status cleared" : "Marked " + labelize(newStatus);
+      message.textContent = nextLabel + ".";
+      const undo = document.createElement("button");
+      undo.type = "button";
+      undo.textContent = "Undo";
+      undo.addEventListener("click", () => {
+        hideUndoToast();
+        saveManualStatus(job, previousStatus || "unreviewed", {
+          previousStatus: newStatus,
+          silent: true
+        });
+      });
+      els.toast.append(message, undo);
+      els.toast.classList.add("visible");
+      state.toastTimer = window.setTimeout(hideUndoToast, 5000);
+    }
+
+    function hideUndoToast() {
+      if (!els.toast) return;
+      window.clearTimeout(state.toastTimer);
+      els.toast.classList.remove("visible");
     }
 
     function badge(text, extraClass) {

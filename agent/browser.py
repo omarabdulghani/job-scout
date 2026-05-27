@@ -20,6 +20,7 @@ class BrowserController:
         browser_type: str = "chromium",
         executable_path: str | None = None,
         start_new_page: bool = False,
+        keep_in_front: bool = False,
     ):
         self.headless = headless
         self.profile_dir = profile_dir
@@ -28,6 +29,7 @@ class BrowserController:
         self.browser_type = (browser_type or "chromium").strip().lower()
         self.executable_path = executable_path
         self.start_new_page = bool(start_new_page)
+        self.keep_in_front = bool(keep_in_front)
         self.playwright = None
         self.browser: Browser = None
         self.context: BrowserContext = None
@@ -86,7 +88,8 @@ class BrowserController:
             if self.start_new_page or not self.context.pages
             else self.context.pages[0]
         )
-        await self.page.bring_to_front()
+        if self.keep_in_front:
+            await self.page.bring_to_front()
         print(f"Browser started ({self.browser_type})")
 
     async def close(self):
@@ -103,10 +106,10 @@ class BrowserController:
     async def goto(self, url: str):
         if self.page is None or self.page.is_closed():
             self.page = await self.context.new_page()
-        await self.page.bring_to_front()
         print(f"Navigating to {url}")
         await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        await self.page.bring_to_front()
+        if self.keep_in_front:
+            await self.page.bring_to_front()
         await self.human_delay(1, 2)
 
     async def screenshot_base64(self) -> str:

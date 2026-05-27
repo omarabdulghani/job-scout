@@ -35,9 +35,10 @@ class GeminiRetryableScoringError(RuntimeError):
 class HostedProviderRetryableScoringError(RuntimeError):
     """Retryable hosted-provider scoring failure."""
 
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, retry_after_seconds: int | None = None):
         super().__init__(message)
         self.kind = (kind or "unknown").strip().lower() or "unknown"
+        self.retry_after_seconds = retry_after_seconds
 
 
 SYSTEM_PROMPT = """You are an expert job application agent. You control a browser to apply for jobs on behalf of a user.
@@ -655,6 +656,11 @@ class JobBrain:
             preferences.get("openai_compatible_max_attempts", self.HOSTED_SCORING_MAX_ATTEMPTS),
             minimum=1,
         )
+        self.hosted_rate_limit_cooldown_seconds = self._env_int(
+            "HOSTED_RATE_LIMIT_COOLDOWN_SECONDS",
+            preferences.get("hosted_rate_limit_cooldown_seconds", 90),
+            minimum=5,
+        )
         self._lmstudio_api_models_cache = None
         self.gemini_client = None
         self.scoring_event_logger = None
@@ -662,6 +668,7 @@ class JobBrain:
         self._lmstudio_request_settings_logged = False
         self._gemini_request_settings_logged = False
         self._hosted_request_settings_logged = set()
+        self._hosted_backend_cooldowns = {}
         self._last_scoring_audit_snapshot = None
         self.profile_knowledge = self._build_profile_knowledge()
 
@@ -1598,6 +1605,49 @@ class JobBrain:
         delay = initial_delay * (2 ** exponent)
         return min(max_delay, delay)
 
+    def _retry_after_seconds_from_headers(self, headers) -> int | None:
+        if headers is None:
+            return None
+        for key in (
+            "retry-after",
+            "x-ratelimit-reset-tokens-minute",
+            "x-ratelimit-reset-requests-minute",
+            "x-ratelimit-reset-requests-day",
+        ):
+            value = None
+            try:
+                value = headers.get(key)
+            except Exception:
+                value = None
+            if value in ("", None):
+                continue
+            try:
+                return max(1, int(float(str(value).strip()) + 0.999))
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _cooldown_seconds_for_rate_limit(self, exc: Exception) -> int:
+        retry_after = getattr(exc, "retry_after_seconds", None)
+        if retry_after:
+            return max(10, min(300, int(retry_after) + 5))
+        return int(self.hosted_rate_limit_cooldown_seconds)
+
+    def _backend_cooldown_remaining_seconds(self, backend: str) -> int:
+        backend = self._normalize_scoring_backend(backend)
+        until = float(self._hosted_backend_cooldowns.get(backend, 0) or 0)
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            self._hosted_backend_cooldowns.pop(backend, None)
+            return 0
+        return max(1, int(remaining + 0.999))
+
+    def _cool_down_backend_after_rate_limit(self, backend: str, exc: Exception) -> int:
+        backend = self._normalize_scoring_backend(backend)
+        seconds = self._cooldown_seconds_for_rate_limit(exc)
+        self._hosted_backend_cooldowns[backend] = time.monotonic() + seconds
+        return seconds
+
     def _extract_openai_compatible_chat_text(self, payload: dict, *, label: str) -> str:
         choices = payload.get("choices") or []
         if not choices:
@@ -1676,7 +1726,11 @@ class JobBrain:
             )
             kind = self._classify_hosted_exception(RuntimeError(message))
             if kind in {"rate_limit", "transient_api_error", "api_error"}:
-                raise HostedProviderRetryableScoringError(kind, message) from exc
+                raise HostedProviderRetryableScoringError(
+                    kind,
+                    message,
+                    retry_after_seconds=self._retry_after_seconds_from_headers(exc.headers),
+                ) from exc
             raise RuntimeError(message) from exc
         except URLError as exc:
             raise HostedProviderRetryableScoringError(
@@ -1761,7 +1815,11 @@ class JobBrain:
             )
             kind = self._classify_hosted_exception(RuntimeError(message))
             if kind in {"rate_limit", "transient_api_error", "api_error"}:
-                raise HostedProviderRetryableScoringError(kind, message) from exc
+                raise HostedProviderRetryableScoringError(
+                    kind,
+                    message,
+                    retry_after_seconds=self._retry_after_seconds_from_headers(exc.headers),
+                ) from exc
             raise RuntimeError(message) from exc
         except URLError as exc:
             raise HostedProviderRetryableScoringError(
@@ -1799,6 +1857,7 @@ class JobBrain:
         *,
         backend: str,
         prompt: str,
+        fast_fail_rate_limit: bool = False,
     ) -> tuple[dict, str]:
         config = self._validate_hosted_scoring_config(backend)
         max_tokens = int(config.get("max_output_tokens") or self.HOSTED_SCORING_MAX_OUTPUT_TOKENS)
@@ -1821,12 +1880,21 @@ class JobBrain:
                 parsed = self._parse_scoring_payload(raw, backend=config["backend"])
                 return parsed, model_label
             except HostedProviderRetryableScoringError as exc:
+                if fast_fail_rate_limit and exc.kind == "rate_limit":
+                    raise
                 if attempt >= max_attempts:
-                    raise RuntimeError(
-                        f"{config['label']} scoring could not complete after {max_attempts} attempts: {str(exc).strip()}"
+                    raise HostedProviderRetryableScoringError(
+                        exc.kind,
+                        f"{config['label']} scoring could not complete after {max_attempts} attempts: {str(exc).strip()}",
+                        retry_after_seconds=exc.retry_after_seconds,
                     ) from exc
                 next_attempt = attempt + 1
                 delay_seconds = self._hosted_retry_delay_seconds(next_attempt)
+                if exc.retry_after_seconds:
+                    delay_seconds = min(
+                        int(self.HOSTED_SCORING_MAX_RETRY_DELAY_SECONDS),
+                        max(1, int(exc.retry_after_seconds)),
+                    )
                 self._log_scoring_event(
                     "retry",
                     (
@@ -1837,7 +1905,13 @@ class JobBrain:
                 time.sleep(delay_seconds)
                 attempt = next_attempt
 
-    def _request_backend_scoring_response(self, backend: str, *, prompt: str) -> tuple[dict, str]:
+    def _request_backend_scoring_response(
+        self,
+        backend: str,
+        *,
+        prompt: str,
+        fast_fail_rate_limit: bool = False,
+    ) -> tuple[dict, str]:
         backend = self._normalize_scoring_backend(backend)
         if backend == "gemini":
             return self._request_gemini_scoring_response_with_retries(
@@ -1848,6 +1922,7 @@ class JobBrain:
             return self._request_hosted_scoring_response_with_retries(
                 backend=backend,
                 prompt=prompt,
+                fast_fail_rate_limit=fast_fail_rate_limit,
             )
         if backend == "lmstudio":
             parsed, model_label = self._request_lmstudio_scoring_response_with_retries(
@@ -1869,16 +1944,64 @@ class JobBrain:
 
         errors: list[str] = []
         for index, backend in enumerate(backends):
+            remaining = self._backend_cooldown_remaining_seconds(backend)
+            if remaining:
+                errors.append(
+                    f"{self._hosted_model_label(backend)}: cooling down after rate limit ({remaining}s remaining)"
+                )
+                self._log_scoring_event(
+                    "fallback",
+                    (
+                        f"Skipping {self._hosted_model_label(backend)} for {remaining}s "
+                        "after rate limit; trying next AI backend."
+                    ),
+                )
+                continue
             try:
                 if index > 0:
                     self._log_scoring_event(
                         "fallback",
                         f"Trying fallback AI backend: {self._hosted_model_label(backend)}",
                     )
-                return self._request_backend_scoring_response(backend, prompt=prompt)
+                return self._request_backend_scoring_response(
+                    backend,
+                    prompt=prompt,
+                    fast_fail_rate_limit=True,
+                )
+            except HostedProviderRetryableScoringError as exc:
+                message = str(exc).strip()
+                errors.append(f"{self._hosted_model_label(backend)}: {message}")
+                if exc.kind == "rate_limit":
+                    cooldown_seconds = self._cool_down_backend_after_rate_limit(backend, exc)
+                    self._log_scoring_event(
+                        "fallback",
+                        (
+                            f"{self._hosted_model_label(backend)} rate-limited; "
+                            f"cooling down for {cooldown_seconds}s before retrying this backend."
+                        ),
+                    )
+                if index < len(backends) - 1:
+                    self._log_scoring_event(
+                        "fallback",
+                        (
+                            f"{self._hosted_model_label(backend)} failed; "
+                            f"falling back to {self._hosted_model_label(backends[index + 1])}"
+                        ),
+                    )
+                    continue
+                break
             except Exception as exc:
                 message = str(exc).strip()
                 errors.append(f"{self._hosted_model_label(backend)}: {message}")
+                if self._classify_hosted_exception(exc) == "rate_limit":
+                    cooldown_seconds = self._cool_down_backend_after_rate_limit(backend, exc)
+                    self._log_scoring_event(
+                        "fallback",
+                        (
+                            f"{self._hosted_model_label(backend)} rate-limited; "
+                            f"cooling down for {cooldown_seconds}s before retrying this backend."
+                        ),
+                    )
                 if index < len(backends) - 1:
                     self._log_scoring_event(
                         "fallback",

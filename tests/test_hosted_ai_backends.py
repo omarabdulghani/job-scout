@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from agent.brain import JobBrain
+from agent.brain import HostedProviderRetryableScoringError, JobBrain
 
 
 class FakeHTTPResponse:
@@ -181,7 +181,7 @@ class HostedAIBackendTests(unittest.TestCase):
 
         calls = []
 
-        def fake_request(backend, *, prompt):
+        def fake_request(backend, *, prompt, fast_fail_rate_limit=False):
             calls.append((backend, prompt))
             if backend == "cerebras":
                 raise RuntimeError("quota reached")
@@ -199,6 +199,42 @@ class HostedAIBackendTests(unittest.TestCase):
         self.assertEqual([call[0] for call in calls], ["cerebras", "gemini"])
         self.assertEqual(model_label, "gemini:gemini-test-model")
         self.assertEqual(parsed["interview_probability_score"], 72)
+
+    def test_auto_backend_cools_down_rate_limited_provider(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AI_BACKEND": "auto",
+                "AI_BACKEND_ORDER": "cerebras,ollama_cloud",
+                "CEREBRAS_API_KEY": "test-cerebras-key",
+                "OLLAMA_API_KEY": "test-ollama-key",
+                "HOSTED_RATE_LIMIT_COOLDOWN_SECONDS": "30",
+            },
+            clear=True,
+        ):
+            brain = JobBrain({}, {})
+
+        calls = []
+
+        def fake_request(backend, *, prompt, fast_fail_rate_limit=False):
+            calls.append(backend)
+            if backend == "cerebras":
+                raise HostedProviderRetryableScoringError("rate_limit", "Cerebras quota reached")
+            return (
+                {
+                    "interview_probability_score": 66,
+                    "reason": "Fallback scorer worked.",
+                },
+                "ollama_cloud:gpt-oss:120b",
+            )
+
+        with patch.object(brain, "_request_backend_scoring_response", side_effect=fake_request):
+            brain._request_auto_scoring_response(prompt="first")
+            parsed, model_label = brain._request_auto_scoring_response(prompt="second")
+
+        self.assertEqual(calls, ["cerebras", "ollama_cloud", "ollama_cloud"])
+        self.assertEqual(model_label, "ollama_cloud:gpt-oss:120b")
+        self.assertEqual(parsed["interview_probability_score"], 66)
 
     def test_score_cache_accepts_all_auto_provider_model_labels(self):
         with patch.dict(
