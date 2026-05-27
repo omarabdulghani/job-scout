@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+
+data/*
+!data/portfolio_site_notes.txt
+cv/*.pdf
+config/profile.local.json
+
+.playwright/
+.pytest_cache/
+logs/
+*.log
+
+# Runtime output and local scouting state
+high_success_probability_jobs.json
+recommended_jobs_dashboard_data.json
+recommended_jobs_dashboard_user_state.json
+rejected_jobs_debug.json
+review_latest_jobs.json
+scored_jobs_cache.json
+scout_ai_debug.json
+scout_collected_jobs.json
+scout_progress.json
+scout_run_history.json
