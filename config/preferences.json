@@ -180,7 +180,17 @@
       "max_titles_per_search": 8,
       "max_jobs_to_collect": 25,
       "search_titles_without_seniority": true,
-      "distance_configurable": true
+      "distance_configurable": true,
+      "fresh_scout": {
+        "max_pages_per_query": 4,
+        "known_ratio_continue_threshold": 0.8,
+        "duplicate_heavy_stop_threshold": 0.9,
+        "stop_after_duplicate_heavy_pages": 2,
+        "min_new_jobs_per_useful_query": 5,
+        "target_apply_first_jobs": 8,
+        "target_good_or_better_jobs": 20,
+        "global_new_jobs_soft_cap": 140
+      }
     },
     "indeed": {
       "enabled": false,

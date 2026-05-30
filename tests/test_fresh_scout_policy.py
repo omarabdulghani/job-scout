@@ -43,6 +43,24 @@ class FreshScoutPolicyTests(unittest.TestCase):
         self.assertEqual(policy.target_good_or_better_jobs, 15)
         self.assertEqual(policy.global_new_jobs_soft_cap, 60)
 
+    def test_linkedin_specific_preferences_override_defaults(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "job_boards": {
+                    "linkedin": {
+                        "fresh_scout": {
+                            "min_new_jobs_per_useful_query": 5,
+                            "global_new_jobs_soft_cap": 140,
+                        }
+                    }
+                }
+            },
+            enabled=True,
+        )
+
+        self.assertEqual(policy.min_new_jobs_per_useful_query, 5)
+        self.assertEqual(policy.global_new_jobs_soft_cap, 140)
+
     def test_panel_label_is_clear_when_enabled_or_disabled(self):
         self.assertEqual(FreshScoutPolicy.from_preferences({}, enabled=False).panel_label(), "disabled")
 
