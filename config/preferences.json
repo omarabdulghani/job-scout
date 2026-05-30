@@ -189,7 +189,15 @@
         "min_new_jobs_per_useful_query": 5,
         "target_apply_first_jobs": 8,
         "target_good_or_better_jobs": 20,
-        "global_new_jobs_soft_cap": 140
+        "global_new_jobs_soft_cap": 140,
+        "ai_budget_guard_enabled": true,
+        "ai_calls_quality_check": 40,
+        "min_apply_first_after_ai_quality_check": 2,
+        "min_good_or_better_after_ai_quality_check": 5,
+        "ai_calls_strict_check": 80,
+        "min_apply_first_after_ai_strict_check": 4,
+        "min_good_or_better_after_ai_strict_check": 10,
+        "ai_calls_soft_cap": 120
       }
     },
     "indeed": {

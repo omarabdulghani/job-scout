@@ -17,6 +17,14 @@ class FreshScoutPolicy:
     target_apply_first_jobs: int = 8
     target_good_or_better_jobs: int = 20
     global_new_jobs_soft_cap: int = 80
+    ai_budget_guard_enabled: bool = True
+    ai_calls_quality_check: int = 40
+    min_apply_first_after_ai_quality_check: int = 2
+    min_good_or_better_after_ai_quality_check: int = 5
+    ai_calls_strict_check: int = 80
+    min_apply_first_after_ai_strict_check: int = 4
+    min_good_or_better_after_ai_strict_check: int = 10
+    ai_calls_soft_cap: int = 120
 
     @classmethod
     def from_preferences(cls, preferences: dict[str, Any] | None, *, enabled: bool = False) -> "FreshScoutPolicy":
@@ -63,6 +71,53 @@ class FreshScoutPolicy:
                 "global_new_jobs_soft_cap",
                 cls.global_new_jobs_soft_cap,
             ),
+            ai_budget_guard_enabled=_bool_setting(
+                raw,
+                "ai_budget_guard_enabled",
+                cls.ai_budget_guard_enabled,
+            ),
+            ai_calls_quality_check=_int_setting(
+                raw,
+                "ai_calls_quality_check",
+                cls.ai_calls_quality_check,
+                minimum=0,
+            ),
+            min_apply_first_after_ai_quality_check=_int_setting(
+                raw,
+                "min_apply_first_after_ai_quality_check",
+                cls.min_apply_first_after_ai_quality_check,
+                minimum=0,
+            ),
+            min_good_or_better_after_ai_quality_check=_int_setting(
+                raw,
+                "min_good_or_better_after_ai_quality_check",
+                cls.min_good_or_better_after_ai_quality_check,
+                minimum=0,
+            ),
+            ai_calls_strict_check=_int_setting(
+                raw,
+                "ai_calls_strict_check",
+                cls.ai_calls_strict_check,
+                minimum=0,
+            ),
+            min_apply_first_after_ai_strict_check=_int_setting(
+                raw,
+                "min_apply_first_after_ai_strict_check",
+                cls.min_apply_first_after_ai_strict_check,
+                minimum=0,
+            ),
+            min_good_or_better_after_ai_strict_check=_int_setting(
+                raw,
+                "min_good_or_better_after_ai_strict_check",
+                cls.min_good_or_better_after_ai_strict_check,
+                minimum=0,
+            ),
+            ai_calls_soft_cap=_int_setting(
+                raw,
+                "ai_calls_soft_cap",
+                cls.ai_calls_soft_cap,
+                minimum=0,
+            ),
         )
         return policy._normalized()
 
@@ -79,6 +134,14 @@ class FreshScoutPolicy:
             target_apply_first_jobs=max(1, self.target_apply_first_jobs),
             target_good_or_better_jobs=max(1, target_good),
             global_new_jobs_soft_cap=max(1, self.global_new_jobs_soft_cap),
+            ai_budget_guard_enabled=bool(self.ai_budget_guard_enabled),
+            ai_calls_quality_check=max(0, self.ai_calls_quality_check),
+            min_apply_first_after_ai_quality_check=max(0, self.min_apply_first_after_ai_quality_check),
+            min_good_or_better_after_ai_quality_check=max(0, self.min_good_or_better_after_ai_quality_check),
+            ai_calls_strict_check=max(0, self.ai_calls_strict_check),
+            min_apply_first_after_ai_strict_check=max(0, self.min_apply_first_after_ai_strict_check),
+            min_good_or_better_after_ai_strict_check=max(0, self.min_good_or_better_after_ai_strict_check),
+            ai_calls_soft_cap=max(0, self.ai_calls_soft_cap),
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -92,6 +155,14 @@ class FreshScoutPolicy:
             "target_apply_first_jobs": self.target_apply_first_jobs,
             "target_good_or_better_jobs": self.target_good_or_better_jobs,
             "global_new_jobs_soft_cap": self.global_new_jobs_soft_cap,
+            "ai_budget_guard_enabled": self.ai_budget_guard_enabled,
+            "ai_calls_quality_check": self.ai_calls_quality_check,
+            "min_apply_first_after_ai_quality_check": self.min_apply_first_after_ai_quality_check,
+            "min_good_or_better_after_ai_quality_check": self.min_good_or_better_after_ai_quality_check,
+            "ai_calls_strict_check": self.ai_calls_strict_check,
+            "min_apply_first_after_ai_strict_check": self.min_apply_first_after_ai_strict_check,
+            "min_good_or_better_after_ai_strict_check": self.min_good_or_better_after_ai_strict_check,
+            "ai_calls_soft_cap": self.ai_calls_soft_cap,
         }
 
     def panel_label(self) -> str:
@@ -105,7 +176,8 @@ class FreshScoutPolicy:
             f"{self._pct(self.duplicate_heavy_stop_threshold)} known; "
             f"targets {self.target_apply_first_jobs} APPLY FIRST / "
             f"{self.target_good_or_better_jobs} good+; "
-            f"cap {self.global_new_jobs_soft_cap} new jobs)"
+            f"cap {self.global_new_jobs_soft_cap} new jobs; "
+            f"AI guard {'on' if self.ai_budget_guard_enabled else 'off'})"
         )
 
     @staticmethod
@@ -128,6 +200,19 @@ def _ratio_setting(settings: dict[str, Any], key: str, default: float) -> float:
     if value > 1:
         value = value / 100
     return _clamp_ratio(value)
+
+
+def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
+    value = settings.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
 
 
 def _clamp_ratio(value: float) -> float:

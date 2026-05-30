@@ -230,10 +230,12 @@ def _fresh_recommendation_counts(reports: list[dict], scout: LinkedInJobScout) -
     apply_first = 0
     good_or_better = 0
     new_jobs_seen = 0
+    ai_calls = 0
 
     for report in reports:
         stats = report.get("stats", {}) or {}
         new_jobs_seen += int(stats.get("job_cards_collected", 0) or 0)
+        ai_calls += _fresh_ai_calls_from_stats(stats)
         for bucket_name, job in _iter_report_jobs(report):
             if bucket_name not in {"new_recommendations", "cached_previous_recommendations"}:
                 continue
@@ -256,7 +258,66 @@ def _fresh_recommendation_counts(reports: list[dict], scout: LinkedInJobScout) -
         "apply_first": apply_first,
         "good_or_better": good_or_better,
         "new_jobs_seen": new_jobs_seen,
+        "ai_calls": ai_calls,
     }
+
+
+def _fresh_ai_calls_from_stats(stats: dict) -> int:
+    explicit_keys = {"ai_scored_new", "ai_cache_refreshed", "ai_cache_reused", "ai_errors"}
+    if any(key in stats for key in explicit_keys):
+        return sum(
+            int(stats.get(key, 0) or 0)
+            for key in ("ai_scored_new", "ai_cache_refreshed", "ai_errors")
+        )
+    return int(stats.get("survived_non_ai", 0) or 0)
+
+
+def _fresh_ai_budget_stop_reason(counts: dict[str, int], policy: FreshScoutPolicy) -> str:
+    if not policy.ai_budget_guard_enabled:
+        return ""
+
+    ai_calls = int(counts.get("ai_calls", 0) or 0)
+    apply_first = int(counts.get("apply_first", 0) or 0)
+    good_or_better = int(counts.get("good_or_better", 0) or 0)
+
+    if (
+        policy.ai_calls_quality_check
+        and ai_calls >= policy.ai_calls_quality_check
+        and apply_first < policy.min_apply_first_after_ai_quality_check
+        and good_or_better < policy.min_good_or_better_after_ai_quality_check
+    ):
+        return (
+            "AI budget guard: "
+            f"{ai_calls} model call(s) produced only {apply_first} APPLY FIRST / "
+            f"{good_or_better} GOOD+ jobs "
+            f"(minimum {policy.min_apply_first_after_ai_quality_check} APPLY FIRST or "
+            f"{policy.min_good_or_better_after_ai_quality_check} GOOD+ after "
+            f"{policy.ai_calls_quality_check} calls)"
+        )
+
+    if (
+        policy.ai_calls_strict_check
+        and ai_calls >= policy.ai_calls_strict_check
+        and apply_first < policy.min_apply_first_after_ai_strict_check
+        and good_or_better < policy.min_good_or_better_after_ai_strict_check
+    ):
+        return (
+            "AI budget guard: "
+            f"{ai_calls} model call(s) produced only {apply_first} APPLY FIRST / "
+            f"{good_or_better} GOOD+ jobs "
+            f"(minimum {policy.min_apply_first_after_ai_strict_check} APPLY FIRST or "
+            f"{policy.min_good_or_better_after_ai_strict_check} GOOD+ after "
+            f"{policy.ai_calls_strict_check} calls)"
+        )
+
+    if policy.ai_calls_soft_cap and ai_calls >= policy.ai_calls_soft_cap:
+        return (
+            "AI budget guard: "
+            f"processed {ai_calls} model call(s) before reaching fresh quality targets "
+            f"(soft cap {policy.ai_calls_soft_cap})"
+        )
+
+    return ""
 
 
 def _fresh_global_stop_reason(
@@ -277,6 +338,9 @@ def _fresh_global_stop_reason(
             f"(target {policy.target_good_or_better_jobs})",
             counts,
         )
+    budget_reason = _fresh_ai_budget_stop_reason(counts, policy)
+    if budget_reason:
+        return budget_reason, counts
     if counts["new_jobs_seen"] >= policy.global_new_jobs_soft_cap:
         return (
             f"processed {counts['new_jobs_seen']} fresh job cards "
@@ -931,6 +995,7 @@ async def main():
                         current_query=query,
                         pages_scanned=cumulative_pages,
                         fresh_jobs_seen=int(fresh_stop_counts.get("new_jobs_seen", 0) or cumulative_jobs),
+                        ai_scored=int(fresh_stop_counts.get("ai_calls", 0) or 0),
                         apply_first=int(fresh_stop_counts.get("apply_first", 0) or 0),
                         good_or_better=int(fresh_stop_counts.get("good_or_better", 0) or 0),
                         stopped_early=True,
@@ -992,6 +1057,9 @@ async def main():
             merged_output.setdefault("stats", {})["fresh_new_jobs_seen"] = int(
                 fresh_counts.get("new_jobs_seen", 0) or 0
             )
+            merged_output.setdefault("stats", {})["fresh_ai_calls"] = int(
+                fresh_counts.get("ai_calls", 0) or 0
+            )
         _write_output(merged_output)
         review_writer.write(merged_output, reports=reports)
         try:
@@ -1038,6 +1106,7 @@ async def main():
             update_live_progress(
                 phase="completed",
                 total_queries=len(queries),
+                ai_scored=int((fresh_stop_counts or {}).get("ai_calls", 0) or 0),
                 stopped_early=bool(fresh_stop_reason),
                 stop_reason=fresh_stop_reason,
             )

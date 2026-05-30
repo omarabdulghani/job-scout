@@ -199,6 +199,7 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
         fresh_apply_first = 0
         fresh_good_or_better = 0
         fresh_new_jobs_seen = 0
+        fresh_ai_calls = 0
         if final_stats:
             accepted = int(
                 final_stats.get("accepted_after_ai")
@@ -230,6 +231,7 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
             fresh_apply_first = int(final_stats.get("fresh_apply_first_jobs", 0) or 0)
             fresh_good_or_better = int(final_stats.get("fresh_good_or_better_jobs", 0) or 0)
             fresh_new_jobs_seen = int(final_stats.get("fresh_new_jobs_seen", 0) or 0)
+            fresh_ai_calls = int(final_stats.get("fresh_ai_calls", 0) or 0)
 
         self.console.print(Text("--- RUN SUMMARY ---", style="bold bright_cyan"))
         self._summary_line("Collected", counters.collected, "bright_cyan")
@@ -252,6 +254,7 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
             self._summary_line("Fresh APPLY FIRST", fresh_apply_first, "green")
             self._summary_line("Fresh good or better", fresh_good_or_better, "green")
             self._summary_line("Fresh new jobs seen", fresh_new_jobs_seen, "bright_cyan")
+            self._summary_line("Fresh AI calls", fresh_ai_calls, "bright_cyan")
         if completed_at:
             self._summary_line("Completed at", completed_at, "bright_cyan")
         self.console.print(Text("-------------------", style="bold bright_cyan"))
