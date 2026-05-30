@@ -194,6 +194,11 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
         previously_analyzed_skipped = counters.previously_analyzed_skipped
         previously_analyzed_skipped_at_card_stage = counters.previously_analyzed_skipped_at_card_stage
         duplicate_job_records_prevented = counters.duplicate_job_records_prevented
+        fresh_stopped_early = False
+        fresh_stop_reason = ""
+        fresh_apply_first = 0
+        fresh_good_or_better = 0
+        fresh_new_jobs_seen = 0
         if final_stats:
             accepted = int(
                 final_stats.get("accepted_after_ai")
@@ -220,6 +225,11 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
             duplicate_job_records_prevented = int(
                 final_stats.get("duplicate_job_records_prevented", duplicate_job_records_prevented) or 0
             )
+            fresh_stopped_early = bool(final_stats.get("fresh_stopped_early"))
+            fresh_stop_reason = str(final_stats.get("fresh_stop_reason", "") or "").strip()
+            fresh_apply_first = int(final_stats.get("fresh_apply_first_jobs", 0) or 0)
+            fresh_good_or_better = int(final_stats.get("fresh_good_or_better_jobs", 0) or 0)
+            fresh_new_jobs_seen = int(final_stats.get("fresh_new_jobs_seen", 0) or 0)
 
         self.console.print(Text("--- RUN SUMMARY ---", style="bold bright_cyan"))
         self._summary_line("Collected", counters.collected, "bright_cyan")
@@ -237,6 +247,11 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
             "yellow",
         )
         self._summary_line("Duplicate records prevented", duplicate_job_records_prevented, "magenta")
+        if fresh_stopped_early or fresh_stop_reason:
+            self._summary_line("Fresh stop", fresh_stop_reason or "fresh target reached", "green")
+            self._summary_line("Fresh APPLY FIRST", fresh_apply_first, "green")
+            self._summary_line("Fresh good or better", fresh_good_or_better, "green")
+            self._summary_line("Fresh new jobs seen", fresh_new_jobs_seen, "bright_cyan")
         if completed_at:
             self._summary_line("Completed at", completed_at, "bright_cyan")
         self.console.print(Text("-------------------", style="bold bright_cyan"))
@@ -257,6 +272,9 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
         new_cards: int,
         total_collected: int,
         results_layout_type: str = "",
+        cards_seen: int = 0,
+        known_cards: int = 0,
+        known_ratio: float = 0.0,
     ) -> None:
         self._current_phase = "collecting"
         self.current_page = max(self.current_page, int(page_number or 0))
@@ -265,7 +283,19 @@ class ScoutConsoleReporter(NullScoutConsoleReporter):
         if results_layout_type:
             self.results_layout_types.add(results_layout_type)
         total_label = self.current_query_page_label
-        self.log("PAGE", f"Page {page_number}/{total_label} scanned | new={new_cards}", style="bright_blue")
+        if cards_seen:
+            known_percent = round(float(known_ratio or 0) * 100)
+            self.log(
+                "PAGE",
+                (
+                    f"Page {page_number}/{total_label} scanned | "
+                    f"cards={cards_seen} known={known_cards} new={new_cards} "
+                    f"known_ratio={known_percent}%"
+                ),
+                style="bright_blue",
+            )
+        else:
+            self.log("PAGE", f"Page {page_number}/{total_label} scanned | new={new_cards}", style="bright_blue")
         self._emit_live_status(force=True)
 
     def record_collected_import(self, *, total_collected: int) -> None:

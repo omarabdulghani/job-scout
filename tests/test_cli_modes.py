@@ -1,8 +1,13 @@
 import argparse
 import contextlib
 import io
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 import urllib.parse
+
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from agent.scout_cli_modes import (
     add_board_mode_arguments,
@@ -14,6 +19,9 @@ from agent.scout_cli_modes import (
 from agent.browser import BrowserController
 from agent.indeed_job_scout import IndeedJobScout
 from scrapers.indeed import IndeedScraper
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ScoutCliModeTests(unittest.TestCase):
@@ -104,6 +112,24 @@ class IndeedUrlTests(unittest.TestCase):
         )
 
 
+class FreshCliFlagTests(unittest.TestCase):
+    def _help_output(self, script_name: str) -> str:
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / script_name), "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return completed.stdout
+
+    def test_single_query_cli_exposes_fresh_flag(self):
+        self.assertIn("--fresh", self._help_output("scout_jobs.py"))
+
+    def test_multi_query_cli_exposes_fresh_flag(self):
+        self.assertIn("--fresh", self._help_output("scout_jobs_multi.py"))
+
+
 class BrowserControllerConfigTests(unittest.TestCase):
     def test_firefox_engine_can_use_dedicated_profile_config(self):
         browser = BrowserController(
@@ -117,6 +143,61 @@ class BrowserControllerConfigTests(unittest.TestCase):
         self.assertEqual(browser.profile_dir, "data/indeed_browser_profile")
         self.assertFalse(browser.use_automation_overrides)
         self.assertTrue(browser.start_new_page)
+
+
+class FakeNavigationPage:
+    def __init__(self, *, target_visible_after_timeout: bool):
+        self.url = "https://www.linkedin.com/jobs/view/old-job/"
+        self.goto_calls = 0
+        self.evaluate_calls = 0
+        self.target_visible_after_timeout = target_visible_after_timeout
+
+    def is_closed(self):
+        return False
+
+    async def goto(self, url, wait_until=None, timeout=None):
+        self.goto_calls += 1
+        if self.goto_calls == 1:
+            if self.target_visible_after_timeout:
+                self.url = url
+            raise PlaywrightTimeoutError("navigation timed out")
+        self.url = url
+
+    async def wait_for_selector(self, selector, timeout=None):
+        if selector == "body" and self.target_visible_after_timeout:
+            return object()
+        raise PlaywrightTimeoutError("body not visible")
+
+    async def evaluate(self, script):
+        self.evaluate_calls += 1
+
+
+class FakeNavigationContext:
+    async def new_page(self):
+        return FakeNavigationPage(target_visible_after_timeout=False)
+
+
+class BrowserControllerNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_goto_continues_when_timeout_landed_on_target_page(self):
+        browser = BrowserController(use_human_delays=False)
+        browser.context = FakeNavigationContext()
+        browser.page = FakeNavigationPage(target_visible_after_timeout=True)
+
+        await browser.goto("https://www.linkedin.com/feed/")
+
+        self.assertEqual(browser.page.goto_calls, 1)
+        self.assertEqual(browser.page.url, "https://www.linkedin.com/feed/")
+
+    async def test_goto_retries_when_timeout_did_not_reach_target_page(self):
+        browser = BrowserController(use_human_delays=False)
+        browser.context = FakeNavigationContext()
+        browser.page = FakeNavigationPage(target_visible_after_timeout=False)
+
+        await browser.goto("https://www.linkedin.com/feed/")
+
+        self.assertEqual(browser.page.goto_calls, 2)
+        self.assertEqual(browser.page.evaluate_calls, 1)
+        self.assertEqual(browser.page.url, "https://www.linkedin.com/feed/")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from agent.browser import BrowserController
+from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.indeed_job_scout import IndeedJobScout
 from agent.job_scout import LinkedInJobScout
 from agent.scout_cli_modes import (
@@ -110,6 +111,11 @@ async def main():
         default="2",
         help="How many result pages to scan: 1, 2, or 'all'.",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Enable Smart Fresh Scout mode. Dynamic fresh-run behavior is added in follow-up steps.",
+    )
     parser.add_argument("--pages", dest="legacy_pages", help=argparse.SUPPRESS)
     parser.add_argument(
         "--human-mode",
@@ -171,8 +177,12 @@ async def main():
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
     profile, preferences = load_config()
+    fresh_policy = FreshScoutPolicy.from_preferences(preferences, enabled=args.fresh)
     max_pages_value = args.legacy_pages if args.legacy_pages is not None else args.max_pages
     effective_pages, page_label = _parse_max_pages(max_pages_value)
+    if fresh_policy.enabled:
+        effective_pages = fresh_policy.max_pages_per_query
+        page_label = f"smart up to {fresh_policy.max_pages_per_query}"
     progress_store = ScoutProgressStore()
     if args.reset_progress:
         progress_store.clear()
@@ -250,6 +260,7 @@ async def main():
             f"Query: {args.query}\n"
             f"Location: {args.location}\n"
             f"Pages: {page_label}\n"
+            f"Fresh mode: {fresh_policy.panel_label()}\n"
             f"Browser: {args.browser}\n"
             f"Interaction: {'human-like' if args.human_mode or board_mode == 'indeed' else 'fast'}\n"
             f"AI Backend: {ai_backend_label}\n"
@@ -320,7 +331,13 @@ async def main():
 
             current_query_pages = {"value": 0}
 
-            def on_page_scanned(query: str, page_number: int, pages_scanned: int, total_jobs_collected: int):
+            def on_page_scanned(
+                query: str,
+                page_number: int,
+                pages_scanned: int,
+                total_jobs_collected: int,
+                page_quality: dict | None = None,
+            ):
                 current_query_pages["value"] = pages_scanned
                 save_progress(
                     status="in_progress",
@@ -329,6 +346,7 @@ async def main():
                     current_query=query,
                     current_page_number=page_number,
                     last_completed_page_number=page_number,
+                    last_page_quality=page_quality or {},
                     total_pages_processed=stable_pages + pages_scanned,
                     total_jobs_processed=stable_jobs,
                 )
@@ -357,6 +375,7 @@ async def main():
                 live_result_callback=on_live_result if live_dashboard else None,
                 run_started_at=run_started_at,
                 description_only=args.description_only,
+                fresh_policy=fresh_policy,
             )
             stats_for_progress = report.get("stats", {})
             save_progress(

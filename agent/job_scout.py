@@ -11,6 +11,7 @@ from pathlib import Path
 
 from agent.brain import JobBrain
 from agent.description_log import DescriptionLogWriter
+from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.scout_collected_jobs import ScoutCollectedJobsStore
 from agent.scout_console_reporter import NullScoutConsoleReporter
 from agent.scout_run_history import ScoutRunHistoryStore
@@ -741,6 +742,7 @@ class LinkedInJobScout:
         self.job_tracking = JobTrackingStore(self.tracking_status_path)
         self.run_history = ScoutRunHistoryStore(self.run_history_path)
         self.reporter = reporter or NullScoutConsoleReporter()
+        self._page_quality_records: list[dict] = []
         self.description_log_writer: DescriptionLogWriter | None = None
         self.ai_payload_audit_enabled = self._env_bool("SCOUT_AI_PAYLOAD_AUDIT", False)
         self.ai_payload_audit_limit = self._env_int("SCOUT_AI_PAYLOAD_AUDIT_LIMIT", 5, minimum=1)
@@ -774,12 +776,16 @@ class LinkedInJobScout:
         live_result_callback=None,
         run_started_at: str | None = None,
         description_only: bool = False,
+        fresh_policy: FreshScoutPolicy | None = None,
     ) -> dict:
         query = (query or "").strip()
         if not query:
             raise ValueError("A search query is required.")
 
+        fresh_policy = fresh_policy if fresh_policy and fresh_policy.enabled else None
         page_limit = None if max_pages is None else max(1, int(max_pages or 1))
+        if fresh_policy:
+            page_limit = max(1, int(fresh_policy.max_pages_per_query or 1))
         self._reset_human_mode_state(enabled=human_mode)
         self._reset_global_known_job_counters()
         if description_only:
@@ -791,6 +797,7 @@ class LinkedInJobScout:
 
         self._search_urls_used = []
         self._results_layout_types_encountered = []
+        self._page_quality_records = []
         run_started_at = run_started_at or datetime.now().astimezone().isoformat()
         processing_state = self._new_processing_state(
             query=query,
@@ -808,6 +815,7 @@ class LinkedInJobScout:
             max_pages=page_limit,
             start_page=max(1, int(start_page or 1)),
             page_scanned_callback=page_scanned_callback,
+            fresh_policy=fresh_policy,
         ):
             await self._process_summaries_to_output(
                 query=query,
@@ -1258,6 +1266,7 @@ class LinkedInJobScout:
                 "ai_scoring_version": self.AI_SCORING_VERSION,
                 "perfect_job_profile_path": str(self.perfect_job_profile_path),
                 "search_urls_used": [],
+                "page_quality": [],
                 "job_cards_collected": initial_job_count,
                 "preopen_skipped_total": 0,
                 "skipped_preopen_outside_netherlands": 0,
@@ -1328,6 +1337,7 @@ class LinkedInJobScout:
         else:
             processing_state["stats"]["pages_scanned"] = pages_scanned
             processing_state["stats"]["job_cards_collected"] += len(summaries)
+        processing_state["stats"]["page_quality"] = list(self._page_quality_records)
 
         new_recommendations = processing_state["new_recommendations"]
         cached_previous_recommendations = processing_state["cached_previous_recommendations"]
@@ -1719,6 +1729,7 @@ class LinkedInJobScout:
 
         processing_state["cache_dirty"] = cache_dirty
         stats["pages_scanned"] = pages_scanned
+        stats["page_quality"] = list(self._page_quality_records)
         if not finalize:
             return {
                 "started_at": run_started_at,
@@ -1743,6 +1754,7 @@ class LinkedInJobScout:
         stats["accepted_after_ai"] = stats["accepted"]
         stats["search_urls_used"] = list(self._search_urls_used)
         stats["results_layout_types"] = list(self._results_layout_types_encountered)
+        stats["page_quality"] = list(self._page_quality_records)
         stats["previously_analyzed_jobs_skipped"] = int(
             self._known_job_counters.get("previously_analyzed_jobs_skipped", 0) or 0
         )
@@ -1842,6 +1854,7 @@ class LinkedInJobScout:
         max_pages: int | None,
         start_page: int = 1,
         page_scanned_callback=None,
+        fresh_policy: FreshScoutPolicy | None = None,
     ) -> tuple[list[dict], int]:
         all_jobs = []
         pages_scanned = 0
@@ -1851,6 +1864,7 @@ class LinkedInJobScout:
             max_pages=max_pages,
             start_page=start_page,
             page_scanned_callback=page_scanned_callback,
+            fresh_policy=fresh_policy,
         ):
             all_jobs.extend(page_jobs)
         return all_jobs, pages_scanned
@@ -1862,12 +1876,15 @@ class LinkedInJobScout:
         max_pages: int | None,
         start_page: int = 1,
         page_scanned_callback=None,
+        fresh_policy: FreshScoutPolicy | None = None,
     ):
         seen_urls = set()
         first_search_url = self._build_search_url(query, location, start=0)
         pages_scanned = 0
         total_jobs_collected = 0
         page_number = max(1, int(start_page or 1))
+        fresh_policy = fresh_policy if fresh_policy and fresh_policy.enabled else None
+        duplicate_heavy_streak = 0
 
         while True:
             if max_pages is not None and page_number > max_pages:
@@ -1953,7 +1970,11 @@ class LinkedInJobScout:
                     style="bright_cyan",
                 )
 
+            cards_seen = len(page_jobs)
             unique_jobs_added = 0
+            known_jobs_on_page = 0
+            duplicate_cards_on_page = 0
+            invalid_cards_on_page = 0
             page_unique_jobs = []
             for job in page_jobs:
                 job = dict(job)
@@ -1961,6 +1982,7 @@ class LinkedInJobScout:
                     job.get("_raw_url") or job.get("url", "")
                 )
                 if not url_analysis["valid"]:
+                    invalid_cards_on_page += 1
                     self._log_invalid_job_url(
                         analysis=url_analysis,
                         source="fresh extraction",
@@ -1969,12 +1991,14 @@ class LinkedInJobScout:
                     continue
                 url = url_analysis["canonical_url"]
                 if not url or url in seen_urls:
+                    duplicate_cards_on_page += 1
                     continue
                 seen_urls.add(url)
                 job["url"] = url
                 job["_url_validation"] = url_analysis
                 known_analyzed, known_source = self._is_globally_analyzed(job)
                 if known_analyzed:
+                    known_jobs_on_page += 1
                     self._touch_known_job_seen(job, query)
                     self._record_previously_analyzed_skip(stage="card_stage")
                     if (
@@ -1996,9 +2020,34 @@ class LinkedInJobScout:
                 unique_jobs_added += 1
                 total_jobs_collected += 1
 
+            valid_unique_cards = known_jobs_on_page + unique_jobs_added
+            known_ratio = (
+                known_jobs_on_page / valid_unique_cards
+                if valid_unique_cards
+                else 0.0
+            )
+            page_quality = {
+                "query": query,
+                "page_number": page_number,
+                "cards_seen": cards_seen,
+                "valid_unique_cards": valid_unique_cards,
+                "known_jobs": known_jobs_on_page,
+                "new_jobs": unique_jobs_added,
+                "known_ratio": round(known_ratio, 4),
+                "duplicate_cards": duplicate_cards_on_page,
+                "invalid_cards": invalid_cards_on_page,
+                "total_new_jobs_collected": total_jobs_collected,
+                "results_layout_type": layout.get("layout_type", ""),
+                "has_additional_pages": bool(layout.get("has_additional_pages", False)),
+            }
+            self._page_quality_records.append(page_quality)
+
             self.reporter.record_page_scan(
                 page_number=page_number,
                 new_cards=unique_jobs_added,
+                cards_seen=cards_seen,
+                known_cards=known_jobs_on_page,
+                known_ratio=known_ratio,
                 total_collected=total_jobs_collected,
                 results_layout_type=layout.get("layout_type", ""),
             )
@@ -2009,6 +2058,7 @@ class LinkedInJobScout:
                     page_number=page_number,
                     pages_scanned=pages_scanned,
                     total_jobs_collected=total_jobs_collected,
+                    page_quality=page_quality,
                 )
 
             yield page_unique_jobs, pages_scanned, page_number
@@ -2019,8 +2069,97 @@ class LinkedInJobScout:
             if not layout.get("has_additional_pages", False):
                 break
 
+            if fresh_policy:
+                duplicate_heavy_streak = self._fresh_duplicate_heavy_streak(
+                    page_quality,
+                    duplicate_heavy_streak,
+                    fresh_policy,
+                )
+                if self._should_stop_fresh_query(
+                    page_quality=page_quality,
+                    duplicate_heavy_streak=duplicate_heavy_streak,
+                    policy=fresh_policy,
+                ):
+                    break
+
             self._human_pages_since_break += 1
             page_number += 1
+
+    def _fresh_duplicate_heavy_streak(
+        self,
+        page_quality: dict,
+        current_streak: int,
+        policy: FreshScoutPolicy,
+    ) -> int:
+        valid_unique_cards = int(page_quality.get("valid_unique_cards", 0) or 0)
+        known_ratio = float(page_quality.get("known_ratio", 0) or 0)
+        if valid_unique_cards and known_ratio >= policy.duplicate_heavy_stop_threshold:
+            return current_streak + 1
+        return 0
+
+    def _should_stop_fresh_query(
+        self,
+        *,
+        page_quality: dict,
+        duplicate_heavy_streak: int,
+        policy: FreshScoutPolicy,
+    ) -> bool:
+        page_number = int(page_quality.get("page_number", 0) or 0)
+        total_new_jobs = int(page_quality.get("total_new_jobs_collected", 0) or 0)
+        new_jobs = int(page_quality.get("new_jobs", 0) or 0)
+        known_ratio = float(page_quality.get("known_ratio", 0) or 0)
+
+        if total_new_jobs >= policy.min_new_jobs_per_useful_query:
+            self._report(
+                "FRESH",
+                (
+                    f"Stopping query after finding {total_new_jobs} new job(s); "
+                    f"fresh target per useful query is {policy.min_new_jobs_per_useful_query}."
+                ),
+                style="bright_green",
+            )
+            return True
+
+        if duplicate_heavy_streak >= policy.stop_after_duplicate_heavy_pages:
+            self._report(
+                "FRESH",
+                (
+                    "Stopping query after "
+                    f"{duplicate_heavy_streak} duplicate-heavy page(s) "
+                    f"with fewer than {policy.min_new_jobs_per_useful_query} new jobs."
+                ),
+                style="yellow",
+            )
+            return True
+
+        if page_number >= policy.max_pages_per_query:
+            self._report(
+                "FRESH",
+                f"Stopping query at fresh page cap ({policy.max_pages_per_query}).",
+                style="yellow",
+            )
+            return True
+
+        if known_ratio >= policy.known_ratio_continue_threshold:
+            self._report(
+                "FRESH",
+                (
+                    f"Trying next page because page {page_number} was "
+                    f"{round(known_ratio * 100)}% known and found {new_jobs} new job(s)."
+                ),
+                style="bright_blue",
+            )
+            return False
+
+        self._report(
+            "FRESH",
+            (
+                f"Trying next page because only {total_new_jobs}/"
+                f"{policy.min_new_jobs_per_useful_query} fresh job(s) were found for this query."
+            ),
+            style="bright_blue",
+        )
+        return False
 
     async def _navigate_to_results_page(self, page_number: int, query: str, location: str) -> bool:
         page = self.browser.page

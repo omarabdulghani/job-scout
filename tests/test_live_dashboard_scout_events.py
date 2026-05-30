@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
+from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.job_scout import LinkedInJobScout
 
 
@@ -87,6 +88,98 @@ class _FakeLoggedInLinkedIn:
         return True
 
 
+class _FakePageQualityBrowser:
+    def __init__(self):
+        self.page = type("Page", (), {"url": "https://www.linkedin.com/jobs/search/"})()
+
+    async def goto(self, _url):
+        self.page.url = _url
+
+
+class _FakePageQualityLinkedIn:
+    SEARCH_SCROLL_ROUNDS = 0
+
+    def __init__(self, cards):
+        self.cards = cards
+
+    async def _scroll_search_results(self, _distance):
+        return None
+
+    async def _extract_job_cards(self):
+        return list(self.cards)
+
+
+class _PageQualityScout(LinkedInJobScout):
+    def __init__(self, profile, preferences, cards, known_job_ids):
+        super().__init__(profile, preferences, browser=_FakePageQualityBrowser())
+        self.linkedin = _FakePageQualityLinkedIn(cards)
+        self.known_job_ids = set(known_job_ids)
+
+    async def _wait_for_search_state_stable(self, query, location, search_url):
+        return None
+
+    async def _human_pause_after_page_navigation(self):
+        return None
+
+    async def _human_pause_between_scroll_rounds(self):
+        return None
+
+    async def _ensure_full_results_list_ready(self, query, location, search_url, page_number):
+        return {}
+
+    async def _inspect_results_layout(self, page_number):
+        return {"layout_type": "full_paginated_results", "has_additional_pages": False}
+
+    def _log_results_layout(self, layout, page_number):
+        return None
+
+    def _log_invalid_job_url(self, *, analysis, source, title):
+        return None
+
+    def _is_globally_analyzed(self, job):
+        job_id = (job.get("job_id") or self._linkedin_job_id(job.get("url", ""))).strip()
+        if job_id in self.known_job_ids:
+            return True, "test_known_store"
+        return False, ""
+
+    def _touch_known_job_seen(self, job, query):
+        return None
+
+
+class _FreshDecisionLinkedIn:
+    SEARCH_SCROLL_ROUNDS = 0
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.current_page = 1
+
+    async def _scroll_search_results(self, _distance):
+        return None
+
+    async def _extract_job_cards(self):
+        return list(self.pages.get(self.current_page, []))
+
+
+class _FreshDecisionScout(_PageQualityScout):
+    def __init__(self, profile, preferences, pages, known_job_ids):
+        first_page = pages.get(1, [])
+        super().__init__(profile, preferences, cards=first_page, known_job_ids=known_job_ids)
+        self.linkedin = _FreshDecisionLinkedIn(pages)
+        self.max_available_page = max(pages)
+        self.navigation_pages = []
+
+    async def _inspect_results_layout(self, page_number):
+        return {
+            "layout_type": "full_paginated_results",
+            "has_additional_pages": page_number < self.max_available_page,
+        }
+
+    async def _navigate_to_results_page(self, page_number, query, location):
+        self.navigation_pages.append(page_number)
+        self.linkedin.current_page = page_number
+        return True
+
+
 class _PageByPageScout(LinkedInJobScout):
     def __init__(self, profile, preferences):
         super().__init__(profile, preferences, browser=None)
@@ -100,6 +193,7 @@ class _PageByPageScout(LinkedInJobScout):
         max_pages,
         start_page=1,
         page_scanned_callback=None,
+        fresh_policy=None,
     ):
         self.events.append("collect-page-1")
         yield [{"title": "One", "company": "A", "url": "https://www.linkedin.com/jobs/view/1/"}], 1, 1
@@ -137,6 +231,13 @@ class _PageByPageScout(LinkedInJobScout):
 
 
 class LinkedInPageByPageRunTests(unittest.IsolatedAsyncioTestCase):
+    def _card(self, job_id: int) -> dict:
+        return {
+            "title": f"Job {job_id}",
+            "company": "Example",
+            "url": f"https://www.linkedin.com/jobs/view/{job_id}/",
+        }
+
     async def test_browser_run_processes_each_page_before_collecting_next_page(self):
         profile = json.loads((ROOT / "config" / "profile.json").read_text(encoding="utf-8"))
         preferences = json.loads((ROOT / "config" / "preferences.json").read_text(encoding="utf-8"))
@@ -156,6 +257,103 @@ class LinkedInPageByPageRunTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["pages_scanned"], 2)
         self.assertEqual(result["stats"]["job_cards_collected"], 2)
+
+    async def test_collect_page_reports_known_new_and_duplicate_quality(self):
+        profile = json.loads((ROOT / "config" / "profile.json").read_text(encoding="utf-8"))
+        preferences = json.loads((ROOT / "config" / "preferences.json").read_text(encoding="utf-8"))
+        cards = [
+            {
+                "title": "Fresh UX",
+                "company": "A",
+                "url": "https://www.linkedin.com/jobs/view/111/",
+            },
+            {
+                "title": "Known UX",
+                "company": "B",
+                "url": "https://www.linkedin.com/jobs/view/222/",
+            },
+            {
+                "title": "Duplicate Fresh UX",
+                "company": "A",
+                "url": "https://www.linkedin.com/jobs/view/111/",
+            },
+            {
+                "title": "Invalid",
+                "company": "C",
+                "url": "https://example.com/jobs/333",
+            },
+        ]
+        scout = _PageQualityScout(profile, preferences, cards=cards, known_job_ids={"222"})
+        callbacks = []
+
+        async for page_jobs, pages_scanned, page_number in scout._collect_job_summary_pages(
+            query="junior ux designer",
+            location="Amsterdam",
+            max_pages=1,
+            page_scanned_callback=lambda **kwargs: callbacks.append(kwargs),
+        ):
+            self.assertEqual(pages_scanned, 1)
+            self.assertEqual(page_number, 1)
+            self.assertEqual([job["url"] for job in page_jobs], ["https://www.linkedin.com/jobs/view/111/"])
+
+        quality = callbacks[0]["page_quality"]
+        self.assertEqual(quality["cards_seen"], 4)
+        self.assertEqual(quality["valid_unique_cards"], 2)
+        self.assertEqual(quality["known_jobs"], 1)
+        self.assertEqual(quality["new_jobs"], 1)
+        self.assertEqual(quality["duplicate_cards"], 1)
+        self.assertEqual(quality["invalid_cards"], 1)
+        self.assertEqual(quality["known_ratio"], 0.5)
+        self.assertEqual(scout._page_quality_records, [quality])
+
+    async def test_fresh_mode_continues_past_first_page_when_page_is_duplicate_heavy(self):
+        profile = json.loads((ROOT / "config" / "profile.json").read_text(encoding="utf-8"))
+        preferences = json.loads((ROOT / "config" / "preferences.json").read_text(encoding="utf-8"))
+        pages = {
+            1: [self._card(job_id) for job_id in range(100, 110)],
+            2: [self._card(job_id) for job_id in range(200, 210)],
+            3: [self._card(job_id) for job_id in range(300, 310)],
+        }
+        known_ids = {str(job_id) for job_id in range(101, 110)} | {str(job_id) for job_id in range(200, 210)}
+        scout = _FreshDecisionScout(profile, preferences, pages=pages, known_job_ids=known_ids)
+        policy = FreshScoutPolicy.from_preferences({}, enabled=True)
+        seen_pages = []
+
+        async for _page_jobs, _pages_scanned, page_number in scout._collect_job_summary_pages(
+            query="junior ux designer",
+            location="Amsterdam",
+            max_pages=policy.max_pages_per_query,
+            fresh_policy=policy,
+        ):
+            seen_pages.append(page_number)
+
+        self.assertEqual(seen_pages, [1, 2])
+        self.assertEqual([item["known_jobs"] for item in scout._page_quality_records], [9, 10])
+        self.assertEqual([item["new_jobs"] for item in scout._page_quality_records], [1, 0])
+        self.assertEqual(scout.navigation_pages, [2])
+
+    async def test_fresh_mode_stops_query_after_enough_new_jobs(self):
+        profile = json.loads((ROOT / "config" / "profile.json").read_text(encoding="utf-8"))
+        preferences = json.loads((ROOT / "config" / "preferences.json").read_text(encoding="utf-8"))
+        pages = {
+            1: [self._card(100), self._card(101), self._card(102)],
+            2: [self._card(200), self._card(201), self._card(202)],
+        }
+        scout = _FreshDecisionScout(profile, preferences, pages=pages, known_job_ids=set())
+        policy = FreshScoutPolicy.from_preferences({}, enabled=True)
+        seen_pages = []
+
+        async for _page_jobs, _pages_scanned, page_number in scout._collect_job_summary_pages(
+            query="junior ux designer",
+            location="Amsterdam",
+            max_pages=policy.max_pages_per_query,
+            fresh_policy=policy,
+        ):
+            seen_pages.append(page_number)
+
+        self.assertEqual(seen_pages, [1])
+        self.assertEqual(scout._page_quality_records[0]["new_jobs"], 3)
+        self.assertEqual(scout.navigation_pages, [])
 
 
 if __name__ == "__main__":

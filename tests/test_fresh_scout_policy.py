@@ -1,0 +1,56 @@
+import unittest
+
+from agent.fresh_scout_policy import FreshScoutPolicy
+
+
+class FreshScoutPolicyTests(unittest.TestCase):
+    def test_defaults_are_reasonable_for_daily_fresh_scouting(self):
+        policy = FreshScoutPolicy.from_preferences({}, enabled=True)
+
+        self.assertTrue(policy.enabled)
+        self.assertEqual(policy.max_pages_per_query, 4)
+        self.assertEqual(policy.known_ratio_continue_threshold, 0.80)
+        self.assertEqual(policy.duplicate_heavy_stop_threshold, 0.90)
+        self.assertEqual(policy.stop_after_duplicate_heavy_pages, 2)
+        self.assertEqual(policy.min_new_jobs_per_useful_query, 3)
+        self.assertEqual(policy.target_apply_first_jobs, 8)
+        self.assertEqual(policy.target_good_or_better_jobs, 20)
+        self.assertEqual(policy.global_new_jobs_soft_cap, 80)
+
+    def test_preferences_can_override_defaults(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "max_pages_per_query": 3,
+                    "known_ratio_continue_threshold": 85,
+                    "duplicate_heavy_stop_threshold": 95,
+                    "stop_after_duplicate_heavy_pages": 3,
+                    "min_new_jobs_per_useful_query": 4,
+                    "target_apply_first_jobs": 6,
+                    "target_good_or_better_jobs": 15,
+                    "global_new_jobs_soft_cap": 60,
+                }
+            },
+            enabled=True,
+        )
+
+        self.assertEqual(policy.max_pages_per_query, 3)
+        self.assertEqual(policy.known_ratio_continue_threshold, 0.85)
+        self.assertEqual(policy.duplicate_heavy_stop_threshold, 0.95)
+        self.assertEqual(policy.stop_after_duplicate_heavy_pages, 3)
+        self.assertEqual(policy.min_new_jobs_per_useful_query, 4)
+        self.assertEqual(policy.target_apply_first_jobs, 6)
+        self.assertEqual(policy.target_good_or_better_jobs, 15)
+        self.assertEqual(policy.global_new_jobs_soft_cap, 60)
+
+    def test_panel_label_is_clear_when_enabled_or_disabled(self):
+        self.assertEqual(FreshScoutPolicy.from_preferences({}, enabled=False).panel_label(), "disabled")
+
+        enabled_label = FreshScoutPolicy.from_preferences({}, enabled=True).panel_label()
+        self.assertIn("max 4 pages/query", enabled_label)
+        self.assertIn("8 APPLY FIRST", enabled_label)
+        self.assertIn("20 good+", enabled_label)
+
+
+if __name__ == "__main__":
+    unittest.main()

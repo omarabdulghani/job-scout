@@ -118,7 +118,7 @@
 
     .filters {
       display: grid;
-      grid-template-columns: 1.4fr repeat(8, minmax(112px, 1fr)) auto;
+      grid-template-columns: 1.4fr repeat(8, minmax(112px, 1fr)) auto auto;
       gap: 10px;
       align-items: end;
       padding: 12px;
@@ -163,6 +163,17 @@
       cursor: pointer;
       font-weight: 700;
       white-space: nowrap;
+    }
+
+    .button.secondary {
+      border-color: var(--line);
+      background: #fff;
+      color: var(--blue);
+    }
+
+    .button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
     }
 
     .button:focus,
@@ -741,6 +752,7 @@
           <button id="listViewButton" class="layout-button" type="button" data-view-mode="list">List</button>
         </div>
       </div>
+      <button id="undoButton" class="button secondary" type="button" disabled>Undo</button>
       <button id="refreshButton" class="button" type="button">Refresh</button>
     </section>
 
@@ -789,6 +801,7 @@
       apiAvailable: false,
       savingJobKey: "",
       toastTimer: null,
+      manualUndoStack: [],
       filters: {
         search: "",
         actionScope: "all",
@@ -825,6 +838,7 @@
       sortFilter: document.getElementById("sortFilter"),
       boardViewButton: document.getElementById("boardViewButton"),
       listViewButton: document.getElementById("listViewButton"),
+      undoButton: document.getElementById("undoButton"),
       refreshButton: document.getElementById("refreshButton"),
       boardView: document.getElementById("boardView"),
       compactList: document.getElementById("compactList"),
@@ -864,6 +878,7 @@
         }
         state.data = payload;
         state.apiAvailable = apiAvailable;
+        updateUndoButtonState();
         setStatus(
           payload.active_run_id ? "live" : "",
           payload.active_run_id ? "Run active" : (apiAvailable ? "Ready" : "Read-only")
@@ -913,6 +928,7 @@
       renderStats();
       renderJobs();
       renderLayoutMode();
+      updateUndoButtonState();
     }
 
     function syncFilterOptions() {
@@ -1275,6 +1291,7 @@
       const key = safe(job.job_key) || jobIdentity(job);
       const previousStatus = options.previousStatus || manualStatus(job);
       state.savingJobKey = key;
+      updateUndoButtonState();
       renderJobs();
       try {
         const response = await fetch(API_STATUS_URL, {
@@ -1290,14 +1307,20 @@
         state.savingJobKey = "";
         state.apiAvailable = true;
         setStatus(state.data.active_run_id ? "live" : "", status === "unreviewed" ? "Status cleared" : "Status saved");
+        if (options.trackUndo !== false && previousStatus !== status) {
+          pushManualUndo({ job, previousStatus, newStatus: status });
+        }
         if (!options.silent) {
           showUndoToast(job, previousStatus, status);
         }
         render();
+        return true;
       } catch (error) {
         state.savingJobKey = "";
+        updateUndoButtonState();
         setStatus("error", "Run python serve_dashboard.py to save status");
         renderJobs();
+        return false;
       }
     }
 
@@ -1313,10 +1336,7 @@
       undo.textContent = "Undo";
       undo.addEventListener("click", () => {
         hideUndoToast();
-        saveManualStatus(job, previousStatus || "unreviewed", {
-          previousStatus: newStatus,
-          silent: true
-        });
+        undoLastManualStatus();
       });
       els.toast.append(message, undo);
       els.toast.classList.add("visible");
@@ -1327,6 +1347,53 @@
       if (!els.toast) return;
       window.clearTimeout(state.toastTimer);
       els.toast.classList.remove("visible");
+    }
+
+    function pushManualUndo(action) {
+      const compactJob = JSON.parse(JSON.stringify(action.job || {}));
+      state.manualUndoStack.push({
+        job: compactJob,
+        previousStatus: action.previousStatus || "unreviewed",
+        newStatus: action.newStatus || "unreviewed"
+      });
+      if (state.manualUndoStack.length > 50) {
+        state.manualUndoStack.shift();
+      }
+      updateUndoButtonState();
+    }
+
+    async function undoLastManualStatus() {
+      if (!state.manualUndoStack.length || !state.apiAvailable) return;
+      const action = state.manualUndoStack.pop();
+      updateUndoButtonState();
+      const currentJob = findCurrentJob(action.job) || action.job;
+      hideUndoToast();
+      const saved = await saveManualStatus(currentJob, action.previousStatus || "unreviewed", {
+        previousStatus: action.newStatus || manualStatus(currentJob),
+        silent: true,
+        trackUndo: false
+      });
+      if (!saved) {
+        state.manualUndoStack.push(action);
+        updateUndoButtonState();
+        return;
+      }
+      setStatus(state.data.active_run_id ? "live" : "", "Undo applied");
+      updateUndoButtonState();
+    }
+
+    function updateUndoButtonState() {
+      if (!els.undoButton) return;
+      const hasUndo = state.manualUndoStack.length > 0;
+      els.undoButton.disabled = !state.apiAvailable || !hasUndo || Boolean(state.savingJobKey);
+      els.undoButton.title = hasUndo
+        ? "Undo the last Applied/Irrelevant status change"
+        : "No manual status changes to undo";
+    }
+
+    function findCurrentJob(job) {
+      const key = safe(job.job_key) || jobIdentity(job);
+      return jobs().find((item) => (safe(item.job_key) || jobIdentity(item)) === key);
     }
 
     function badge(text, extraClass) {
@@ -1461,7 +1528,17 @@
           renderLayoutMode();
         });
       }
+      els.undoButton.addEventListener("click", undoLastManualStatus);
       els.refreshButton.addEventListener("click", loadData);
+      window.addEventListener("keydown", (event) => {
+        if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
+        if (event.key.toLowerCase() !== "z") return;
+        const active = document.activeElement;
+        const tag = active && active.tagName ? active.tagName.toLowerCase() : "";
+        if (tag === "input" || tag === "textarea" || tag === "select" || (active && active.isContentEditable)) return;
+        event.preventDefault();
+        undoLastManualStatus();
+      });
     }
 
     bindControls();

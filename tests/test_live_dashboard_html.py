@@ -34,6 +34,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "sortFilter",
             "boardViewButton",
             "listViewButton",
+            "undoButton",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
 
@@ -43,9 +44,18 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("Undo", self.html)
         self.assertIn("saveManualStatus", self.html)
         self.assertIn("showUndoToast", self.html)
+        self.assertIn("manualUndoStack", self.html)
+        self.assertIn("undoLastManualStatus", self.html)
+        self.assertIn("updateUndoButtonState", self.html)
         self.assertIn("targetStatus === currentStatus ? \"unreviewed\" : targetStatus", self.html)
         self.assertIn("manual-applied", self.html)
         self.assertIn("manual-irrelevant", self.html)
+
+    def test_dashboard_has_global_manual_status_undo(self):
+        self.assertIn('id="undoButton"', self.html)
+        self.assertIn("pushManualUndo({ job, previousStatus, newStatus: status })", self.html)
+        self.assertIn("trackUndo: false", self.html)
+        self.assertIn('event.key.toLowerCase() !== "z"', self.html)
 
     def test_dashboard_has_run_badges_and_empty_run_labels(self):
         self.assertIn("run-badge", self.html)

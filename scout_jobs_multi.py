@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from agent.browser import BrowserController
+from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.indeed_job_scout import IndeedJobScout
 from agent.job_scout import LinkedInJobScout
 from agent.scout_cli_modes import (
@@ -223,6 +224,68 @@ def _build_query_hits(occurrences: list[dict], query_order: dict[str, int]) -> l
     return hits
 
 
+def _fresh_recommendation_counts(reports: list[dict], scout: LinkedInJobScout) -> dict[str, int]:
+    tracker = JobTrackingStore()
+    seen_keys: set[str] = set()
+    apply_first = 0
+    good_or_better = 0
+    new_jobs_seen = 0
+
+    for report in reports:
+        stats = report.get("stats", {}) or {}
+        new_jobs_seen += int(stats.get("job_cards_collected", 0) or 0)
+        for bucket_name, job in _iter_report_jobs(report):
+            if bucket_name not in {"new_recommendations", "cached_previous_recommendations"}:
+                continue
+            status = str(job.get("output_status", "") or "").strip().lower()
+            if status not in {"accepted", "duplicate_suppressed"}:
+                continue
+            key = _dedupe_key(job, tracker)
+            if key and key in seen_keys:
+                continue
+            if key:
+                seen_keys.add(key)
+            score = int(job.get("interview_probability_score", 0) or 0)
+            if score < scout.AI_THRESHOLD:
+                continue
+            good_or_better += 1
+            if score >= scout.AI_STRONG_MATCH_THRESHOLD:
+                apply_first += 1
+
+    return {
+        "apply_first": apply_first,
+        "good_or_better": good_or_better,
+        "new_jobs_seen": new_jobs_seen,
+    }
+
+
+def _fresh_global_stop_reason(
+    reports: list[dict],
+    scout: LinkedInJobScout,
+    policy: FreshScoutPolicy,
+) -> tuple[str, dict[str, int]]:
+    counts = _fresh_recommendation_counts(reports, scout)
+    if counts["apply_first"] >= policy.target_apply_first_jobs:
+        return (
+            f"found {counts['apply_first']} APPLY FIRST jobs "
+            f"(target {policy.target_apply_first_jobs})",
+            counts,
+        )
+    if counts["good_or_better"] >= policy.target_good_or_better_jobs:
+        return (
+            f"found {counts['good_or_better']} APPLY FIRST/GOOD OPTIONS jobs "
+            f"(target {policy.target_good_or_better_jobs})",
+            counts,
+        )
+    if counts["new_jobs_seen"] >= policy.global_new_jobs_soft_cap:
+        return (
+            f"processed {counts['new_jobs_seen']} fresh job cards "
+            f"(soft cap {policy.global_new_jobs_soft_cap})",
+            counts,
+        )
+    return "", counts
+
+
 def _min_timestamp(values: list[str]) -> str:
     cleaned = sorted(value for value in values if isinstance(value, str) and value.strip())
     return cleaned[0] if cleaned else ""
@@ -263,6 +326,7 @@ def _build_merged_output(
                     0,
                 ),
                 "duplicate_job_records_prevented": stats.get("duplicate_job_records_prevented", 0),
+                "page_quality": stats.get("page_quality", []),
                 "new_recommendations": stats.get("new_recommendations", 0),
                 "cached_previous_recommendations": stats.get("cached_previous_recommendations", 0),
                 "rejected_or_below_threshold": stats.get("rejected_or_below_threshold", 0),
@@ -505,6 +569,11 @@ async def main():
         help="How many result pages to scan per query: 1, 2, or 'all'.",
     )
     parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Enable Smart Fresh Scout mode. Dynamic fresh-run behavior is added in follow-up steps.",
+    )
+    parser.add_argument(
         "--human-mode",
         action="store_true",
         help="Use slower, randomized human-like pacing to reduce bot-like behavior.",
@@ -567,6 +636,10 @@ async def main():
     queries = _load_queries(query_file)
     effective_pages, page_label = _parse_max_pages(args.max_pages)
     profile, preferences = load_config()
+    fresh_policy = FreshScoutPolicy.from_preferences(preferences, enabled=args.fresh)
+    if fresh_policy.enabled:
+        effective_pages = fresh_policy.max_pages_per_query
+        page_label = f"smart up to {fresh_policy.max_pages_per_query}"
     run_started_at = datetime.now().astimezone().isoformat()
     progress_store = ScoutProgressStore()
     if args.reset_progress:
@@ -652,6 +725,7 @@ async def main():
             f"Queries: {len(queries)}\n"
             f"Location: {args.location}\n"
             f"Pages per query: {page_label}\n"
+            f"Fresh mode: {fresh_policy.panel_label()}\n"
             f"Browser: {args.browser}\n"
             f"Interaction: {'human-like' if args.human_mode or board_mode == 'indeed' else 'fast'}\n"
             f"AI Backend: {ai_backend_label}\n"
@@ -662,6 +736,8 @@ async def main():
     )
     reports: list[dict] = []
     same_run_job_registry: dict[str, dict] = {}
+    fresh_stop_reason = ""
+    fresh_stop_counts: dict[str, int] = {}
     progress_state = {
         "mode": progress_mode,
         "status": "in_progress",
@@ -717,7 +793,13 @@ async def main():
 
             query_pages_seen = {"value": 0}
 
-            def on_page_scanned(query: str, page_number: int, pages_scanned: int, total_jobs_collected: int):
+            def on_page_scanned(
+                query: str,
+                page_number: int,
+                pages_scanned: int,
+                total_jobs_collected: int,
+                page_quality: dict | None = None,
+            ):
                 query_pages_seen["value"] = pages_scanned
                 save_progress(
                     status="in_progress",
@@ -726,6 +808,7 @@ async def main():
                     current_query=query,
                     current_page_number=page_number,
                     last_completed_page_number=page_number,
+                    last_page_quality=page_quality or {},
                     total_pages_processed=cumulative_pages + pages_scanned,
                     total_jobs_processed=cumulative_jobs,
                 )
@@ -773,6 +856,7 @@ async def main():
                     live_result_callback=on_live_result if live_dashboard else None,
                     run_started_at=run_started_at,
                     description_only=args.description_only,
+                    fresh_policy=fresh_policy,
                 )
             reports.append(report)
             reporter.finish_query(report.get("stats", {}))
@@ -792,6 +876,18 @@ async def main():
                 stable_total_pages_processed=cumulative_pages,
                 stable_total_jobs_processed=cumulative_jobs,
             )
+            if fresh_policy.enabled and not args.description_only and not args.process_only:
+                fresh_stop_reason, fresh_stop_counts = _fresh_global_stop_reason(
+                    reports,
+                    scout,
+                    fresh_policy,
+                )
+                if fresh_stop_reason:
+                    console.print(
+                        "[green][FRESH][/green] "
+                        f"Stopping multi-query run early: {fresh_stop_reason}."
+                    )
+                    break
 
         if args.description_only:
             completed_at = datetime.now().astimezone().isoformat()
@@ -828,6 +924,25 @@ async def main():
             scout=scout,
             started_at=run_started_at,
         )
+        if fresh_policy.enabled:
+            fresh_counts = fresh_stop_counts or _fresh_recommendation_counts(reports, scout)
+            merged_output["fresh_scout"] = {
+                "policy": fresh_policy.as_dict(),
+                "stopped_early": bool(fresh_stop_reason),
+                "stop_reason": fresh_stop_reason,
+                "counts": fresh_counts,
+            }
+            merged_output.setdefault("stats", {})["fresh_stopped_early"] = bool(fresh_stop_reason)
+            merged_output.setdefault("stats", {})["fresh_stop_reason"] = fresh_stop_reason
+            merged_output.setdefault("stats", {})["fresh_apply_first_jobs"] = int(
+                fresh_counts.get("apply_first", 0) or 0
+            )
+            merged_output.setdefault("stats", {})["fresh_good_or_better_jobs"] = int(
+                fresh_counts.get("good_or_better", 0) or 0
+            )
+            merged_output.setdefault("stats", {})["fresh_new_jobs_seen"] = int(
+                fresh_counts.get("new_jobs_seen", 0) or 0
+            )
         _write_output(merged_output)
         review_writer.write(merged_output, reports=reports)
         try:
@@ -855,15 +970,20 @@ async def main():
         save_progress(
             status="completed",
             phase="completed",
-            current_query_index=len(queries),
+            current_query_index=len(queries) if not fresh_stop_reason else min(len(queries), index + 1),
             current_query="",
             current_page_number=0,
-            last_completed_query_index=len(queries) - 1 if queries else -1,
-            last_completed_query=queries[-1] if queries else "",
+            last_completed_query_index=(
+                len(queries) - 1 if queries and not fresh_stop_reason else min(len(queries) - 1, index)
+            ),
+            last_completed_query=(
+                queries[-1] if queries and not fresh_stop_reason else (queries[index] if queries else "")
+            ),
             total_pages_processed=cumulative_pages,
             total_jobs_processed=cumulative_jobs,
             stable_total_pages_processed=cumulative_pages,
             stable_total_jobs_processed=cumulative_jobs,
+            fresh_stop_reason=fresh_stop_reason,
         )
         if live_dashboard and live_run:
             live_dashboard.complete_run(live_run["run_id"], status="completed")

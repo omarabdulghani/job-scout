@@ -2,7 +2,14 @@ import asyncio
 import base64
 from pathlib import Path
 import random
-from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+import urllib.parse
+from playwright.async_api import (
+    async_playwright,
+    Page,
+    Browser,
+    BrowserContext,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 
 class BrowserController:
@@ -106,11 +113,58 @@ class BrowserController:
     async def goto(self, url: str):
         if self.page is None or self.page.is_closed():
             self.page = await self.context.new_page()
-        print(f"Navigating to {url}")
-        await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await self._goto_with_retries(url)
         if self.keep_in_front:
             await self.page.bring_to_front()
         await self.human_delay(1, 2)
+
+    async def _goto_with_retries(self, url: str, *, timeout_ms: int = 45000, max_attempts: int = 3) -> None:
+        for attempt in range(1, max_attempts + 1):
+            if self.page is None or self.page.is_closed():
+                self.page = await self.context.new_page()
+            attempt_suffix = f" (attempt {attempt}/{max_attempts})" if attempt > 1 else ""
+            print(f"Navigating to {url}{attempt_suffix}")
+            try:
+                await self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                return
+            except PlaywrightTimeoutError:
+                if await self._target_page_has_visible_body(url):
+                    print(f"[NAV] Timed out waiting for full load, but target page content is visible; continuing: {url}")
+                    return
+                if attempt >= max_attempts:
+                    raise
+                await self._stop_current_page_load()
+                wait_seconds = min(10, attempt * 3)
+                print(f"[NAV] Navigation timed out; retrying in {wait_seconds}s: {url}")
+                await asyncio.sleep(wait_seconds)
+
+    async def _target_page_has_visible_body(self, target_url: str) -> bool:
+        if not self._current_url_matches_target(target_url):
+            return False
+        try:
+            await self.page.wait_for_selector("body", timeout=5000)
+            return True
+        except Exception:
+            return False
+
+    async def _stop_current_page_load(self) -> None:
+        try:
+            await self.page.evaluate("window.stop()")
+        except Exception:
+            pass
+
+    def _current_url_matches_target(self, target_url: str) -> bool:
+        current_url = getattr(self.page, "url", "") if self.page is not None else ""
+        if not current_url:
+            return False
+        try:
+            current = urllib.parse.urlparse(current_url)
+            target = urllib.parse.urlparse(target_url)
+        except Exception:
+            return False
+        current_path = (current.path or "/").rstrip("/") or "/"
+        target_path = (target.path or "/").rstrip("/") or "/"
+        return current.netloc == target.netloc and current_path == target_path
 
     async def screenshot_base64(self) -> str:
         """Take screenshot and return as base64 — used to show Claude what's on screen."""
