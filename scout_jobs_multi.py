@@ -26,6 +26,7 @@ from agent.scout_console_reporter import ScoutConsoleReporter
 from agent.scout_progress import ScoutProgressStore
 from agent.recommended_jobs_dashboard import update_recommended_jobs_html
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
+from agent.query_learning import order_queries_with_learning
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.job_tracking import JobTrackingStore
 from agent.scout_run_logger import ScoutRunLogger
@@ -638,6 +639,11 @@ async def main():
         help="Enable Smart Fresh Scout mode. Dynamic fresh-run behavior is added in follow-up steps.",
     )
     parser.add_argument(
+        "--no-query-learning",
+        action="store_true",
+        help="Keep query-file order instead of prioritizing queries using previous fresh-scout results.",
+    )
+    parser.add_argument(
         "--human-mode",
         action="store_true",
         help="Use slower, randomized human-like pacing to reduce bot-like behavior.",
@@ -697,7 +703,8 @@ async def main():
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
     query_file = Path(args.query_file)
-    queries = _load_queries(query_file)
+    base_queries = _load_queries(query_file)
+    queries = list(base_queries)
     effective_pages, page_label = _parse_max_pages(args.max_pages)
     profile, preferences = load_config()
     fresh_policy = FreshScoutPolicy.from_preferences(preferences, enabled=args.fresh)
@@ -712,8 +719,13 @@ async def main():
 
     progress = progress_store.load() if args.resume else {}
     expected_query_file = str(query_file.resolve())
-    expected_queries = [_normalize_query(query) for query in queries]
     progress_mode = PROGRESS_MODE if board_mode == "linkedin" else f"{board_mode}_{PROGRESS_MODE}"
+    base_query_keys = sorted(_normalize_query(query) for query in base_queries)
+    progress_queries = [
+        query
+        for query in progress.get("queries", [])
+        if isinstance(query, str) and _normalize_query(query)
+    ]
     resume_active = bool(
         progress
         and progress.get("mode") == progress_mode
@@ -721,8 +733,32 @@ async def main():
         and progress.get("location", "") == args.location
         and str(progress.get("max_pages", "")) == page_label
         and str(progress.get("query_file", "")) == expected_query_file
-        and [_normalize_query(query) for query in progress.get("queries", [])] == expected_queries
+        and sorted(_normalize_query(query) for query in progress_queries) == base_query_keys
     )
+    query_learning = {
+        "enabled": False,
+        "reason": "disabled",
+        "reordered": False,
+        "top_queries": [],
+        "sources_used": [],
+    }
+    if resume_active:
+        queries = progress_queries
+        query_learning["reason"] = "resume uses saved query order"
+    else:
+        learning_enabled = (
+            board_mode == "linkedin"
+            and fresh_policy.enabled
+            and not args.description_only
+            and not args.process_only
+            and not args.no_query_learning
+        )
+        queries, query_learning = order_queries_with_learning(
+            base_queries,
+            preferences=preferences,
+            enabled=learning_enabled,
+        )
+    expected_queries = [_normalize_query(query) for query in queries]
     start_query_index = int(progress.get("current_query_index", 0) or 0) if resume_active else 0
     if start_query_index >= len(queries):
         resume_active = False
@@ -785,6 +821,22 @@ async def main():
         except Exception as exc:
             console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
 
+    query_learning_label = "disabled"
+    if query_learning.get("enabled"):
+        query_learning_label = (
+            "enabled"
+            + ("; reordered queries" if query_learning.get("reordered") else "; kept query-file order")
+        )
+        top_queries = [
+            item.get("query", "")
+            for item in query_learning.get("top_queries", [])[:3]
+            if item.get("query")
+        ]
+        if top_queries:
+            query_learning_label += f"; top: {', '.join(top_queries)}"
+    elif query_learning.get("reason"):
+        query_learning_label = str(query_learning.get("reason"))
+
     mode_label = (
         f"Curated {board_name} description extraction only (no AI scoring)"
         if args.description_only
@@ -799,6 +851,7 @@ async def main():
             f"Location: {args.location}\n"
             f"Pages per query: {page_label}\n"
             f"Fresh mode: {fresh_policy.panel_label()}\n"
+            f"Query learning: {query_learning_label}\n"
             f"Browser: {args.browser}\n"
             f"Interaction: {'human-like' if args.human_mode or board_mode == 'indeed' else 'fast'}\n"
             f"AI Backend: {ai_backend_label}\n"
@@ -1046,6 +1099,7 @@ async def main():
                 "stop_reason": fresh_stop_reason,
                 "counts": fresh_counts,
             }
+            merged_output["query_learning"] = query_learning
             merged_output.setdefault("stats", {})["fresh_stopped_early"] = bool(fresh_stop_reason)
             merged_output.setdefault("stats", {})["fresh_stop_reason"] = fresh_stop_reason
             merged_output.setdefault("stats", {})["fresh_apply_first_jobs"] = int(

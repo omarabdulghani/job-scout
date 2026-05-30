@@ -129,6 +129,9 @@ class FreshCliFlagTests(unittest.TestCase):
     def test_multi_query_cli_exposes_fresh_flag(self):
         self.assertIn("--fresh", self._help_output("scout_jobs_multi.py"))
 
+    def test_multi_query_cli_exposes_query_learning_opt_out(self):
+        self.assertIn("--no-query-learning", self._help_output("scout_jobs_multi.py"))
+
 
 class BrowserControllerConfigTests(unittest.TestCase):
     def test_firefox_engine_can_use_dedicated_profile_config(self):

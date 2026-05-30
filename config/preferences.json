@@ -198,6 +198,12 @@
         "min_apply_first_after_ai_strict_check": 4,
         "min_good_or_better_after_ai_strict_check": 10,
         "ai_calls_soft_cap": 120
+      },
+      "query_learning": {
+        "enabled": true,
+        "history_run_limit": 80,
+        "exploration_interval": 5,
+        "top_query_preview_count": 8
       }
     },
     "indeed": {
