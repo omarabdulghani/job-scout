@@ -40,6 +40,7 @@ PREFERENCES_PATH = Path("config/preferences.json")
 DEFAULT_QUERY_FILE = Path("search_queries.txt")
 OUTPUT_PATH = Path("high_success_probability_jobs_multi.json")
 PROGRESS_MODE = "multi_query_scout"
+FRESH_COUNT_KEYS = ("apply_first", "good_or_better", "new_jobs_seen", "ai_calls")
 
 
 def _load_json_file(path: Path, label: str) -> dict:
@@ -263,6 +264,26 @@ def _fresh_recommendation_counts(reports: list[dict], scout: LinkedInJobScout) -
     }
 
 
+def _normalize_fresh_counts(value: dict | None) -> dict[str, int]:
+    counts = {}
+    source = value if isinstance(value, dict) else {}
+    for key in FRESH_COUNT_KEYS:
+        try:
+            counts[key] = max(0, int(source.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            counts[key] = 0
+    return counts
+
+
+def _combine_fresh_counts(*count_sets: dict | None) -> dict[str, int]:
+    combined = _normalize_fresh_counts({})
+    for count_set in count_sets:
+        normalized = _normalize_fresh_counts(count_set)
+        for key in FRESH_COUNT_KEYS:
+            combined[key] += normalized[key]
+    return combined
+
+
 def _fresh_ai_calls_from_stats(stats: dict) -> int:
     explicit_keys = {"ai_scored_new", "ai_cache_refreshed", "ai_cache_reused", "ai_errors"}
     if any(key in stats for key in explicit_keys):
@@ -325,8 +346,9 @@ def _fresh_global_stop_reason(
     reports: list[dict],
     scout: LinkedInJobScout,
     policy: FreshScoutPolicy,
+    base_counts: dict | None = None,
 ) -> tuple[str, dict[str, int]]:
-    counts = _fresh_recommendation_counts(reports, scout)
+    counts = _combine_fresh_counts(base_counts, _fresh_recommendation_counts(reports, scout))
     if counts["apply_first"] >= policy.target_apply_first_jobs:
         return (
             f"found {counts['apply_first']} APPLY FIRST jobs "
@@ -765,6 +787,11 @@ async def main():
         start_query_index = 0
     stable_pages = int(progress.get("stable_total_pages_processed", 0) or 0) if resume_active else 0
     stable_jobs = int(progress.get("stable_total_jobs_processed", 0) or 0) if resume_active else 0
+    base_fresh_counts = (
+        _normalize_fresh_counts(progress.get("fresh_progress_counts"))
+        if resume_active and fresh_policy.enabled
+        else _normalize_fresh_counts({})
+    )
 
     profile_dir = args.browser_profile_dir or default_browser_profile_dir(board_mode, args.browser)
     browser = None if args.process_only else BrowserController(
@@ -820,6 +847,19 @@ async def main():
             live_dashboard.update_run_progress(live_run["run_id"], **updates)
         except Exception as exc:
             console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
+
+    if fresh_policy.enabled and any(base_fresh_counts.values()):
+        update_live_progress(
+            phase="resumed",
+            current_query_index=start_query_index + 1,
+            total_queries=len(queries),
+            current_query=queries[start_query_index] if queries and start_query_index < len(queries) else "",
+            pages_scanned=stable_pages,
+            fresh_jobs_seen=base_fresh_counts["new_jobs_seen"],
+            ai_scored=base_fresh_counts["ai_calls"],
+            apply_first=base_fresh_counts["apply_first"],
+            good_or_better=base_fresh_counts["good_or_better"],
+        )
 
     query_learning_label = "disabled"
     if query_learning.get("enabled"):
@@ -886,6 +926,9 @@ async def main():
         "last_completed_page_number": int(progress.get("last_completed_page_number", 0) or 0)
         if resume_active
         else 0,
+        "fresh_policy": fresh_policy.as_dict() if fresh_policy.enabled else {},
+        "fresh_progress_counts": base_fresh_counts if fresh_policy.enabled else {},
+        "query_learning": query_learning,
     }
 
     def save_progress(**updates):
@@ -893,6 +936,13 @@ async def main():
             return
         progress_state.update(updates)
         progress_store.save(progress_state)
+
+    def fresh_counts_so_far(extra_new_jobs_seen: int = 0) -> dict[str, int]:
+        current_counts = _fresh_recommendation_counts(reports, scout)
+        if extra_new_jobs_seen:
+            current_counts = dict(current_counts)
+            current_counts["new_jobs_seen"] += max(0, int(extra_new_jobs_seen or 0))
+        return _combine_fresh_counts(base_fresh_counts, current_counts)
 
     try:
         if browser:
@@ -937,7 +987,9 @@ async def main():
                     last_page_quality=page_quality or {},
                     total_pages_processed=cumulative_pages + pages_scanned,
                     total_jobs_processed=cumulative_jobs,
+                    fresh_progress_counts=fresh_counts_so_far(),
                 )
+                live_fresh_counts = fresh_counts_so_far(extra_new_jobs_seen=int(total_jobs_collected or 0))
                 update_live_progress(
                     phase="collecting_pages",
                     current_query_index=index + 1,
@@ -945,7 +997,10 @@ async def main():
                     current_query=query,
                     current_page_number=page_number,
                     pages_scanned=cumulative_pages + pages_scanned,
-                    fresh_jobs_seen=cumulative_jobs + int(total_jobs_collected or 0),
+                    fresh_jobs_seen=live_fresh_counts["new_jobs_seen"],
+                    ai_scored=live_fresh_counts["ai_calls"],
+                    apply_first=live_fresh_counts["apply_first"],
+                    good_or_better=live_fresh_counts["good_or_better"],
                     page_quality=page_quality or {},
                 )
 
@@ -959,7 +1014,9 @@ async def main():
                     last_completed_page_number=query_pages_seen["value"],
                     total_pages_processed=cumulative_pages + query_pages_seen["value"],
                     total_jobs_processed=cumulative_jobs + int(processed_jobs or 0),
+                    fresh_progress_counts=fresh_counts_so_far(),
                 )
+                live_fresh_counts = fresh_counts_so_far()
                 update_live_progress(
                     phase="processing_jobs",
                     current_query_index=index + 1,
@@ -968,6 +1025,9 @@ async def main():
                     current_page_number=int(page_number or 0),
                     pages_scanned=cumulative_pages + query_pages_seen["value"],
                     processed_jobs=cumulative_jobs + int(processed_jobs or 0),
+                    ai_scored=live_fresh_counts["ai_calls"],
+                    apply_first=live_fresh_counts["apply_first"],
+                    good_or_better=live_fresh_counts["good_or_better"],
                 )
 
             if args.process_only:
@@ -988,6 +1048,7 @@ async def main():
                     phase="collecting_pages",
                     current_query_index=index,
                     current_query=query,
+                    fresh_progress_counts=fresh_counts_so_far(),
                 )
                 report = await scout.run(
                     query=query,
@@ -1007,6 +1068,7 @@ async def main():
             reporter.finish_query(report.get("stats", {}))
             cumulative_pages += int(report.get("pages_scanned", 0) or 0)
             cumulative_jobs += int((report.get("stats", {}) or {}).get("job_cards_collected", 0) or 0)
+            completed_fresh_counts = fresh_counts_so_far()
             save_progress(
                 status="in_progress",
                 phase="query_completed",
@@ -1020,6 +1082,7 @@ async def main():
                 total_jobs_processed=cumulative_jobs,
                 stable_total_pages_processed=cumulative_pages,
                 stable_total_jobs_processed=cumulative_jobs,
+                fresh_progress_counts=completed_fresh_counts if fresh_policy.enabled else {},
             )
             update_live_progress(
                 phase="query_completed",
@@ -1028,13 +1091,17 @@ async def main():
                 current_query=query,
                 current_page_number=0,
                 pages_scanned=cumulative_pages,
-                fresh_jobs_seen=cumulative_jobs,
+                fresh_jobs_seen=completed_fresh_counts["new_jobs_seen"],
+                ai_scored=completed_fresh_counts["ai_calls"],
+                apply_first=completed_fresh_counts["apply_first"],
+                good_or_better=completed_fresh_counts["good_or_better"],
             )
             if fresh_policy.enabled and not args.description_only and not args.process_only:
                 fresh_stop_reason, fresh_stop_counts = _fresh_global_stop_reason(
                     reports,
                     scout,
                     fresh_policy,
+                    base_counts=base_fresh_counts,
                 )
                 if fresh_stop_reason:
                     console.print(
@@ -1092,7 +1159,7 @@ async def main():
             started_at=run_started_at,
         )
         if fresh_policy.enabled:
-            fresh_counts = fresh_stop_counts or _fresh_recommendation_counts(reports, scout)
+            fresh_counts = fresh_stop_counts or fresh_counts_so_far()
             merged_output["fresh_scout"] = {
                 "policy": fresh_policy.as_dict(),
                 "stopped_early": bool(fresh_stop_reason),
@@ -1155,12 +1222,17 @@ async def main():
             stable_total_pages_processed=cumulative_pages,
             stable_total_jobs_processed=cumulative_jobs,
             fresh_stop_reason=fresh_stop_reason,
+            fresh_progress_counts=fresh_counts if fresh_policy.enabled else {},
         )
         if live_dashboard and live_run:
+            live_fresh_counts = fresh_counts if fresh_policy.enabled else {}
             update_live_progress(
                 phase="completed",
                 total_queries=len(queries),
-                ai_scored=int((fresh_stop_counts or {}).get("ai_calls", 0) or 0),
+                ai_scored=int(live_fresh_counts.get("ai_calls", 0) or 0),
+                apply_first=int(live_fresh_counts.get("apply_first", 0) or 0),
+                good_or_better=int(live_fresh_counts.get("good_or_better", 0) or 0),
+                fresh_jobs_seen=int(live_fresh_counts.get("new_jobs_seen", 0) or 0),
                 stopped_early=bool(fresh_stop_reason),
                 stop_reason=fresh_stop_reason,
             )

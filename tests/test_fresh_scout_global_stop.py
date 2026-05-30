@@ -4,7 +4,11 @@ from rich.console import Console
 
 from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.scout_console_reporter import ScoutConsoleReporter
-from scout_jobs_multi import _fresh_global_stop_reason, _fresh_recommendation_counts
+from scout_jobs_multi import (
+    _combine_fresh_counts,
+    _fresh_global_stop_reason,
+    _fresh_recommendation_counts,
+)
 
 
 class _ScoutThresholds:
@@ -56,6 +60,22 @@ class FreshScoutGlobalStopTests(unittest.TestCase):
         self.assertEqual(counts["good_or_better"], 2)
         self.assertEqual(counts["new_jobs_seen"], 3)
 
+    def test_fresh_counts_combine_resume_base_counts(self):
+        counts = _combine_fresh_counts(
+            {"apply_first": 3, "good_or_better": 7, "new_jobs_seen": 86, "ai_calls": 75},
+            {"apply_first": 1, "good_or_better": 2, "new_jobs_seen": 12, "ai_calls": 10},
+        )
+
+        self.assertEqual(
+            counts,
+            {
+                "apply_first": 4,
+                "good_or_better": 9,
+                "new_jobs_seen": 98,
+                "ai_calls": 85,
+            },
+        )
+
     def test_stop_reason_prefers_apply_first_target(self):
         policy = FreshScoutPolicy.from_preferences(
             {
@@ -73,6 +93,30 @@ class FreshScoutGlobalStopTests(unittest.TestCase):
 
         self.assertIn("APPLY FIRST", reason)
         self.assertEqual(counts["apply_first"], 2)
+
+    def test_stop_reason_uses_resume_base_counts(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "target_apply_first_jobs": 4,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                }
+            },
+            enabled=True,
+        )
+
+        reason, counts = _fresh_global_stop_reason(
+            [_report([_job(4, 72, "strong_match")], collected=8, ai_calls=7)],
+            _ScoutThresholds(),
+            policy,
+            base_counts={"apply_first": 3, "good_or_better": 8, "new_jobs_seen": 86, "ai_calls": 75},
+        )
+
+        self.assertIn("APPLY FIRST", reason)
+        self.assertEqual(counts["apply_first"], 4)
+        self.assertEqual(counts["new_jobs_seen"], 94)
+        self.assertEqual(counts["ai_calls"], 82)
 
     def test_stop_reason_uses_good_jobs_target_and_soft_cap(self):
         good_policy = FreshScoutPolicy.from_preferences(
