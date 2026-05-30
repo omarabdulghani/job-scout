@@ -695,6 +695,7 @@ async def main():
                 max_pages=page_label,
                 queries=queries,
                 started_at=run_started_at,
+                fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
             )
             console.print(
                 "[green]Live dashboard:[/green] "
@@ -711,6 +712,14 @@ async def main():
         event = dict(event)
         event["run_id"] = live_run["run_id"]
         live_dashboard.record_job(event)
+
+    def update_live_progress(**updates):
+        if not live_dashboard or not live_run or not fresh_policy.enabled:
+            return
+        try:
+            live_dashboard.update_run_progress(live_run["run_id"], **updates)
+        except Exception as exc:
+            console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
 
     mode_label = (
         f"Curated {board_name} description extraction only (no AI scoring)"
@@ -812,6 +821,16 @@ async def main():
                     total_pages_processed=cumulative_pages + pages_scanned,
                     total_jobs_processed=cumulative_jobs,
                 )
+                update_live_progress(
+                    phase="collecting_pages",
+                    current_query_index=index + 1,
+                    total_queries=len(queries),
+                    current_query=query,
+                    current_page_number=page_number,
+                    pages_scanned=cumulative_pages + pages_scanned,
+                    fresh_jobs_seen=cumulative_jobs + int(total_jobs_collected or 0),
+                    page_quality=page_quality or {},
+                )
 
             def on_job_processed(query: str, processed_jobs: int, page_number: int):
                 save_progress(
@@ -823,6 +842,15 @@ async def main():
                     last_completed_page_number=query_pages_seen["value"],
                     total_pages_processed=cumulative_pages + query_pages_seen["value"],
                     total_jobs_processed=cumulative_jobs + int(processed_jobs or 0),
+                )
+                update_live_progress(
+                    phase="processing_jobs",
+                    current_query_index=index + 1,
+                    total_queries=len(queries),
+                    current_query=query,
+                    current_page_number=int(page_number or 0),
+                    pages_scanned=cumulative_pages + query_pages_seen["value"],
+                    processed_jobs=cumulative_jobs + int(processed_jobs or 0),
                 )
 
             if args.process_only:
@@ -876,6 +904,15 @@ async def main():
                 stable_total_pages_processed=cumulative_pages,
                 stable_total_jobs_processed=cumulative_jobs,
             )
+            update_live_progress(
+                phase="query_completed",
+                current_query_index=index + 1,
+                total_queries=len(queries),
+                current_query=query,
+                current_page_number=0,
+                pages_scanned=cumulative_pages,
+                fresh_jobs_seen=cumulative_jobs,
+            )
             if fresh_policy.enabled and not args.description_only and not args.process_only:
                 fresh_stop_reason, fresh_stop_counts = _fresh_global_stop_reason(
                     reports,
@@ -886,6 +923,18 @@ async def main():
                     console.print(
                         "[green][FRESH][/green] "
                         f"Stopping multi-query run early: {fresh_stop_reason}."
+                    )
+                    update_live_progress(
+                        phase="fresh_stopped",
+                        current_query_index=index + 1,
+                        total_queries=len(queries),
+                        current_query=query,
+                        pages_scanned=cumulative_pages,
+                        fresh_jobs_seen=int(fresh_stop_counts.get("new_jobs_seen", 0) or cumulative_jobs),
+                        apply_first=int(fresh_stop_counts.get("apply_first", 0) or 0),
+                        good_or_better=int(fresh_stop_counts.get("good_or_better", 0) or 0),
+                        stopped_early=True,
+                        stop_reason=fresh_stop_reason,
                     )
                     break
 
@@ -986,6 +1035,12 @@ async def main():
             fresh_stop_reason=fresh_stop_reason,
         )
         if live_dashboard and live_run:
+            update_live_progress(
+                phase="completed",
+                total_queries=len(queries),
+                stopped_early=bool(fresh_stop_reason),
+                stop_reason=fresh_stop_reason,
+            )
             live_dashboard.complete_run(live_run["run_id"], status="completed")
             live_run_completed = True
     except KeyboardInterrupt:

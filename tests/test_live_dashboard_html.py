@@ -80,6 +80,22 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("renderLayoutMode", self.html)
         self.assertIn("decision-chip", self.html)
 
+    def test_dashboard_has_fresh_scout_progress_panel(self):
+        for element_id in [
+            "freshPanel",
+            "freshStatus",
+            "freshApply",
+            "freshGood",
+            "freshJobs",
+            "freshKnownSkipped",
+            "freshQuery",
+            "freshPages",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn("renderFreshProgress", self.html)
+        self.assertIn("selectedFreshRun", self.html)
+        self.assertIn("freshPageCard", self.html)
+
     def test_dashboard_has_required_decision_columns(self):
         for decision in ["APPLY_FIRST", "GOOD_OPTIONS", "LOW_PROBABILITY", "REJECTED"]:
             self.assertIn(f'data-column="{decision}"', self.html)

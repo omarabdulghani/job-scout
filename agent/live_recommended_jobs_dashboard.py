@@ -63,6 +63,7 @@ class LiveRecommendedJobsDashboard:
         queries: list[str],
         started_at: str | None = None,
         run_id: str | None = None,
+        fresh_policy: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started_at = started_at or self._now_iso()
         run_id = run_id or self._unique_run_id(started_at)
@@ -80,6 +81,7 @@ class LiveRecommendedJobsDashboard:
             "max_pages": "" if max_pages is None else str(max_pages),
             "queries": [_clean_text(query) for query in queries if _clean_text(query)],
             "stats": self._empty_run_stats(),
+            "fresh_scout": self._empty_fresh_scout(fresh_policy),
         }
 
         existing_index = self._run_index(run_id)
@@ -90,6 +92,63 @@ class LiveRecommendedJobsDashboard:
             run = self.data["runs"][existing_index]
 
         self.data["active_run_id"] = run_id
+        self._refresh_metadata()
+        self.write()
+        return dict(run)
+
+    def update_run_progress(
+        self,
+        run_id: str | None = None,
+        **progress: Any,
+    ) -> dict[str, Any]:
+        resolved_run_id = _clean_text(run_id or self.data.get("active_run_id"))
+        if not resolved_run_id:
+            raise ValueError("run_id is required to update live dashboard progress")
+
+        run = self._find_run(resolved_run_id)
+        if not run:
+            raise ValueError(f"Unknown live dashboard run_id: {resolved_run_id}")
+
+        fresh_policy = progress.pop("fresh_policy", None)
+        fresh = run.setdefault("fresh_scout", self._empty_fresh_scout(fresh_policy))
+        if not isinstance(fresh, dict):
+            fresh = self._empty_fresh_scout(fresh_policy)
+            run["fresh_scout"] = fresh
+        if isinstance(fresh_policy, dict) and fresh_policy:
+            fresh["enabled"] = bool(fresh_policy.get("enabled", True))
+            fresh["policy"] = dict(fresh_policy)
+        elif "fresh_enabled" in progress:
+            fresh["enabled"] = bool(progress.get("fresh_enabled"))
+
+        page_quality = progress.pop("page_quality", None)
+        if isinstance(page_quality, dict) and page_quality:
+            self._upsert_fresh_page(fresh, page_quality)
+
+        target = fresh.setdefault("progress", self._empty_fresh_progress())
+        allowed_text = {"phase", "current_query", "stop_reason"}
+        allowed_int = {
+            "current_query_index",
+            "total_queries",
+            "current_page_number",
+            "pages_scanned",
+            "fresh_jobs_seen",
+            "processed_jobs",
+            "opened_jobs",
+            "survived_to_ai",
+            "ai_scored",
+            "apply_first",
+            "good_or_better",
+        }
+        for key in allowed_text:
+            if key in progress:
+                target[key] = _clean_text(progress.get(key))
+        for key in allowed_int:
+            if key in progress:
+                target[key] = _safe_int(progress.get(key))
+        if "stopped_early" in progress:
+            target["stopped_early"] = bool(progress.get("stopped_early"))
+        target["updated_at"] = self._now_iso()
+
         self._refresh_metadata()
         self.write()
         return dict(run)
@@ -292,6 +351,7 @@ class LiveRecommendedJobsDashboard:
         self.data["filter_options"] = self._build_filter_options()
         for run in self.data["runs"]:
             run["stats"] = self._build_run_stats(run.get("run_id", ""))
+            self._refresh_fresh_progress(run)
 
     def _build_summary(self) -> dict[str, Any]:
         jobs = [job for job in self.data.get("jobs", []) if isinstance(job, dict)]
@@ -450,6 +510,102 @@ class LiveRecommendedJobsDashboard:
             "rejected": 0,
         }
 
+    def _empty_fresh_scout(self, policy: dict[str, Any] | None = None) -> dict[str, Any]:
+        policy = policy if isinstance(policy, dict) else {}
+        return {
+            "enabled": bool(policy.get("enabled")),
+            "policy": dict(policy),
+            "progress": self._empty_fresh_progress(),
+            "page_history": [],
+        }
+
+    def _empty_fresh_progress(self) -> dict[str, Any]:
+        return {
+            "phase": "",
+            "current_query": "",
+            "current_query_index": 0,
+            "total_queries": 0,
+            "current_page_number": 0,
+            "pages_scanned": 0,
+            "fresh_jobs_seen": 0,
+            "known_jobs_skipped": 0,
+            "processed_jobs": 0,
+            "opened_jobs": 0,
+            "survived_to_ai": 0,
+            "ai_scored": 0,
+            "apply_first": 0,
+            "good_or_better": 0,
+            "stopped_early": False,
+            "stop_reason": "",
+            "updated_at": "",
+        }
+
+    def _upsert_fresh_page(self, fresh: dict[str, Any], page_quality: dict[str, Any]) -> None:
+        page = {
+            "query": _clean_text(page_quality.get("query")),
+            "page_number": _safe_int(page_quality.get("page_number")),
+            "cards_seen": _safe_int(page_quality.get("cards_seen")),
+            "valid_unique_cards": _safe_int(page_quality.get("valid_unique_cards")),
+            "known_jobs": _safe_int(page_quality.get("known_jobs")),
+            "new_jobs": _safe_int(page_quality.get("new_jobs")),
+            "known_ratio": _safe_float(page_quality.get("known_ratio")),
+            "duplicate_cards": _safe_int(page_quality.get("duplicate_cards")),
+            "invalid_cards": _safe_int(page_quality.get("invalid_cards")),
+            "total_new_jobs_collected": _safe_int(page_quality.get("total_new_jobs_collected")),
+            "results_layout_type": _clean_text(page_quality.get("results_layout_type")),
+            "has_additional_pages": bool(page_quality.get("has_additional_pages")),
+            "scanned_at": self._now_iso(),
+        }
+        if not page["query"] or not page["page_number"]:
+            return
+
+        history = fresh.setdefault("page_history", [])
+        if not isinstance(history, list):
+            history = []
+            fresh["page_history"] = history
+        identity = (page["query"].lower(), page["page_number"])
+        for index, existing in enumerate(history):
+            if not isinstance(existing, dict):
+                continue
+            existing_identity = (
+                _clean_text(existing.get("query")).lower(),
+                _safe_int(existing.get("page_number")),
+            )
+            if existing_identity == identity:
+                history[index] = page
+                return
+        history.append(page)
+
+    def _refresh_fresh_progress(self, run: dict[str, Any]) -> None:
+        fresh = run.get("fresh_scout")
+        if not isinstance(fresh, dict) or not fresh.get("enabled"):
+            return
+        progress = fresh.setdefault("progress", self._empty_fresh_progress())
+        if not isinstance(progress, dict):
+            progress = self._empty_fresh_progress()
+            fresh["progress"] = progress
+
+        stats = run.get("stats", {}) if isinstance(run.get("stats"), dict) else {}
+        page_history = [
+            page for page in fresh.get("page_history", [])
+            if isinstance(page, dict)
+        ]
+        progress["apply_first"] = _safe_int(stats.get("apply_first"))
+        progress["good_or_better"] = _safe_int(stats.get("apply_first")) + _safe_int(stats.get("good_options"))
+        progress["processed_jobs"] = max(
+            _safe_int(progress.get("processed_jobs")),
+            _safe_int(stats.get("processed_jobs")),
+        )
+        progress["known_jobs_skipped"] = sum(_safe_int(page.get("known_jobs")) for page in page_history)
+        progress["fresh_jobs_seen"] = max(
+            _safe_int(progress.get("fresh_jobs_seen")),
+            sum(_safe_int(page.get("new_jobs")) for page in page_history),
+        )
+        progress["pages_scanned"] = max(
+            _safe_int(progress.get("pages_scanned")),
+            len(page_history),
+        )
+
     def _now_iso(self) -> str:
         return self.now_provider().isoformat()
 
@@ -593,6 +749,13 @@ def _safe_int(value: Any) -> int:
         return int(float(str(value or 0).strip()))
     except (TypeError, ValueError):
         return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(str(value or 0).strip())
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _normalize_identity_text(value: Any) -> str:

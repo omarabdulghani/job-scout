@@ -80,6 +80,72 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(writer.data["summary"]["by_decision"]["APPLY_FIRST"], 1)
             self.assertIn("UX_UI_PRODUCT_DESIGN", writer.data["filter_options"]["domains"])
 
+    def test_fresh_run_progress_tracks_goals_and_page_quality(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = LiveRecommendedJobsDashboard(
+                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                now_provider=FixedClock(),
+            )
+            run = writer.start_run(
+                mode="linkedin_multi_query_scout",
+                board="linkedin",
+                location="Amstelveen",
+                max_pages="smart up to 4",
+                queries=["junior ux designer", "product coordinator"],
+                started_at="2026-05-26T14:03:00+02:00",
+                fresh_policy={
+                    "enabled": True,
+                    "max_pages_per_query": 4,
+                    "min_new_jobs_per_useful_query": 5,
+                    "target_apply_first_jobs": 8,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                },
+            )
+
+            writer.update_run_progress(
+                run["run_id"],
+                phase="collecting_pages",
+                current_query_index=1,
+                total_queries=2,
+                current_query="junior ux designer",
+                current_page_number=1,
+                pages_scanned=1,
+                fresh_jobs_seen=2,
+                page_quality={
+                    "query": "junior ux designer",
+                    "page_number": 1,
+                    "cards_seen": 25,
+                    "valid_unique_cards": 25,
+                    "known_jobs": 23,
+                    "new_jobs": 2,
+                    "known_ratio": 0.92,
+                },
+            )
+            writer.record_job(
+                {
+                    "run_id": run["run_id"],
+                    "query": "junior ux designer",
+                    "title": "Junior UX Designer",
+                    "company": "Example",
+                    "location": "Amsterdam, Netherlands",
+                    "url": "https://www.linkedin.com/jobs/view/123456789/",
+                    "score": 82,
+                    "terminal_status": "accepted",
+                    "source_stage": "ai_scored",
+                }
+            )
+
+            fresh = writer.data["runs"][0]["fresh_scout"]
+            self.assertTrue(fresh["enabled"])
+            self.assertEqual(fresh["policy"]["global_new_jobs_soft_cap"], 140)
+            self.assertEqual(fresh["progress"]["current_query"], "junior ux designer")
+            self.assertEqual(fresh["progress"]["apply_first"], 1)
+            self.assertEqual(fresh["progress"]["good_or_better"], 1)
+            self.assertEqual(fresh["progress"]["known_jobs_skipped"], 23)
+            self.assertEqual(fresh["progress"]["fresh_jobs_seen"], 2)
+            self.assertEqual(fresh["page_history"][0]["known_ratio"], 0.92)
+
     def test_record_job_maps_rejected_and_good_options(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(

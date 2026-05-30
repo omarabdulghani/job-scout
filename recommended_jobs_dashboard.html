@@ -116,6 +116,147 @@
       line-height: 1.1;
     }
 
+    .fresh-panel {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      margin: 14px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .fresh-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .fresh-head h2 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.2;
+    }
+
+    .fresh-head p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .fresh-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .fresh-metric {
+      display: grid;
+      gap: 6px;
+      min-height: 78px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .fresh-metric span,
+    .fresh-detail span {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .fresh-metric strong,
+    .fresh-detail strong {
+      font-size: 1rem;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .fresh-bar {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--surface-2);
+    }
+
+    .fresh-bar i {
+      display: block;
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--blue);
+    }
+
+    .fresh-bar.apply i {
+      background: var(--green);
+    }
+
+    .fresh-bar.good i {
+      background: var(--amber);
+    }
+
+    .fresh-bar.volume i {
+      background: var(--violet);
+    }
+
+    .fresh-details {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .fresh-detail {
+      display: grid;
+      gap: 3px;
+      min-height: 52px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .fresh-pages {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .fresh-page {
+      display: grid;
+      gap: 4px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--blue);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .fresh-page.duplicate-heavy {
+      border-left-color: var(--amber);
+    }
+
+    .fresh-page.useful {
+      border-left-color: var(--green);
+    }
+
+    .fresh-page strong {
+      font-size: 0.86rem;
+      overflow-wrap: anywhere;
+    }
+
+    .fresh-page span {
+      color: var(--muted);
+    }
+
     .filters {
       display: grid;
       grid-template-columns: 1.4fr repeat(8, minmax(112px, 1fr)) auto auto;
@@ -640,6 +781,12 @@
         grid-template-columns: repeat(3, minmax(130px, 1fr));
       }
 
+      .fresh-metrics,
+      .fresh-details,
+      .fresh-pages {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+      }
+
       .filters {
         grid-template-columns: repeat(3, minmax(160px, 1fr));
       }
@@ -665,6 +812,9 @@
       }
 
       .stats,
+      .fresh-metrics,
+      .fresh-details,
+      .fresh-pages,
       .filters,
       .board {
         grid-template-columns: 1fr;
@@ -702,6 +852,45 @@
       <div class="stat"><span>Unreviewed</span><strong id="statUnreviewed">0</strong></div>
       <div class="stat"><span>Applied</span><strong id="statApplied">0</strong></div>
       <div class="stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong></div>
+    </section>
+
+    <section id="freshPanel" class="fresh-panel hidden" aria-label="Fresh Scout progress">
+      <div class="fresh-head">
+        <div>
+          <h2>Fresh Scout Progress</h2>
+          <p id="freshStatus">Waiting for a fresh run.</p>
+        </div>
+        <div class="decision-chip" id="freshRunLabel">No fresh run</div>
+      </div>
+      <div class="fresh-metrics">
+        <div class="fresh-metric">
+          <span>Apply first</span>
+          <strong id="freshApply">0 / 0</strong>
+          <div class="fresh-bar apply"><i id="freshApplyBar"></i></div>
+        </div>
+        <div class="fresh-metric">
+          <span>Good or better</span>
+          <strong id="freshGood">0 / 0</strong>
+          <div class="fresh-bar good"><i id="freshGoodBar"></i></div>
+        </div>
+        <div class="fresh-metric">
+          <span>Fresh jobs</span>
+          <strong id="freshJobs">0 / 0</strong>
+          <div class="fresh-bar volume"><i id="freshJobsBar"></i></div>
+        </div>
+        <div class="fresh-metric">
+          <span>Known skipped</span>
+          <strong id="freshKnownSkipped">0</strong>
+          <div class="fresh-bar"><i id="freshKnownBar"></i></div>
+        </div>
+      </div>
+      <div class="fresh-details">
+        <div class="fresh-detail"><span>Query</span><strong id="freshQuery">-</strong></div>
+        <div class="fresh-detail"><span>Page</span><strong id="freshPage">-</strong></div>
+        <div class="fresh-detail"><span>Queries searched</span><strong id="freshQueries">-</strong></div>
+        <div class="fresh-detail"><span>Pages scanned</span><strong id="freshPagesScanned">0</strong></div>
+      </div>
+      <div id="freshPages" class="fresh-pages" aria-label="Recent fresh page decisions"></div>
     </section>
 
     <section class="filters" aria-label="Dashboard filters">
@@ -828,6 +1017,22 @@
       statUnreviewed: document.getElementById("statUnreviewed"),
       statApplied: document.getElementById("statApplied"),
       statIrrelevant: document.getElementById("statIrrelevant"),
+      freshPanel: document.getElementById("freshPanel"),
+      freshStatus: document.getElementById("freshStatus"),
+      freshRunLabel: document.getElementById("freshRunLabel"),
+      freshApply: document.getElementById("freshApply"),
+      freshApplyBar: document.getElementById("freshApplyBar"),
+      freshGood: document.getElementById("freshGood"),
+      freshGoodBar: document.getElementById("freshGoodBar"),
+      freshJobs: document.getElementById("freshJobs"),
+      freshJobsBar: document.getElementById("freshJobsBar"),
+      freshKnownSkipped: document.getElementById("freshKnownSkipped"),
+      freshKnownBar: document.getElementById("freshKnownBar"),
+      freshQuery: document.getElementById("freshQuery"),
+      freshPage: document.getElementById("freshPage"),
+      freshQueries: document.getElementById("freshQueries"),
+      freshPagesScanned: document.getElementById("freshPagesScanned"),
+      freshPages: document.getElementById("freshPages"),
       searchInput: document.getElementById("searchInput"),
       actionFilter: document.getElementById("actionFilter"),
       runFilter: document.getElementById("runFilter"),
@@ -926,6 +1131,7 @@
     function render() {
       syncFilterOptions();
       renderStats();
+      renderFreshProgress();
       renderJobs();
       renderLayoutMode();
       updateUndoButtonState();
@@ -1028,6 +1234,119 @@
       els.statApplied.textContent = String(manual.applied || 0);
       els.statIrrelevant.textContent = String(manual.irrelevant || 0);
       els.updatedAt.textContent = "Updated: " + (formatDateTime(state.data.dashboard_updated_at) || "never");
+    }
+
+    function renderFreshProgress() {
+      const run = selectedFreshRun();
+      const fresh = run && run.fresh_scout && run.fresh_scout.enabled ? run.fresh_scout : null;
+      if (!fresh) {
+        els.freshPanel.classList.add("hidden");
+        return;
+      }
+
+      const policy = fresh.policy || {};
+      const progress = fresh.progress || {};
+      const stats = run.stats || {};
+      const apply = numeric(progress.apply_first || stats.apply_first);
+      const good = numeric(progress.good_or_better || (numeric(stats.apply_first) + numeric(stats.good_options)));
+      const freshJobs = numeric(progress.fresh_jobs_seen);
+      const knownSkipped = numeric(progress.known_jobs_skipped);
+      const applyTarget = numeric(policy.target_apply_first_jobs);
+      const goodTarget = numeric(policy.target_good_or_better_jobs);
+      const jobCap = numeric(policy.global_new_jobs_soft_cap);
+      const totalQueries = numeric(progress.total_queries || (Array.isArray(run.queries) ? run.queries.length : 0));
+      const queryIndex = numeric(progress.current_query_index);
+      const maxPages = numeric(policy.max_pages_per_query);
+      const currentPage = numeric(progress.current_page_number);
+      const stopReason = safe(progress.stop_reason);
+
+      els.freshPanel.classList.remove("hidden");
+      els.freshRunLabel.textContent = safe(run.run_label) || "Fresh run";
+      els.freshStatus.textContent = freshStatusText(run, progress, stopReason);
+      els.freshApply.textContent = metricText(apply, applyTarget);
+      els.freshGood.textContent = metricText(good, goodTarget);
+      els.freshJobs.textContent = metricText(freshJobs, jobCap);
+      els.freshKnownSkipped.textContent = String(knownSkipped);
+      els.freshApplyBar.style.width = progressPercent(apply, applyTarget) + "%";
+      els.freshGoodBar.style.width = progressPercent(good, goodTarget) + "%";
+      els.freshJobsBar.style.width = progressPercent(freshJobs, jobCap) + "%";
+      els.freshKnownBar.style.width = progressPercent(knownSkipped, Math.max(knownSkipped + freshJobs, 1)) + "%";
+      els.freshQuery.textContent = safe(progress.current_query) || "No active query";
+      els.freshPage.textContent = currentPage ? ("Page " + currentPage + (maxPages ? " / " + maxPages : "")) : "-";
+      els.freshQueries.textContent = totalQueries ? (Math.min(queryIndex || 0, totalQueries) + " / " + totalQueries) : "-";
+      els.freshPagesScanned.textContent = String(numeric(progress.pages_scanned));
+      renderFreshPages(fresh, policy);
+    }
+
+    function selectedFreshRun() {
+      const runs = Array.isArray(state.data.runs) ? state.data.runs : [];
+      const selectedRunId = state.filters.run !== "all" ? state.filters.run : "";
+      if (selectedRunId) {
+        return runs.find((run) => safe(run.run_id) === selectedRunId && run.fresh_scout && run.fresh_scout.enabled);
+      }
+      const activeRun = runs.find((run) => safe(run.run_id) === safe(state.data.active_run_id) && run.fresh_scout && run.fresh_scout.enabled);
+      if (activeRun) return activeRun;
+      return [...runs].reverse().find((run) => run.fresh_scout && run.fresh_scout.enabled);
+    }
+
+    function freshStatusText(run, progress, stopReason) {
+      if (stopReason) return "Stopped: " + stopReason;
+      const phase = labelize(progress.phase || "");
+      if (run.status === "running") return phase ? ("Running: " + phase) : "Fresh run active.";
+      if (run.status === "failed") return "Fresh run ended with an error.";
+      if (run.status === "stopped") return "Fresh run stopped before completion.";
+      return "Fresh run complete.";
+    }
+
+    function metricText(value, target) {
+      return target ? (value + " / " + target) : String(value);
+    }
+
+    function progressPercent(value, target) {
+      if (!target) return 0;
+      return Math.max(0, Math.min(100, Math.round((numeric(value) / numeric(target)) * 100)));
+    }
+
+    function renderFreshPages(fresh, policy) {
+      const history = Array.isArray(fresh.page_history) ? fresh.page_history : [];
+      const recent = history.slice(-4).reverse();
+      els.freshPages.replaceChildren();
+      if (!recent.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Fresh page decisions will appear here while the scout scans.";
+        els.freshPages.append(empty);
+        return;
+      }
+      els.freshPages.append(...recent.map((page) => freshPageCard(page, policy)));
+    }
+
+    function freshPageCard(page, policy) {
+      const card = document.createElement("div");
+      const knownRatio = Number(page.known_ratio || 0);
+      const newJobs = numeric(page.new_jobs);
+      const minNew = numeric(policy.min_new_jobs_per_useful_query);
+      const duplicateHeavy = knownRatio >= Number(policy.duplicate_heavy_stop_threshold || 0.9);
+      const useful = minNew && newJobs >= minNew;
+      card.className = "fresh-page" + (useful ? " useful" : duplicateHeavy ? " duplicate-heavy" : "");
+
+      const title = document.createElement("strong");
+      title.textContent = (safe(page.query) || "Query") + " - page " + (numeric(page.page_number) || "?");
+      const numbers = document.createElement("span");
+      numbers.textContent = [
+        numeric(page.cards_seen) + " cards",
+        numeric(page.known_jobs) + " known",
+        newJobs + " new",
+        Math.round(knownRatio * 100) + "% known"
+      ].join(" | ");
+      const note = document.createElement("span");
+      note.textContent = useful
+        ? "Useful page"
+        : duplicateHeavy
+          ? "Duplicate-heavy"
+          : "Mixed page";
+      card.append(title, numbers, note);
+      return card;
     }
 
     function renderJobs() {

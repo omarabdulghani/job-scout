@@ -231,6 +231,7 @@ async def main():
                 max_pages=page_label,
                 queries=[args.query],
                 started_at=run_started_at,
+                fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
             )
             console.print(
                 "[green]Live dashboard:[/green] "
@@ -247,6 +248,14 @@ async def main():
         event = dict(event)
         event["run_id"] = live_run["run_id"]
         live_dashboard.record_job(event)
+
+    def update_live_progress(**updates):
+        if not live_dashboard or not live_run or not fresh_policy.enabled:
+            return
+        try:
+            live_dashboard.update_run_progress(live_run["run_id"], **updates)
+        except Exception as exc:
+            console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
 
     mode_label = (
         f"{board_name} description extraction only (no AI scoring)"
@@ -350,6 +359,16 @@ async def main():
                     total_pages_processed=stable_pages + pages_scanned,
                     total_jobs_processed=stable_jobs,
                 )
+                update_live_progress(
+                    phase="collecting_pages",
+                    current_query_index=1,
+                    total_queries=1,
+                    current_query=query,
+                    current_page_number=page_number,
+                    pages_scanned=stable_pages + pages_scanned,
+                    fresh_jobs_seen=stable_jobs + int(total_jobs_collected or 0),
+                    page_quality=page_quality or {},
+                )
 
             def on_job_processed(query: str, processed_jobs: int, page_number: int):
                 save_progress(
@@ -361,6 +380,15 @@ async def main():
                     last_completed_page_number=current_query_pages["value"],
                     total_pages_processed=stable_pages + current_query_pages["value"],
                     total_jobs_processed=stable_jobs + int(processed_jobs or 0),
+                )
+                update_live_progress(
+                    phase="processing_jobs",
+                    current_query_index=1,
+                    total_queries=1,
+                    current_query=query,
+                    current_page_number=int(page_number or 0),
+                    pages_scanned=stable_pages + current_query_pages["value"],
+                    processed_jobs=stable_jobs + int(processed_jobs or 0),
                 )
 
             report = await scout.run(
@@ -391,6 +419,15 @@ async def main():
                 total_jobs_processed=stable_jobs + int(stats_for_progress.get("job_cards_collected", 0) or 0),
                 stable_total_pages_processed=stable_pages + int(report.get("pages_scanned", 0) or 0),
                 stable_total_jobs_processed=stable_jobs + int(stats_for_progress.get("job_cards_collected", 0) or 0),
+            )
+            update_live_progress(
+                phase="completed",
+                current_query_index=1,
+                total_queries=1,
+                current_query=args.query,
+                current_page_number=0,
+                pages_scanned=stable_pages + int(report.get("pages_scanned", 0) or 0),
+                fresh_jobs_seen=stable_jobs + int(stats_for_progress.get("job_cards_collected", 0) or 0),
             )
 
         stats = report.get("stats", {})
