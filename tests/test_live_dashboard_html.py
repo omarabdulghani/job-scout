@@ -37,9 +37,22 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "listViewButton",
             "undoButton",
             "quickPresets",
+            "themeToggle",
             "runScoutButton",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
+
+    def test_dashboard_has_persistent_light_dark_theme_toggle(self):
+        self.assertIn('localStorage.getItem("jobDashboardTheme")', self.html)
+        self.assertIn('const THEME_STORAGE_KEY = "jobDashboardTheme"', self.html)
+        self.assertIn('data-theme', self.html)
+        self.assertIn('id="themeToggle"', self.html)
+        self.assertIn('id="themeToggleText"', self.html)
+        self.assertIn('id="icon-moon"', self.html)
+        self.assertIn('id="icon-sun"', self.html)
+        self.assertIn("applyTheme", self.html)
+        self.assertIn("toggleTheme", self.html)
+        self.assertIn("renderThemeToggle", self.html)
 
     def test_dashboard_has_manual_status_actions(self):
         self.assertIn("Applied", self.html)
