@@ -4,20 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Live Recommended Jobs Dashboard</title>
+  <link rel="icon" href="icon-dashboard.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="icon-dashboard.png" />
   <style>
     :root {
-      --bg: #f5f7fb;
+      --bg: #f3f6fb;
       --surface: #ffffff;
-      --surface-2: #f0f4f8;
-      --ink: #17202a;
-      --muted: #5e6b78;
-      --line: #d8e0e8;
-      --blue: #2459a6;
-      --green: #1d7a4d;
+      --surface-2: #eef3f8;
+      --surface-3: #f8fbfd;
+      --ink: #121a24;
+      --muted: #607083;
+      --line: #d6e0ea;
+      --blue: #235ba8;
+      --blue-soft: #e8f1ff;
+      --green: #187647;
+      --green-soft: #e8f7ef;
       --amber: #9a650e;
-      --red: #a83b3b;
-      --violet: #6b4bb8;
+      --amber-soft: #fff4df;
+      --red: #a63d3d;
+      --red-soft: #fff0f0;
+      --violet: #6550b9;
+      --violet-soft: #f1edff;
       --shadow: 0 8px 24px rgba(21, 33, 46, 0.08);
+      --shadow-sm: 0 2px 10px rgba(21, 33, 46, 0.05);
     }
 
     * {
@@ -38,6 +47,34 @@
       font: inherit;
     }
 
+    .icon-sprite {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    .icon {
+      width: 1em;
+      height: 1em;
+      flex: 0 0 auto;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .icon-sm {
+      width: 0.92em;
+      height: 0.92em;
+    }
+
+    .icon-lg {
+      width: 1.15em;
+      height: 1.15em;
+    }
+
     .shell {
       width: min(1440px, calc(100vw - 32px));
       margin: 0 auto;
@@ -48,7 +85,7 @@
       display: grid;
       grid-template-columns: minmax(260px, 1fr) auto;
       gap: 16px;
-      align-items: end;
+      align-items: center;
       padding: 16px 0 14px;
       border-bottom: 1px solid var(--line);
     }
@@ -58,6 +95,57 @@
       font-size: 1.6rem;
       line-height: 1.2;
       font-weight: 760;
+    }
+
+    .brand {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(36, 89, 166, 0.16);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: var(--shadow-sm);
+      object-fit: cover;
+    }
+
+    .page-intent {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.35;
+    }
+
+    .section-title,
+    #freshTitle,
+    .button,
+    .fresh-action,
+    .preset-chip,
+    .job-action,
+    .layout-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .section-title {
+      justify-content: flex-start;
+    }
+
+    .section-title .icon {
+      color: var(--blue);
+    }
+
+    .top-actions {
+      display: grid;
+      justify-items: end;
+      gap: 9px;
     }
 
     .meta {
@@ -90,10 +178,14 @@
       display: grid;
       grid-template-columns: repeat(9, minmax(120px, 1fr));
       gap: 10px;
-      margin: 14px 0;
+      margin: 16px 0 14px;
     }
 
     .stat {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 6px 10px;
       min-height: 74px;
       padding: 12px;
       border: 1px solid var(--line);
@@ -102,8 +194,80 @@
       box-shadow: var(--shadow);
     }
 
+    .stat-icon {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      width: 26px;
+      height: 26px;
+      padding: 5px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+
+    .stat.apply .stat-icon {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .stat.good .stat-icon {
+      color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .stat.low .stat-icon {
+      color: var(--violet);
+      background: var(--violet-soft);
+    }
+
+    .stat.rejected .stat-icon {
+      color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .stat.needs-action .stat-icon {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .stat.primary-stat {
+      background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+    }
+
+    .stat.supporting-stat {
+      background: #fbfdff;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat.archive-stat {
+      background: #f8fafc;
+      opacity: 0.86;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .stat.apply {
+      border-top: 3px solid var(--green);
+    }
+
+    .stat.good {
+      border-top: 3px solid var(--amber);
+    }
+
+    .stat.low {
+      border-top: 3px solid var(--violet);
+    }
+
+    .stat.rejected {
+      border-top: 3px solid var(--red);
+    }
+
+    .stat.needs-action {
+      border-top: 3px solid var(--blue);
+    }
+
     .stat span {
       display: block;
+      grid-column: 1;
       color: var(--muted);
       font-size: 0.78rem;
       text-transform: uppercase;
@@ -111,6 +275,7 @@
 
     .stat strong {
       display: block;
+      grid-column: 1;
       margin-top: 5px;
       font-size: 1.5rem;
       line-height: 1.1;
@@ -125,6 +290,174 @@
       border-radius: 8px;
       background: var(--surface);
       box-shadow: var(--shadow);
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      margin: 14px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.2;
+    }
+
+    .section-head p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .best-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(190px, 1fr));
+      gap: 10px;
+    }
+
+    .best-card {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--green);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .best-card:hover,
+    .job:hover,
+    .compact-job:hover {
+      border-color: rgba(36, 89, 166, 0.32);
+      box-shadow: 0 8px 22px rgba(21, 33, 46, 0.09);
+    }
+
+    .best-card.GOOD_OPTIONS {
+      border-left-color: var(--amber);
+    }
+
+    .best-card .job-actions {
+      margin-top: 2px;
+    }
+
+    .best-title {
+      display: grid;
+      gap: 6px;
+    }
+
+    .best-title a,
+    .best-title span {
+      color: var(--ink);
+      font-size: 0.95rem;
+      font-weight: 820;
+      line-height: 1.25;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    .best-title a:hover {
+      color: var(--blue);
+      text-decoration: underline;
+    }
+
+    .best-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .run-history-list {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .run-history-panel.compact .run-history-list {
+      grid-template-columns: 1fr;
+    }
+
+    .run-history-panel.compact .run-history-item {
+      grid-template-columns: minmax(170px, 1fr) minmax(210px, auto) minmax(180px, 2fr) auto;
+      align-items: center;
+    }
+
+    .run-history-item {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-3);
+    }
+
+    .run-history-item.running {
+      border-color: rgba(29, 122, 77, 0.35);
+      background: var(--green-soft);
+    }
+
+    .run-history-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 850;
+      line-height: 1.25;
+    }
+
+    .run-history-meta {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .run-history-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .best-empty {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .best-empty strong {
+      color: var(--ink);
+    }
+
+    .fresh-panel.completed {
+      gap: 10px;
+    }
+
+    .fresh-panel.completed:not(.expanded) .fresh-metrics,
+    .fresh-panel.completed:not(.expanded) .fresh-details,
+    .fresh-panel.completed:not(.expanded) .fresh-pages {
+      display: none;
     }
 
     .fresh-head {
@@ -146,6 +479,49 @@
       color: var(--muted);
       font-size: 0.86rem;
       line-height: 1.35;
+    }
+
+    .fresh-complete-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .fresh-summary-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fbfdff;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 760;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .fresh-summary-chip strong {
+      color: var(--ink);
+      font-weight: 850;
+    }
+
+    .fresh-action {
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid rgba(36, 89, 166, 0.26);
+      border-radius: 999px;
+      background: rgba(36, 89, 166, 0.07);
+      color: var(--blue);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .fresh-action:hover {
+      background: rgba(36, 89, 166, 0.12);
     }
 
     .fresh-metrics {
@@ -249,6 +625,9 @@
     }
 
     .fresh-page strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       font-size: 0.86rem;
       overflow-wrap: anywhere;
     }
@@ -258,8 +637,8 @@
     }
 
     .filters {
-      display: grid;
-      grid-template-columns: 1.4fr repeat(8, minmax(112px, 1fr)) auto auto;
+      display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       align-items: end;
       padding: 12px;
@@ -270,8 +649,56 @@
       box-shadow: var(--shadow);
     }
 
+    .quick-presets {
+      flex: 1 0 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding-bottom: 2px;
+    }
+
+    .preset-chip {
+      min-height: 30px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 820;
+      line-height: 1.2;
+    }
+
+    .preset-chip:hover {
+      border-color: rgba(36, 89, 166, 0.32);
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .preset-chip.active {
+      border-color: rgba(36, 89, 166, 0.44);
+      color: var(--blue);
+      background: var(--blue-soft);
+      box-shadow: inset 0 0 0 1px rgba(36, 89, 166, 0.05);
+    }
+
     .control {
+      flex: 1 1 154px;
       min-width: 0;
+    }
+
+    .control.search-control {
+      flex: 1.6 1 230px;
+    }
+
+    .control.wide-control {
+      flex: 1.2 1 176px;
+    }
+
+    .control.compact-control {
+      flex: 0.9 1 138px;
     }
 
     .control label {
@@ -294,6 +721,21 @@
       color: var(--ink);
     }
 
+    .control input:disabled,
+    .control select:disabled {
+      cursor: not-allowed;
+      background: #f3f6fa;
+      color: var(--muted);
+      opacity: 0.82;
+    }
+
+    .filter-hint {
+      flex: 1 0 100%;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
     .button {
       min-height: 38px;
       padding: 8px 12px;
@@ -304,6 +746,11 @@
       cursor: pointer;
       font-weight: 700;
       white-space: nowrap;
+    }
+
+    .button.primary {
+      border-color: #14613e;
+      background: var(--green);
     }
 
     .button.secondary {
@@ -320,7 +767,12 @@
     .button:focus,
     .control input:focus,
     .control select:focus,
-    .layout-button:focus {
+    .layout-button:focus,
+    .preset-chip:focus,
+    .fresh-action:focus,
+    .job-action:focus,
+    .icon-button:focus,
+    .toast button:focus {
       outline: 2px solid rgba(36, 89, 166, 0.35);
       outline-offset: 2px;
     }
@@ -496,12 +948,12 @@
     .job {
       display: grid;
       gap: 8px;
-      padding: 10px;
+      padding: 11px;
       border: 1px solid var(--line);
       border-left-width: 4px;
       border-radius: 8px;
       background: var(--surface);
-      box-shadow: 0 2px 10px rgba(21, 33, 46, 0.05);
+      box-shadow: var(--shadow-sm);
     }
 
     .job.APPLY_FIRST {
@@ -545,9 +997,12 @@
 
     .job-title-main {
       min-width: 0;
+      display: grid;
+      gap: 5px;
     }
 
-    .job-title a {
+    .job-title-main > a,
+    .job-title-main > span {
       color: var(--ink);
       font-weight: 750;
       line-height: 1.25;
@@ -555,7 +1010,7 @@
       overflow-wrap: anywhere;
     }
 
-    .job-title a:hover {
+    .job-title-main > a:hover {
       color: var(--blue);
       text-decoration: underline;
     }
@@ -592,7 +1047,31 @@
       white-space: nowrap;
     }
 
+    .apply-method-badge {
+      max-width: 92px;
+      padding: 3px 7px;
+      border: 1px solid rgba(10, 102, 194, 0.32);
+      border-radius: 999px;
+      background: rgba(10, 102, 194, 0.08);
+      color: #0a66c2;
+      font-size: 0.72rem;
+      font-weight: 850;
+      line-height: 1.2;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .apply-method-badge.external,
+    .apply-method-badge.unknown {
+      border-color: var(--line);
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+
     .decision-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       padding: 3px 7px;
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -646,6 +1125,9 @@
     }
 
     .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       max-width: 100%;
       padding: 3px 6px;
       border: 1px solid var(--line);
@@ -675,10 +1157,17 @@
       background: rgba(168, 59, 59, 0.08);
     }
 
+    .badge.risk {
+      color: #7a520e;
+      border-color: rgba(154, 101, 14, 0.3);
+      background: var(--amber-soft);
+    }
+
     .job-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      padding-top: 2px;
     }
 
     .job-action {
@@ -710,6 +1199,10 @@
       background: rgba(36, 89, 166, 0.05);
     }
 
+    .job-action.utility:hover {
+      background: var(--blue-soft);
+    }
+
     .job-action.danger.active {
       border-color: rgba(168, 59, 59, 0.36);
       background: rgba(168, 59, 59, 0.09);
@@ -719,6 +1212,24 @@
     .job-action:disabled {
       cursor: default;
       opacity: 0.5;
+    }
+
+    .empty-state {
+      display: grid;
+      gap: 7px;
+      min-height: 98px;
+      align-content: center;
+    }
+
+    .empty-state strong {
+      color: var(--ink);
+      font-size: 0.92rem;
+    }
+
+    .empty-state p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.35;
     }
 
     .toast {
@@ -765,6 +1276,150 @@
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(18, 26, 36, 0.42);
+    }
+
+    .modal {
+      width: min(760px, 100%);
+      max-height: min(880px, calc(100vh - 36px));
+      overflow: auto;
+      border: 1px solid rgba(214, 224, 234, 0.9);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 22px 60px rgba(18, 26, 36, 0.25);
+    }
+
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-head h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .modal-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .modal-body {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .workflow-hint {
+      display: grid;
+      gap: 4px;
+      padding: 11px 12px;
+      border: 1px solid rgba(36, 89, 166, 0.18);
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: #28415f;
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .workflow-hint strong {
+      color: var(--blue);
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      color: var(--ink);
+      font-weight: 750;
+    }
+
+    .check-row input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--green);
+    }
+
+    .modal-actions,
+    .run-control-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .run-status-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-3);
+    }
+
+    .run-log {
+      min-height: 120px;
+      max-height: 220px;
+      overflow: auto;
+      margin: 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f1720;
+      color: #dbeafe;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.75rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+
+    .icon-button {
+      min-width: 34px;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 900;
+    }
+
+    .icon-button:hover {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .empty {
       padding: 22px 12px;
       color: var(--muted);
@@ -783,12 +1438,11 @@
 
       .fresh-metrics,
       .fresh-details,
-      .fresh-pages {
+      .fresh-pages,
+      .best-grid,
+      .run-history-list,
+      .modal-grid {
         grid-template-columns: repeat(2, minmax(180px, 1fr));
-      }
-
-      .filters {
-        grid-template-columns: repeat(3, minmax(160px, 1fr));
       }
 
       .board {
@@ -815,9 +1469,26 @@
       .fresh-metrics,
       .fresh-details,
       .fresh-pages,
+      .best-grid,
+      .run-history-list,
+      .modal-grid,
       .filters,
       .board {
         grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .fresh-summary-chip,
+      .fresh-action,
+      .preset-chip {
+        white-space: normal;
+      }
+
+      .fresh-complete-summary {
+        align-items: stretch;
       }
 
       .compact-job {
@@ -827,41 +1498,85 @@
       .compact-actions {
         justify-items: start;
       }
+
+      .control,
+      .control.search-control,
+      .control.wide-control,
+      .control.compact-control,
+      .button {
+        flex: 1 1 100%;
+      }
+
+      .run-history-panel.compact .run-history-item {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 7h18"/><path d="M5 7l1 13h12l1-13"/><path d="M8 7V4h8v3"/><path d="M10 12h4"/></symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="icon-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6.6 6.6l10.8 10.8"/></symbol>
+    <symbol id="icon-bar-chart" viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
+    <symbol id="icon-briefcase" viewBox="0 0 24 24"><path d="M10 6V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1"/><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 12h18"/><path d="M10 12v1h4v-1"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="icon-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 16H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="icon-external-link" viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M11 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></symbol>
+    <symbol id="icon-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v5l-4 2v-7z"/></symbol>
+    <symbol id="icon-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/></symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18 9a7 7 0 0 0-11-3l-3 3"/><path d="M6 15a7 7 0 0 0 11 3l3-3"/></symbol>
+    <symbol id="icon-rotate-ccw" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 12a9 9 0 0 0-15-6l-3 3"/><path d="M7 17a9 9 0 0 0 14-5"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="icon-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="icon-star" viewBox="0 0 24 24"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2 7.5 14 3 9.6l6.2-.9z"/></symbol>
+    <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="icon-trending-down" viewBox="0 0 24 24"><path d="M22 17l-8-8-4 4-6-6"/><path d="M16 17h6v-6"/></symbol>
+    <symbol id="icon-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></symbol>
+  </svg>
   <main class="shell">
     <header class="topbar">
-      <div>
-        <h1>Live Recommended Jobs Dashboard</h1>
+      <div class="brand">
+        <img class="brand-icon" src="icon-dashboard.png" alt="" aria-hidden="true" />
+        <div>
+          <h1>Live Recommended Jobs Dashboard</h1>
+          <p class="page-intent">See what the scout is doing, choose the strongest jobs first, and keep your application progress tidy.</p>
+        </div>
       </div>
-      <div class="meta" aria-live="polite">
-        <span><span id="statusDot" class="status-dot"></span> <span id="statusText">Waiting for data</span></span>
-        <span id="updatedAt">Updated: never</span>
+      <div class="top-actions">
+        <button id="runScoutButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Run Scout</button>
+        <div class="meta" aria-live="polite">
+          <span><span id="statusDot" class="status-dot"></span> <span id="statusText">Waiting for data</span></span>
+          <span id="updatedAt">Updated: never</span>
+        </div>
       </div>
     </header>
 
     <section class="stats" aria-label="Dashboard summary">
-      <div class="stat"><span>Total jobs</span><strong id="statTotal">0</strong></div>
-      <div class="stat"><span>Active run</span><strong id="statActive">0</strong></div>
-      <div class="stat"><span>Apply first</span><strong id="statApply">0</strong></div>
-      <div class="stat"><span>Good options</span><strong id="statGood">0</strong></div>
-      <div class="stat"><span>Low probability</span><strong id="statLow">0</strong></div>
-      <div class="stat"><span>Rejected</span><strong id="statRejected">0</strong></div>
-      <div class="stat"><span>Unreviewed</span><strong id="statUnreviewed">0</strong></div>
-      <div class="stat"><span>Applied</span><strong id="statApplied">0</strong></div>
-      <div class="stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong></div>
+      <div class="stat supporting-stat"><span>Total jobs</span><strong id="statTotal">0</strong><svg class="icon stat-icon"><use href="#icon-briefcase"></use></svg></div>
+      <div class="stat supporting-stat"><span>Active run</span><strong id="statActive">0</strong><svg class="icon stat-icon"><use href="#icon-activity"></use></svg></div>
+      <div class="stat apply primary-stat"><span>Apply first</span><strong id="statApply">0</strong><svg class="icon stat-icon"><use href="#icon-star"></use></svg></div>
+      <div class="stat good primary-stat"><span>Good options</span><strong id="statGood">0</strong><svg class="icon stat-icon"><use href="#icon-check-circle"></use></svg></div>
+      <div class="stat low archive-stat"><span>Low probability</span><strong id="statLow">0</strong><svg class="icon stat-icon"><use href="#icon-trending-down"></use></svg></div>
+      <div class="stat rejected archive-stat"><span>Rejected</span><strong id="statRejected">0</strong><svg class="icon stat-icon"><use href="#icon-x-circle"></use></svg></div>
+      <div class="stat needs-action primary-stat"><span>Actionable</span><strong id="statUnreviewed">0</strong><svg class="icon stat-icon"><use href="#icon-target"></use></svg></div>
+      <div class="stat apply supporting-stat"><span>Applied</span><strong id="statApplied">0</strong><svg class="icon stat-icon"><use href="#icon-check"></use></svg></div>
+      <div class="stat archive-stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong><svg class="icon stat-icon"><use href="#icon-archive"></use></svg></div>
     </section>
 
     <section id="freshPanel" class="fresh-panel hidden" aria-label="Fresh Scout progress">
       <div class="fresh-head">
         <div>
-          <h2>Fresh Scout Progress</h2>
+          <h2 id="freshTitle"><span class="section-title"><svg class="icon icon-lg"><use href="#icon-refresh"></use></svg>Fresh Scout Progress</span></h2>
           <p id="freshStatus">Waiting for a fresh run.</p>
         </div>
         <div class="decision-chip" id="freshRunLabel">No fresh run</div>
       </div>
+      <div id="freshCompleteSummary" class="fresh-complete-summary hidden"></div>
       <div class="fresh-metrics">
         <div class="fresh-metric">
           <span>Apply first</span>
@@ -893,39 +1608,67 @@
       <div id="freshPages" class="fresh-pages" aria-label="Recent fresh page decisions"></div>
     </section>
 
+    <section id="bestNextPanel" class="panel hidden" aria-label="Best next jobs">
+      <div class="section-head">
+        <div>
+          <h2><span class="section-title"><svg class="icon icon-lg"><use href="#icon-spark"></use></svg>Best Next Jobs</span></h2>
+          <p>Start here: the strongest unreviewed jobs from your current filters.</p>
+        </div>
+        <span class="decision-chip APPLY_FIRST" id="bestNextCount">0 ready</span>
+      </div>
+      <div id="bestNextList" class="best-grid"></div>
+    </section>
+
+    <section id="runHistoryPanel" class="panel run-history-panel compact" aria-label="Scout run history">
+      <div class="section-head">
+        <div>
+          <h2><span class="section-title"><svg class="icon icon-lg"><use href="#icon-clock"></use></svg>Run History</span></h2>
+          <p>Recent scout runs, why they stopped, and what they found.</p>
+        </div>
+        <button id="toggleRunHistoryButton" class="fresh-action" type="button"><svg class="icon icon-sm"><use href="#icon-clock"></use></svg>Show fewer</button>
+      </div>
+      <div id="runHistoryList" class="run-history-list"></div>
+    </section>
+
     <section class="filters" aria-label="Dashboard filters">
-      <div class="control">
+      <div id="quickPresets" class="quick-presets" aria-label="Quick filter presets"></div>
+      <div id="filterHint" class="filter-hint">Actionable jobs are unreviewed Apply First and Good Options roles.</div>
+      <div class="control search-control">
         <label for="searchInput">Search</label>
         <input id="searchInput" type="search" placeholder="Title, company, query, reason" />
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="actionFilter">View</label>
         <select id="actionFilter">
+          <option value="needs_action" selected>Actionable jobs</option>
           <option value="all">All jobs</option>
-          <option value="needs_action">Needs action</option>
         </select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="runFilter">Run</label>
         <select id="runFilter"></select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="decisionFilter">Decision</label>
         <select id="decisionFilter"></select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="domainFilter">Domain</label>
         <select id="domainFilter"></select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="flagFilter">Flag</label>
         <select id="flagFilter"></select>
       </div>
-      <div class="control">
+      <div class="control wide-control">
+        <label for="applyMethodFilter">Apply</label>
+        <select id="applyMethodFilter"></select>
+      </div>
+      <div class="control compact-control">
         <label for="manualStatusFilter">Status</label>
         <select id="manualStatusFilter"></select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label for="sortFilter">Sort</label>
         <select id="sortFilter">
           <option value="newest">Newest</option>
@@ -934,15 +1677,15 @@
           <option value="location">Location</option>
         </select>
       </div>
-      <div class="control">
+      <div class="control compact-control">
         <label>Layout</label>
         <div class="layout-toggle" role="group" aria-label="Layout">
-          <button id="boardViewButton" class="layout-button active" type="button" data-view-mode="board">Board</button>
-          <button id="listViewButton" class="layout-button" type="button" data-view-mode="list">List</button>
+          <button id="boardViewButton" class="layout-button active" type="button" data-view-mode="board"><svg class="icon icon-sm"><use href="#icon-layout"></use></svg>Board</button>
+          <button id="listViewButton" class="layout-button" type="button" data-view-mode="list"><svg class="icon icon-sm"><use href="#icon-list"></use></svg>List</button>
         </div>
       </div>
-      <button id="undoButton" class="button secondary" type="button" disabled>Undo</button>
-      <button id="refreshButton" class="button" type="button">Refresh</button>
+      <button id="undoButton" class="button secondary" type="button" disabled><svg class="icon icon-sm"><use href="#icon-rotate-ccw"></use></svg>Undo</button>
+      <button id="refreshButton" class="button" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh</button>
     </section>
 
     <section id="boardView" class="board" aria-label="Recommended jobs board">
@@ -968,10 +1711,93 @@
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+  <div id="runScoutOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="runScoutTitle" aria-describedby="runScoutDescription runWorkflowHint">
+    <section class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="runScoutTitle">Run Scout</h2>
+          <p id="runScoutDescription">Start a safe approved scout workflow from the dashboard. Login and verification still stay manual in the browser.</p>
+        </div>
+        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog">x</button>
+      </div>
+      <div class="modal-body">
+        <div id="runControlNotice" class="subline"></div>
+        <div id="runWorkflowHint" class="workflow-hint" aria-live="polite"></div>
+        <div class="modal-grid">
+          <div class="control">
+            <label for="runWorkflow">Workflow</label>
+            <select id="runWorkflow">
+              <option value="linkedin_multi_fresh">LinkedIn multi-query fresh</option>
+              <option value="linkedin_single">LinkedIn single query</option>
+              <option value="linkedin_process_only">LinkedIn process-only</option>
+              <option value="indeed_description">Indeed description extraction</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="runLocation">Location</label>
+            <input id="runLocation" type="text" value="Amstelveen" />
+          </div>
+          <div class="control">
+            <label for="runQuery">Query</label>
+            <input id="runQuery" type="text" value="ux designer" />
+          </div>
+          <div class="control">
+            <label for="runMaxPages">Max pages</label>
+            <select id="runMaxPages">
+              <option value="1">1 page</option>
+              <option value="2">2 pages</option>
+              <option value="3">3 pages</option>
+              <option value="all">All pages</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="runBrowser">Browser</label>
+            <select id="runBrowser">
+              <option value="chromium">Chromium</option>
+              <option value="firefox">Firefox</option>
+            </select>
+          </div>
+          <label class="check-row" for="runHumanMode">
+            <input id="runHumanMode" type="checkbox" checked />
+            Human mode
+          </label>
+          <label class="check-row" for="runFreshMode">
+            <input id="runFreshMode" type="checkbox" checked />
+            Fresh mode
+          </label>
+          <label class="check-row" for="runResumeMode">
+            <input id="runResumeMode" type="checkbox" />
+            Resume saved progress
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button id="startRunButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Start run</button>
+          <button id="refreshRunControlButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh status</button>
+        </div>
+        <div id="runStatusPanel" class="run-status-panel">
+          <div class="section-head">
+            <div>
+              <h2><span class="section-title"><svg class="icon icon-lg"><use href="#icon-activity"></use></svg>Run Status</span></h2>
+              <p id="runStatusText">Checking dashboard controller...</p>
+            </div>
+            <span id="runStatusBadge" class="decision-chip">Idle</span>
+          </div>
+          <div class="run-control-actions">
+            <button id="stopAfterJobButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current job</button>
+            <button id="stopAfterPageButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current page</button>
+            <button id="stopNowButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop now</button>
+          </div>
+          <pre id="runLogTail" class="run-log">No run log yet.</pre>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <script>
     const DATA_URL = "recommended_jobs_dashboard_data.json";
     const API_DATA_URL = "/api/dashboard-data";
     const API_STATUS_URL = "/api/job-status";
+    const API_RUN_CONTROL_URL = "/api/run-control";
     const POLL_MS = 4000;
     const DECISIONS = [
       ["APPLY_FIRST", "APPLY FIRST"],
@@ -984,27 +1810,81 @@
       ["applied", "Applied"],
       ["irrelevant", "Irrelevant"]
     ];
+    const APPLY_METHODS = [
+      ["easy_apply", "Easy Apply"],
+      ["external_apply", "External Apply"],
+      ["unknown", "Unknown"]
+    ];
+    const QUICK_PRESETS = [
+      ["needs_action", "Actionable"],
+      ["current_run", "Current Run"],
+      ["apply_first", "Apply First"],
+      ["good_options", "Good Options"],
+      ["easy_apply", "Easy Apply"],
+      ["dutch_risk", "Dutch Risk"],
+      ["remote_hybrid", "Remote/Hybrid"],
+      ["applied", "Applied"],
+      ["irrelevant", "Irrelevant"]
+    ];
+    const QUICK_PRESET_ICONS = {
+      needs_action: "target",
+      current_run: "activity",
+      apply_first: "star",
+      good_options: "check-circle",
+      easy_apply: "briefcase",
+      dutch_risk: "filter",
+      remote_hybrid: "activity",
+      applied: "check",
+      irrelevant: "archive"
+    };
+    const SUMMARY_ICONS = {
+      Fresh: "briefcase",
+      "Apply first": "star",
+      Apply: "star",
+      "Good+": "check-circle",
+      Good: "check-circle",
+      "Known skipped": "archive",
+      Skipped: "archive",
+      "AI calls": "activity",
+      AI: "activity",
+      Queries: "search",
+      Stop: "ban"
+    };
+    const DECISION_ICONS = {
+      APPLY_FIRST: "star",
+      GOOD_OPTIONS: "check-circle",
+      LOW_PROBABILITY: "trending-down",
+      REJECTED: "x-circle"
+    };
 
     const state = {
       data: emptyData(),
       apiAvailable: false,
+      runControlAvailable: false,
+      runControl: null,
       savingJobKey: "",
       toastTimer: null,
       manualUndoStack: [],
+      expandedFreshRuns: new Set(),
+      runHistoryExpanded: false,
+      lastFocusedBeforeModal: null,
       filters: {
         search: "",
-        actionScope: "all",
+        actionScope: "needs_action",
         run: "all",
         decision: "all",
         domain: "all",
         flag: "all",
+        applyMethod: "all",
         manualStatus: "all",
         sort: "newest",
-        viewMode: "board"
+        viewMode: "board",
+        quickPreset: ""
       }
     };
 
     const els = {
+      runScoutButton: document.getElementById("runScoutButton"),
       statusDot: document.getElementById("statusDot"),
       statusText: document.getElementById("statusText"),
       updatedAt: document.getElementById("updatedAt"),
@@ -1018,8 +1898,10 @@
       statApplied: document.getElementById("statApplied"),
       statIrrelevant: document.getElementById("statIrrelevant"),
       freshPanel: document.getElementById("freshPanel"),
+      freshTitle: document.getElementById("freshTitle"),
       freshStatus: document.getElementById("freshStatus"),
       freshRunLabel: document.getElementById("freshRunLabel"),
+      freshCompleteSummary: document.getElementById("freshCompleteSummary"),
       freshApply: document.getElementById("freshApply"),
       freshApplyBar: document.getElementById("freshApplyBar"),
       freshGood: document.getElementById("freshGood"),
@@ -1033,12 +1915,21 @@
       freshQueries: document.getElementById("freshQueries"),
       freshPagesScanned: document.getElementById("freshPagesScanned"),
       freshPages: document.getElementById("freshPages"),
+      bestNextPanel: document.getElementById("bestNextPanel"),
+      bestNextCount: document.getElementById("bestNextCount"),
+      bestNextList: document.getElementById("bestNextList"),
+      runHistoryPanel: document.getElementById("runHistoryPanel"),
+      toggleRunHistoryButton: document.getElementById("toggleRunHistoryButton"),
+      runHistoryList: document.getElementById("runHistoryList"),
+      quickPresets: document.getElementById("quickPresets"),
+      filterHint: document.getElementById("filterHint"),
       searchInput: document.getElementById("searchInput"),
       actionFilter: document.getElementById("actionFilter"),
       runFilter: document.getElementById("runFilter"),
       decisionFilter: document.getElementById("decisionFilter"),
       domainFilter: document.getElementById("domainFilter"),
       flagFilter: document.getElementById("flagFilter"),
+      applyMethodFilter: document.getElementById("applyMethodFilter"),
       manualStatusFilter: document.getElementById("manualStatusFilter"),
       sortFilter: document.getElementById("sortFilter"),
       boardViewButton: document.getElementById("boardViewButton"),
@@ -1055,7 +1946,27 @@
       countGood: document.getElementById("countGood"),
       countLow: document.getElementById("countLow"),
       countRejected: document.getElementById("countRejected"),
-      toast: document.getElementById("toast")
+      toast: document.getElementById("toast"),
+      runScoutOverlay: document.getElementById("runScoutOverlay"),
+      closeRunScoutButton: document.getElementById("closeRunScoutButton"),
+      runControlNotice: document.getElementById("runControlNotice"),
+      runWorkflowHint: document.getElementById("runWorkflowHint"),
+      runWorkflow: document.getElementById("runWorkflow"),
+      runLocation: document.getElementById("runLocation"),
+      runQuery: document.getElementById("runQuery"),
+      runMaxPages: document.getElementById("runMaxPages"),
+      runBrowser: document.getElementById("runBrowser"),
+      runHumanMode: document.getElementById("runHumanMode"),
+      runFreshMode: document.getElementById("runFreshMode"),
+      runResumeMode: document.getElementById("runResumeMode"),
+      startRunButton: document.getElementById("startRunButton"),
+      refreshRunControlButton: document.getElementById("refreshRunControlButton"),
+      runStatusText: document.getElementById("runStatusText"),
+      runStatusBadge: document.getElementById("runStatusBadge"),
+      stopAfterJobButton: document.getElementById("stopAfterJobButton"),
+      stopAfterPageButton: document.getElementById("stopAfterPageButton"),
+      stopNowButton: document.getElementById("stopNowButton"),
+      runLogTail: document.getElementById("runLogTail")
     };
 
     function emptyData() {
@@ -1066,7 +1977,7 @@
         runs: [],
         jobs: [],
         summary: { by_decision: {}, by_domain: {}, by_manual_status: {} },
-        filter_options: { runs: [], decisions: [], domains: [], flags: [], manual_statuses: [] }
+        filter_options: { runs: [], decisions: [], domains: [], flags: [], apply_methods: [], manual_statuses: [] }
       };
     }
 
@@ -1099,7 +2010,7 @@
       try {
         const apiResponse = await fetch(API_DATA_URL + "?t=" + Date.now(), { cache: "no-store" });
         if (apiResponse.ok) {
-          return { payload: await apiResponse.json(), apiAvailable: true };
+          return { payload: withDefaultManualStatus(await apiResponse.json()), apiAvailable: true };
         }
       } catch (_error) {
         // Fall back to the static JSON file when opened with a read-only server.
@@ -1120,10 +2031,16 @@
           job.manual_status = "unreviewed";
           job.manual_status_label = "Unreviewed";
         }
+        if (!job.apply_method) {
+          job.apply_method = applyMethod(job);
+          const found = APPLY_METHODS.find(([value]) => value === job.apply_method);
+          job.apply_method_label = found ? found[1] : "Unknown";
+        }
       }
       data.summary = data.summary || {};
       data.summary.by_manual_status = manualStatusCounts(jobs);
       data.filter_options = data.filter_options || {};
+      data.filter_options.apply_methods = data.filter_options.apply_methods || APPLY_METHODS.map(([value]) => value);
       data.filter_options.manual_statuses = MANUAL_STATUSES.map(([value, label]) => ({ value, label }));
       return data;
     }
@@ -1132,25 +2049,34 @@
       syncFilterOptions();
       renderStats();
       renderFreshProgress();
+      renderBestNextJobs();
+      renderRunHistory();
+      renderQuickPresets();
+      renderFilterHint();
       renderJobs();
       renderLayoutMode();
+      renderRunControl();
       updateUndoButtonState();
     }
 
     function syncFilterOptions() {
       const selected = {
-        run: els.runFilter.value || state.filters.run,
-        decision: els.decisionFilter.value || state.filters.decision,
-        domain: els.domainFilter.value || state.filters.domain,
-        flag: els.flagFilter.value || state.filters.flag,
-        manualStatus: els.manualStatusFilter.value || state.filters.manualStatus
+        run: state.filters.run,
+        decision: state.filters.decision,
+        domain: state.filters.domain,
+        flag: state.filters.flag,
+        applyMethod: state.filters.applyMethod,
+        manualStatus: state.filters.manualStatus
       };
 
       setOptions(els.runFilter, [["all", "All runs"], ...runOptions()], selected.run);
       setOptions(els.decisionFilter, [["all", "All decisions"], ...DECISIONS], selected.decision);
       setOptions(els.domainFilter, [["all", "All domains"], ...domainOptions()], selected.domain);
       setOptions(els.flagFilter, [["all", "All flags"], ...flagOptions()], selected.flag);
+      setOptions(els.applyMethodFilter, [["all", "All apply methods"], ...applyMethodOptions()], selected.applyMethod);
       setOptions(els.manualStatusFilter, [["all", "All statuses"], ...manualStatusOptions()], selected.manualStatus);
+      els.actionFilter.value = state.filters.actionScope;
+      els.sortFilter.value = state.filters.sort;
     }
 
     function setOptions(select, options, selectedValue) {
@@ -1174,6 +2100,7 @@
       if (select === els.decisionFilter) return "decision";
       if (select === els.domainFilter) return "domain";
       if (select === els.flagFilter) return "flag";
+      if (select === els.applyMethodFilter) return "applyMethod";
       if (select === els.manualStatusFilter) return "manualStatus";
       return "";
     }
@@ -1220,6 +2147,17 @@
       return options.length ? options : MANUAL_STATUSES;
     }
 
+    function applyMethodOptions() {
+      const configured = state.data.filter_options && Array.isArray(state.data.filter_options.apply_methods)
+        ? state.data.filter_options.apply_methods
+        : [];
+      const values = configured.length ? configured : APPLY_METHODS.map(([value]) => value);
+      const labels = new Map(APPLY_METHODS);
+      return values
+        .map((value) => [safe(value), labels.get(safe(value)) || labelize(value)])
+        .filter(([value]) => value);
+    }
+
     function renderStats() {
       const summary = state.data.summary || {};
       const decisions = summary.by_decision || {};
@@ -1230,7 +2168,7 @@
       els.statGood.textContent = String(decisions.GOOD_OPTIONS || 0);
       els.statLow.textContent = String(decisions.LOW_PROBABILITY || 0);
       els.statRejected.textContent = String(decisions.REJECTED || 0);
-      els.statUnreviewed.textContent = String(manual.unreviewed || 0);
+      els.statUnreviewed.textContent = String(jobs().filter((job) => needsAction(job)).length);
       els.statApplied.textContent = String(manual.applied || 0);
       els.statIrrelevant.textContent = String(manual.irrelevant || 0);
       els.updatedAt.textContent = "Updated: " + (formatDateTime(state.data.dashboard_updated_at) || "never");
@@ -1259,8 +2197,16 @@
       const maxPages = numeric(policy.max_pages_per_query);
       const currentPage = numeric(progress.current_page_number);
       const stopReason = safe(progress.stop_reason);
+      const latestPage = latestFreshPage(fresh);
+      const isRunning = run.status === "running";
+      const runId = safe(run.run_id);
+      const expanded = state.expandedFreshRuns.has(runId);
 
       els.freshPanel.classList.remove("hidden");
+      els.freshPanel.classList.toggle("completed", !isRunning);
+      els.freshPanel.classList.toggle("expanded", isRunning || expanded);
+      els.freshCompleteSummary.classList.toggle("hidden", isRunning);
+      setIconText(els.freshTitle, isRunning ? "activity" : "refresh", isRunning ? "Fresh Scout Progress" : "Last Fresh Scout Run");
       els.freshRunLabel.textContent = safe(run.run_label) || "Fresh run";
       els.freshStatus.textContent = freshStatusText(run, progress, stopReason);
       els.freshApply.textContent = metricText(apply, applyTarget);
@@ -1272,9 +2218,22 @@
       els.freshJobsBar.style.width = progressPercent(freshJobs, jobCap) + "%";
       els.freshKnownBar.style.width = progressPercent(knownSkipped, Math.max(knownSkipped + freshJobs, 1)) + "%";
       els.freshQuery.textContent = safe(progress.current_query) || "No active query";
-      els.freshPage.textContent = currentPage ? ("Page " + currentPage + (maxPages ? " / " + maxPages : "")) : "-";
+      els.freshPage.textContent = currentPage
+        ? ("Page " + currentPage + (maxPages ? " / " + maxPages : ""))
+        : (latestPage ? ("Page " + latestPage.page_number + (maxPages ? " / " + maxPages : "")) : "-");
       els.freshQueries.textContent = totalQueries ? (Math.min(queryIndex || 0, totalQueries) + " / " + totalQueries) : "-";
       els.freshPagesScanned.textContent = String(numeric(progress.pages_scanned));
+      renderFreshCompleteSummary(run, progress, {
+        apply,
+        good,
+        freshJobs,
+        knownSkipped,
+        aiScored: numeric(progress.ai_scored),
+        queryIndex,
+        totalQueries,
+        stopReason,
+        expanded,
+      });
       renderFreshPages(fresh, policy);
     }
 
@@ -1290,12 +2249,93 @@
     }
 
     function freshStatusText(run, progress, stopReason) {
-      if (stopReason) return "Stopped: " + stopReason;
       const phase = labelize(progress.phase || "");
+      if (stopReason && run.status === "completed") return "Completed early: " + conciseStopReason(stopReason);
+      if (stopReason) return "Stopped: " + conciseStopReason(stopReason);
       if (run.status === "running") return phase ? ("Running: " + phase) : "Fresh run active.";
       if (run.status === "failed") return "Fresh run ended with an error.";
       if (run.status === "stopped") return "Fresh run stopped before completion.";
       return "Fresh run complete.";
+    }
+
+    function renderFreshCompleteSummary(run, progress, values) {
+      els.freshCompleteSummary.replaceChildren();
+      if (run.status === "running") return;
+
+      const items = [
+        ["Fresh jobs", values.freshJobs],
+        ["Apply first", values.apply],
+        ["Good+", values.good],
+        ["Known skipped", values.knownSkipped],
+        ["AI calls", values.aiScored],
+        ["Queries", values.totalQueries ? Math.min(values.queryIndex || 0, values.totalQueries) + " / " + values.totalQueries : "-"],
+      ];
+      for (const [label, value] of items) {
+        els.freshCompleteSummary.append(freshSummaryChip(label, value));
+      }
+      if (values.stopReason) {
+        const chip = freshSummaryChip("Stop", shortStopReason(values.stopReason));
+        chip.title = values.stopReason;
+        els.freshCompleteSummary.append(chip);
+      }
+
+      const filterButton = document.createElement("button");
+      filterButton.type = "button";
+      filterButton.className = "fresh-action";
+      setIconText(filterButton, "filter", "Filter to this run");
+      filterButton.addEventListener("click", () => {
+        state.filters.run = safe(run.run_id) || "all";
+        els.runFilter.value = state.filters.run;
+        render();
+      });
+
+      const detailsButton = document.createElement("button");
+      detailsButton.type = "button";
+      detailsButton.className = "fresh-action";
+      setIconText(detailsButton, values.expanded ? "archive" : "list", values.expanded ? "Hide details" : "Show details");
+      detailsButton.addEventListener("click", () => {
+        const runId = safe(run.run_id);
+        if (!runId) return;
+        if (state.expandedFreshRuns.has(runId)) {
+          state.expandedFreshRuns.delete(runId);
+        } else {
+          state.expandedFreshRuns.add(runId);
+        }
+        renderFreshProgress();
+      });
+
+      els.freshCompleteSummary.append(filterButton, detailsButton);
+    }
+
+    function freshSummaryChip(label, value) {
+      const chip = document.createElement("span");
+      chip.className = "fresh-summary-chip";
+      const strong = document.createElement("strong");
+      strong.textContent = String(value ?? "");
+      chip.append(createIcon(SUMMARY_ICONS[safe(label)] || "bar-chart", "icon icon-sm"), document.createTextNode(safe(label) + ": "), strong);
+      return chip;
+    }
+
+    function shortStopReason(reason) {
+      return conciseStopReason(reason);
+    }
+
+    function conciseStopReason(reason) {
+      const cleaned = safe(reason);
+      if (!cleaned) return "";
+      if (/ai budget guard|model call|soft cap/i.test(cleaned)) return "AI budget guard";
+      if (/apply first|target apply/i.test(cleaned)) return "Apply target reached";
+      if (/good or better|quality target|fresh quality/i.test(cleaned)) return "Quality target guard";
+      if (/duplicate/i.test(cleaned)) return "Duplicate-heavy pages";
+      if (/rate limit|quota/i.test(cleaned)) return "AI rate limit";
+      if (/captcha|verification|human/i.test(cleaned)) return "Manual verification";
+      if (/timeout|timed out/i.test(cleaned)) return "Navigation timeout";
+      return cleaned.length > 34 ? cleaned.slice(0, 31) + "..." : cleaned;
+    }
+
+    function latestFreshPage(fresh) {
+      const history = Array.isArray(fresh.page_history) ? fresh.page_history : [];
+      return history.length ? history[history.length - 1] : null;
     }
 
     function metricText(value, target) {
@@ -1331,7 +2371,7 @@
       card.className = "fresh-page" + (useful ? " useful" : duplicateHeavy ? " duplicate-heavy" : "");
 
       const title = document.createElement("strong");
-      title.textContent = (safe(page.query) || "Query") + " - page " + (numeric(page.page_number) || "?");
+      title.append(createIcon(useful ? "check-circle" : duplicateHeavy ? "archive" : "bar-chart", "icon icon-sm"), document.createTextNode((safe(page.query) || "Query") + " - page " + (numeric(page.page_number) || "?")));
       const numbers = document.createElement("span");
       numbers.textContent = [
         numeric(page.cards_seen) + " cards",
@@ -1349,6 +2389,252 @@
       return card;
     }
 
+    function renderBestNextJobs() {
+      const items = bestNextJobs();
+      els.bestNextList.replaceChildren();
+      setIconText(els.bestNextCount, "target", items.length + (items.length === 1 ? " ready" : " ready"));
+      els.bestNextPanel.classList.remove("hidden");
+      if (!items.length) {
+        els.bestNextList.append(bestNextEmptyState());
+        return;
+      }
+      els.bestNextList.append(...items.map(bestNextCard));
+    }
+
+    function bestNextEmptyState() {
+      const empty = document.createElement("div");
+      empty.className = "best-empty";
+      const title = document.createElement("strong");
+      title.textContent = "No actionable jobs in this view.";
+      const copy = document.createElement("span");
+      copy.textContent = "Actionable means unreviewed Apply First and Good Options jobs. Try clearing filters or switching to all jobs if you want to inspect the archive.";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "fresh-action";
+      setIconText(button, "filter", "Show all jobs");
+      button.addEventListener("click", () => {
+        state.filters.actionScope = "all";
+        state.filters.decision = "all";
+        state.filters.manualStatus = "all";
+        state.filters.quickPreset = "";
+        render();
+      });
+      empty.append(title, copy, button);
+      return empty;
+    }
+
+    function bestNextJobs() {
+      const activeRunId = safe(state.data.active_run_id);
+      const latestRun = latestRunId();
+      return jobs()
+        .filter((job) => needsAction(job))
+        .filter((job) => {
+          if (state.filters.run !== "all" && job.run_id !== state.filters.run) return false;
+          if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
+          if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
+          if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
+          if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
+          if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const aRunBoost = safe(a.run_id) === activeRunId ? 2 : (safe(a.run_id) === latestRun ? 1 : 0);
+          const bRunBoost = safe(b.run_id) === activeRunId ? 2 : (safe(b.run_id) === latestRun ? 1 : 0);
+          const aDecision = safe(a.decision_category) === "APPLY_FIRST" ? 1 : 0;
+          const bDecision = safe(b.decision_category) === "APPLY_FIRST" ? 1 : 0;
+          return (bDecision - aDecision)
+            || (bRunBoost - aRunBoost)
+            || (numeric(b.score) - numeric(a.score))
+            || safe(b.processed_at).localeCompare(safe(a.processed_at));
+        })
+        .slice(0, 5);
+    }
+
+    function bestNextCard(job) {
+      const status = manualStatus(job);
+      const article = document.createElement("article");
+      article.className = "best-card " + safe(job.decision_category) + " manual-" + status;
+      article.dataset.jobKey = safe(job.job_key) || jobIdentity(job);
+
+      const title = document.createElement("div");
+      title.className = "best-title";
+      const link = document.createElement(job.url ? "a" : "span");
+      link.textContent = safe(job.title) || "Untitled job";
+      if (job.url) {
+        link.href = job.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      }
+      title.append(link);
+
+      const meta = document.createElement("div");
+      meta.className = "best-meta";
+      const score = document.createElement("span");
+      score.className = "score";
+      score.textContent = String(Number.isFinite(Number(job.score)) ? Number(job.score) : 0);
+      const run = document.createElement("span");
+      run.className = "run-badge";
+      run.textContent = shortRunLabel(job) || "Run";
+      run.title = safe(job.run_label) || safe(job.run_id);
+      const decision = decisionChip(job.decision_category, decisionLabel(job));
+      meta.append(score, run, decision);
+      const methodBadge = applyMethodBadge(job);
+      if (methodBadge) meta.append(methodBadge);
+
+      const subline = document.createElement("div");
+      subline.className = "subline";
+      subline.textContent = [safe(job.company), safe(job.location), safe(job.query)].filter(Boolean).join(" | ");
+
+      const reason = document.createElement("div");
+      reason.className = "reason";
+      reason.textContent = safe(job.reason) || safe(job.terminal_status) || "No reason recorded";
+
+      const badges = document.createElement("div");
+      badges.className = "badges";
+      badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
+      for (const flag of importantFlags(job).slice(0, 3)) {
+        badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
+      }
+
+      article.append(title, meta, subline, reason, badges, actionRow(job, status));
+      return article;
+    }
+
+    function renderRunHistory() {
+      const runs = Array.isArray(state.data.runs) ? [...state.data.runs].reverse() : [];
+      els.runHistoryList.replaceChildren();
+      els.runHistoryPanel.classList.toggle("hidden", !runs.length);
+      els.runHistoryPanel.classList.toggle("compact", !state.runHistoryExpanded);
+      if (!runs.length) return;
+      const visible = state.runHistoryExpanded ? runs : runs.slice(0, 1);
+      setIconText(els.toggleRunHistoryButton, "clock", state.runHistoryExpanded ? "Show fewer" : "Show run history");
+      els.toggleRunHistoryButton.disabled = runs.length <= 1;
+      els.runHistoryList.append(...visible.map(runHistoryItem));
+    }
+
+    function renderFilterHint() {
+      if (!els.filterHint) return;
+      const parts = [];
+      if (state.filters.actionScope === "needs_action") {
+        parts.push("Actionable jobs = unreviewed Apply First and Good Options roles.");
+      } else {
+        parts.push("All jobs view includes low probability, rejected, applied, and irrelevant records.");
+      }
+      if (state.filters.run !== "all") parts.push("Run filter is active.");
+      if (state.filters.applyMethod === "easy_apply") parts.push("Showing LinkedIn jobs where Easy Apply was detected.");
+      if (state.filters.manualStatus !== "all") parts.push("Manual status filter is active.");
+      els.filterHint.textContent = parts.join(" ");
+    }
+
+    function runHistoryItem(run) {
+      const item = document.createElement("article");
+      item.className = "run-history-item " + safe(run.status);
+
+      const title = document.createElement("div");
+      title.className = "run-history-title";
+      const label = document.createElement("span");
+      label.textContent = safe(run.run_label) || safe(run.run_id) || "Run";
+      const status = document.createElement("span");
+      status.className = "decision-chip";
+      status.append(createIcon(run.status === "completed" ? "check-circle" : run.status === "running" ? "activity" : "clock", "icon icon-sm"), document.createTextNode(labelize(run.status || "unknown")));
+      title.append(label, status);
+
+      const stats = run.stats || {};
+      const fresh = run.fresh_scout || {};
+      const progress = fresh.progress || {};
+      const counts = [
+        ["Fresh", numeric(progress.fresh_jobs_seen)],
+        ["Apply", numeric(progress.apply_first || stats.apply_first)],
+        ["Good", numeric(progress.good_or_better || stats.good_options)],
+        ["Skipped", numeric(progress.known_jobs_skipped)],
+        ["AI", numeric(progress.ai_scored)]
+      ];
+      const statRow = document.createElement("div");
+      statRow.className = "run-history-stats";
+      for (const [labelText, value] of counts) {
+        statRow.append(freshSummaryChip(labelText, value));
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "run-history-meta";
+      meta.textContent = [
+        safe(run.mode),
+        safe(run.location),
+        safe(progress.stop_reason || ""),
+      ].filter(Boolean).join(" | ");
+
+      const filter = document.createElement("button");
+      filter.type = "button";
+      filter.className = "fresh-action";
+      setIconText(filter, "filter", "Filter to this run");
+      filter.addEventListener("click", () => {
+        state.filters.run = safe(run.run_id) || "all";
+        state.filters.actionScope = "all";
+        state.filters.quickPreset = "current_run";
+        render();
+      });
+
+      item.append(title, statRow, meta, filter);
+      return item;
+    }
+
+    function renderQuickPresets() {
+      els.quickPresets.replaceChildren();
+      for (const [key, label] of QUICK_PRESETS) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "preset-chip" + (isQuickPresetActive(key) ? " active" : "");
+        button.append(createIcon(QUICK_PRESET_ICONS[key] || "filter", "icon icon-sm"), document.createTextNode(label));
+        button.addEventListener("click", () => applyQuickPreset(key));
+        els.quickPresets.append(button);
+      }
+    }
+
+    function applyQuickPreset(key) {
+      state.filters.quickPreset = key;
+      state.filters.search = "";
+      els.searchInput.value = "";
+      if (key === "needs_action") {
+        state.filters.actionScope = "needs_action";
+        state.filters.decision = "all";
+        state.filters.manualStatus = "all";
+      } else if (key === "current_run") {
+        state.filters.run = safe(state.data.active_run_id) || latestRunId() || "all";
+        state.filters.actionScope = "all";
+      } else if (key === "apply_first") {
+        state.filters.actionScope = "needs_action";
+        state.filters.decision = "APPLY_FIRST";
+        state.filters.manualStatus = "all";
+      } else if (key === "good_options") {
+        state.filters.actionScope = "needs_action";
+        state.filters.decision = "GOOD_OPTIONS";
+        state.filters.manualStatus = "all";
+      } else if (key === "easy_apply") {
+        state.filters.applyMethod = "easy_apply";
+        state.filters.actionScope = "needs_action";
+      } else if (key === "applied") {
+        state.filters.actionScope = "all";
+        state.filters.manualStatus = "applied";
+      } else if (key === "irrelevant") {
+        state.filters.actionScope = "all";
+        state.filters.manualStatus = "irrelevant";
+      } else {
+        state.filters.actionScope = "all";
+      }
+      render();
+    }
+
+    function isQuickPresetActive(key) {
+      if (key === "needs_action") return state.filters.actionScope === "needs_action" && state.filters.decision === "all" && state.filters.manualStatus === "all";
+      if (key === "current_run") return state.filters.run !== "all" && state.filters.quickPreset === "current_run";
+      if (key === "apply_first") return state.filters.decision === "APPLY_FIRST";
+      if (key === "good_options") return state.filters.decision === "GOOD_OPTIONS";
+      if (key === "easy_apply") return state.filters.applyMethod === "easy_apply";
+      if (key === "applied") return state.filters.manualStatus === "applied";
+      if (key === "irrelevant") return state.filters.manualStatus === "irrelevant";
+      return state.filters.quickPreset === key;
+    }
+
     function renderJobs() {
       const visibleJobs = filteredJobs();
       const grouped = {
@@ -1362,10 +2648,10 @@
         grouped[category].push(job);
       }
 
-      renderList(els.listApply, grouped.APPLY_FIRST);
-      renderList(els.listGood, grouped.GOOD_OPTIONS);
-      renderList(els.listLow, grouped.LOW_PROBABILITY);
-      renderList(els.listRejected, grouped.REJECTED);
+      renderList(els.listApply, grouped.APPLY_FIRST, "APPLY_FIRST");
+      renderList(els.listGood, grouped.GOOD_OPTIONS, "GOOD_OPTIONS");
+      renderList(els.listLow, grouped.LOW_PROBABILITY, "LOW_PROBABILITY");
+      renderList(els.listRejected, grouped.REJECTED, "REJECTED");
       renderCompactList(visibleJobs);
 
       els.countApply.textContent = grouped.APPLY_FIRST.length;
@@ -1389,24 +2675,41 @@
       els.listViewButton.setAttribute("aria-pressed", String(listMode));
     }
 
-    function renderList(container, items) {
+    function renderList(container, items, decisionKey) {
       container.replaceChildren();
       if (!items.length) {
-        const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.textContent = "No jobs";
-        container.append(empty);
+        container.append(emptyColumnState(decisionKey));
         return;
       }
       container.append(...items.map(jobCard));
+    }
+
+    function emptyColumnState(decisionKey) {
+      const empty = document.createElement("div");
+      empty.className = "empty empty-state";
+      const title = document.createElement("strong");
+      const copy = document.createElement("p");
+      const label = DECISIONS.find(([value]) => value === decisionKey);
+      title.textContent = "No " + (label ? label[1].toLowerCase() : "jobs") + " here.";
+      copy.textContent = state.filters.actionScope === "needs_action"
+        ? "This view only shows unreviewed Apply First and Good Options jobs."
+        : "No jobs match the current filters for this column.";
+      empty.append(title, copy);
+      return empty;
     }
 
     function renderCompactList(items) {
       els.compactList.replaceChildren();
       if (!items.length) {
         const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.textContent = "No jobs";
+        empty.className = "empty empty-state";
+        const title = document.createElement("strong");
+        title.textContent = "No jobs match these filters.";
+        const copy = document.createElement("p");
+        copy.textContent = state.filters.actionScope === "needs_action"
+          ? "Actionable jobs are unreviewed Apply First and Good Options roles."
+          : "Try clearing a search term, status, run, or apply-method filter.";
+        empty.append(title, copy);
         els.compactList.append(empty);
         return;
       }
@@ -1442,10 +2745,12 @@
       run.className = "run-badge";
       run.textContent = shortRunLabel(job) || "Run";
       run.title = safe(job.run_label) || safe(job.run_id);
-      const decision = document.createElement("span");
-      decision.className = "decision-chip " + safe(job.decision_category);
-      decision.textContent = decisionLabel(job);
+      const decision = decisionChip(job.decision_category, decisionLabel(job));
       pillRow.append(score, run, decision);
+      const methodBadge = applyMethodBadge(job);
+      if (methodBadge) {
+        pillRow.append(methodBadge);
+      }
       if (status !== "unreviewed") {
         pillRow.append(badge(labelize(status), "status " + status));
       }
@@ -1467,8 +2772,8 @@
       const badges = document.createElement("div");
       badges.className = "badges";
       badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
-      for (const flag of (Array.isArray(job.flags) ? job.flags : []).slice(0, 5)) {
-        badges.append(badge(labelize(flag)));
+      for (const flag of importantFlags(job).slice(0, 5)) {
+        badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
       }
 
       const actions = document.createElement("div");
@@ -1507,7 +2812,12 @@
       runBadge.className = "run-badge";
       runBadge.textContent = shortRunLabel(job) || "Run";
       runBadge.title = safe(job.run_label) || safe(job.run_id);
-      titleMeta.append(score, runBadge);
+      const decision = decisionChip(job.decision_category, decisionLabel(job));
+      titleMeta.append(score, runBadge, decision);
+      const methodBadge = applyMethodBadge(job);
+      if (methodBadge) {
+        titleMeta.append(methodBadge);
+      }
       titleRow.append(titleMain, titleMeta);
 
       const subline = document.createElement("div");
@@ -1528,8 +2838,8 @@
       if (status !== "unreviewed") {
         badges.append(badge(labelize(status), "status " + status));
       }
-      for (const flag of (Array.isArray(job.flags) ? job.flags : []).slice(0, 8)) {
-        badges.append(badge(labelize(flag)));
+      for (const flag of importantFlags(job).slice(0, 8)) {
+        badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
       }
 
       const details = document.createElement("div");
@@ -1560,8 +2870,9 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "job-action utility";
-      button.textContent = "Open job";
+      setIconText(button, "external-link", "Open job");
       button.title = "Open the job page in a new tab";
+      button.setAttribute("aria-label", "Open job: " + (safe(job.title) || "Untitled job"));
       button.disabled = !safe(job.url);
       button.addEventListener("click", () => {
         if (!safe(job.url)) return;
@@ -1574,8 +2885,9 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "job-action utility";
-      button.textContent = "Copy link";
+      setIconText(button, "copy", "Copy link");
       button.title = "Copy the job URL";
+      button.setAttribute("aria-label", "Copy link for: " + (safe(job.title) || "Untitled job"));
       button.disabled = !safe(job.url);
       button.addEventListener("click", () => copyJobLink(job));
       return button;
@@ -1585,8 +2897,10 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = "job-action" + (targetStatus === currentStatus ? " active" : "") + (targetStatus === "irrelevant" ? " danger" : "");
-      button.textContent = label;
+      setIconText(button, targetStatus === "irrelevant" ? "archive" : "check", label);
       const nextStatus = targetStatus === currentStatus ? "unreviewed" : targetStatus;
+      button.setAttribute("aria-pressed", String(targetStatus === currentStatus));
+      button.setAttribute("aria-label", label + ": " + (safe(job.title) || "Untitled job"));
       button.title = state.apiAvailable
         ? (nextStatus === "unreviewed" ? "Click again to remove this status" : title)
         : "Run python serve_dashboard.py to save status";
@@ -1718,8 +3032,49 @@
     function badge(text, extraClass) {
       const span = document.createElement("span");
       span.className = "badge" + (extraClass ? " " + extraClass : "");
-      span.textContent = text || "Other";
+      const iconName = extraClass && extraClass.includes("domain")
+        ? "briefcase"
+        : extraClass && extraClass.includes("risk")
+          ? "filter"
+          : extraClass && extraClass.includes("status")
+            ? (extraClass.includes("irrelevant") ? "archive" : "check")
+            : "";
+      if (iconName) span.append(createIcon(iconName, "icon icon-sm"));
+      span.append(document.createTextNode(text || "Other"));
       return span;
+    }
+
+    function decisionChip(category, text) {
+      const span = document.createElement("span");
+      const normalized = safe(category);
+      span.className = "decision-chip " + normalized;
+      span.append(createIcon(DECISION_ICONS[normalized] || "bar-chart", "icon icon-sm"), document.createTextNode(text || labelize(normalized)));
+      return span;
+    }
+
+    function applyMethodBadge(job) {
+      const method = applyMethod(job);
+      if (method !== "easy_apply") return null;
+      const span = document.createElement("span");
+      span.className = "apply-method-badge easy";
+      span.append(createIcon("briefcase", "icon icon-sm"), document.createTextNode("Easy Apply"));
+      span.title = "This LinkedIn job showed an Easy Apply button when scouted";
+      return span;
+    }
+
+    function createIcon(name, className = "icon") {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", className);
+      svg.setAttribute("aria-hidden", "true");
+      svg.setAttribute("focusable", "false");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#icon-" + name);
+      svg.append(use);
+      return svg;
+    }
+
+    function setIconText(element, iconName, text) {
+      element.replaceChildren(createIcon(iconName, "icon icon-sm"), document.createTextNode(text));
     }
 
     function filteredJobs() {
@@ -1730,7 +3085,10 @@
         if (state.filters.decision !== "all" && job.decision_category !== state.filters.decision) return false;
         if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
         if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
+        if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
         if (state.filters.manualStatus !== "all" && manualStatus(job) !== state.filters.manualStatus) return false;
+        if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
+        if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
         if (text && !searchBlob(job).includes(text)) return false;
         return true;
       });
@@ -1749,6 +3107,29 @@
         && manualStatus(job) === "unreviewed";
     }
 
+    function latestRunId() {
+      const runs = Array.isArray(state.data.runs) ? state.data.runs : [];
+      const last = runs.length ? runs[runs.length - 1] : null;
+      return last ? safe(last.run_id) : "";
+    }
+
+    function importantFlags(job) {
+      const flags = Array.isArray(job.flags) ? job.flags : [];
+      return flags.slice().sort((a, b) => Number(isRiskFlag(b)) - Number(isRiskFlag(a)));
+    }
+
+    function isRiskFlag(flag) {
+      return /(risk|dutch|commute|low_pay|seniority|manual_review|contract|sales|technical)/i.test(safe(flag));
+    }
+
+    function hasDutchRisk(job) {
+      return /dutch|nederlands|taal|language/i.test(searchBlob(job));
+    }
+
+    function isRemoteOrHybrid(job) {
+      return /remote|hybrid|thuis|from home/i.test(searchBlob(job));
+    }
+
     function jobs() {
       return Array.isArray(state.data.jobs) ? state.data.jobs : [];
     }
@@ -1761,9 +3142,18 @@
         job.query,
         job.reason,
         job.domain_label,
+        job.apply_method_label,
         job.manual_status_label,
         ...(Array.isArray(job.flags) ? job.flags : [])
       ].map(safe).join(" ").toLowerCase();
+    }
+
+    function applyMethod(job) {
+      const method = safe(job.apply_method).toLowerCase().replace(/[\s-]+/g, "_");
+      if (APPLY_METHODS.some(([value]) => value === method)) return method;
+      if (job.easy_apply === true || (Array.isArray(job.flags) && job.flags.includes("easy_apply"))) return "easy_apply";
+      if (Array.isArray(job.flags) && job.flags.includes("external_apply")) return "external_apply";
+      return "unknown";
     }
 
     function manualStatus(job) {
@@ -1821,9 +3211,151 @@
       return cleaned.slice(0, 16).replace("T", " ");
     }
 
+    async function loadRunControl() {
+      try {
+        const response = await fetch(API_RUN_CONTROL_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.runControl = await response.json();
+        state.runControlAvailable = true;
+      } catch (_error) {
+        state.runControlAvailable = false;
+        state.runControl = null;
+      }
+      renderRunControl();
+    }
+
+    function renderRunControl() {
+      const control = state.runControl || {};
+      const active = Boolean(control.active);
+      const available = state.runControlAvailable;
+      if (els.runControlNotice) {
+        els.runControlNotice.textContent = available
+          ? "Dashboard controller is available. Commands are restricted to approved scout workflows."
+          : "Run python serve_dashboard.py to start scout runs from this dashboard.";
+      }
+      if (els.runStatusBadge) {
+        setIconText(els.runStatusBadge, active ? "activity" : "clock", active ? "Running" : labelize(control.status || "Idle"));
+        els.runStatusBadge.className = "decision-chip " + (active ? "APPLY_FIRST" : "");
+      }
+      if (els.runStatusText) {
+        els.runStatusText.textContent = available
+          ? runControlStatusText(control)
+          : "Controller unavailable from this page.";
+      }
+      if (els.runLogTail) {
+        els.runLogTail.textContent = safe(control.log_tail) || "No run log yet.";
+      }
+      if (els.runResumeMode) {
+        els.runResumeMode.disabled = !available || !control.resume_available;
+        els.runResumeMode.title = control.resume_available ? "Resume saved scout progress" : "No resumable scout progress found";
+      }
+      if (els.startRunButton) {
+        els.startRunButton.disabled = !available || active;
+      }
+      for (const button of [els.stopAfterJobButton, els.stopAfterPageButton, els.stopNowButton]) {
+        if (button) button.disabled = !available || !active;
+      }
+    }
+
+    function runControlStatusText(control) {
+      if (control.active) {
+        return "Running " + (safe(control.workflow_label) || "scout") + " since " + (formatDateTime(control.started_at) || "now") + ".";
+      }
+      if (control.status === "failed") return "Last run failed. Review the log tail before resuming.";
+      if (control.status === "stopped") return "Last run was stopped. Resume is available when scout progress exists.";
+      if (control.status === "completed") return "Last run completed.";
+      return "No active scout run.";
+    }
+
+    function openRunScoutModal() {
+      state.lastFocusedBeforeModal = document.activeElement;
+      els.runScoutOverlay.classList.remove("hidden");
+      updateWorkflowFields();
+      loadRunControl();
+      els.runWorkflow.focus();
+    }
+
+    function closeRunScoutModal() {
+      els.runScoutOverlay.classList.add("hidden");
+      if (state.lastFocusedBeforeModal && typeof state.lastFocusedBeforeModal.focus === "function") {
+        state.lastFocusedBeforeModal.focus();
+      }
+    }
+
+    function updateWorkflowFields() {
+      const workflow = els.runWorkflow.value;
+      const needsQuery = ["linkedin_single", "indeed_description"].includes(workflow);
+      els.runQuery.disabled = !needsQuery;
+      els.runQuery.title = needsQuery ? "Search query for this workflow" : "Not used here; multi-query runs read search_queries.txt.";
+      els.runFreshMode.disabled = workflow === "indeed_description" || workflow === "linkedin_process_only";
+      if (workflow === "linkedin_multi_fresh") {
+        els.runFreshMode.checked = true;
+      }
+      if (workflow === "indeed_description" || workflow === "linkedin_process_only") {
+        els.runFreshMode.checked = false;
+      }
+      if (els.runWorkflowHint) {
+        const hints = {
+          linkedin_multi_fresh: ["Recommended daily workflow", "Searches the saved query list, skips known jobs, and keeps going when early pages are mostly duplicates."],
+          linkedin_single: ["Focused search", "Use this when you want one title or phrase only, such as product coordinator or UX designer."],
+          linkedin_process_only: ["Score existing collected jobs", "Runs the analysis pipeline on saved job records without opening LinkedIn search pages."],
+          indeed_description: ["Indeed description extraction", "Opens Indeed for manual login and accessible pages only; verification and login stay manual."]
+        };
+        const hint = hints[workflow] || ["Approved workflow", "Runs through the local dashboard controller using a fixed safe command template."];
+        els.runWorkflowHint.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = hint[0];
+        const copy = document.createElement("span");
+        copy.textContent = hint[1];
+        els.runWorkflowHint.append(title, copy);
+      }
+    }
+
+    async function startDashboardRun() {
+      if (!state.runControlAvailable) return;
+      const payload = {
+        workflow: els.runWorkflow.value,
+        query: els.runQuery.value,
+        location: els.runLocation.value,
+        max_pages: els.runMaxPages.value,
+        browser: els.runBrowser.value,
+        human_mode: els.runHumanMode.checked,
+        fresh: els.runFreshMode.checked,
+        resume: els.runResumeMode.checked
+      };
+      await postRunControl("start", payload);
+    }
+
+    async function stopDashboardRun(mode) {
+      await postRunControl("stop", { mode });
+    }
+
+    async function postRunControl(action, payload) {
+      try {
+        const response = await fetch(API_RUN_CONTROL_URL + "/" + action, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload || {})
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.ok === false) {
+          throw new Error(data.error || "Run control request failed");
+        }
+        state.runControl = data.state || data;
+        state.runControlAvailable = true;
+        setStatus(state.data.active_run_id ? "live" : "", action === "start" ? "Scout started" : "Stop requested");
+      } catch (error) {
+        setStatus("error", safe(error.message) || "Run control failed");
+      }
+      renderRunControl();
+    }
+
     function bindControls() {
       els.searchInput.addEventListener("input", () => {
         state.filters.search = els.searchInput.value;
+        state.filters.quickPreset = "";
+        renderQuickPresets();
+        renderBestNextJobs();
         renderJobs();
       });
       for (const [element, key] of [
@@ -1832,12 +3364,16 @@
         [els.decisionFilter, "decision"],
         [els.domainFilter, "domain"],
         [els.flagFilter, "flag"],
+        [els.applyMethodFilter, "applyMethod"],
         [els.manualStatusFilter, "manualStatus"],
         [els.sortFilter, "sort"]
       ]) {
         element.addEventListener("change", () => {
           state.filters[key] = element.value;
+          state.filters.quickPreset = "";
+          renderQuickPresets();
           renderJobs();
+          renderBestNextJobs();
         });
       }
       for (const button of [els.boardViewButton, els.listViewButton]) {
@@ -1849,7 +3385,26 @@
       }
       els.undoButton.addEventListener("click", undoLastManualStatus);
       els.refreshButton.addEventListener("click", loadData);
+      els.toggleRunHistoryButton.addEventListener("click", () => {
+        state.runHistoryExpanded = !state.runHistoryExpanded;
+        renderRunHistory();
+      });
+      els.runScoutButton.addEventListener("click", openRunScoutModal);
+      els.closeRunScoutButton.addEventListener("click", closeRunScoutModal);
+      els.runScoutOverlay.addEventListener("click", (event) => {
+        if (event.target === els.runScoutOverlay) closeRunScoutModal();
+      });
+      els.runWorkflow.addEventListener("change", updateWorkflowFields);
+      els.startRunButton.addEventListener("click", startDashboardRun);
+      els.refreshRunControlButton.addEventListener("click", loadRunControl);
+      els.stopAfterJobButton.addEventListener("click", () => stopDashboardRun("after_current_job"));
+      els.stopAfterPageButton.addEventListener("click", () => stopDashboardRun("after_current_page"));
+      els.stopNowButton.addEventListener("click", () => stopDashboardRun("now"));
       window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !els.runScoutOverlay.classList.contains("hidden")) {
+          closeRunScoutModal();
+          return;
+        }
         if (!event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) return;
         if (event.key.toLowerCase() !== "z") return;
         const active = document.activeElement;
@@ -1863,7 +3418,9 @@
     bindControls();
     render();
     loadData();
+    loadRunControl();
     window.setInterval(loadData, POLL_MS);
+    window.setInterval(loadRunControl, POLL_MS);
   </script>
 </body>
 </html>

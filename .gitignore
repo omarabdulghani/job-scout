@@ -11,6 +11,7 @@ config/profile.local.json
 
 .playwright/
 .pytest_cache/
+artifacts/
 logs/
 *.log
 

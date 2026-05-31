@@ -35,6 +35,13 @@ The server binds to `127.0.0.1` by default and exposes:
 - `GET /api/dashboard-data`: live scout data merged with manual status.
 - `GET /api/user-state`: raw manual status file.
 - `POST /api/job-status`: save `applied`, `irrelevant`, or `unreviewed`.
+- `GET /api/run-control`: local scout controller state and log tail.
+- `POST /api/run-control/start`: start one approved scout workflow.
+- `POST /api/run-control/stop`: request `after_current_job`, `after_current_page`, or `now`.
+
+Run control is intentionally local-only and allowlisted. The dashboard never
+accepts arbitrary shell commands and never displays credentials, API keys,
+cookies, or tokens.
 
 The existing final outputs should remain separate:
 
@@ -219,6 +226,17 @@ Recommended initial flags:
 - `duplicate_suppressed`
 - `external_apply`
 - `easy_apply`
+
+## Apply Method
+
+Each job may include:
+
+- `easy_apply`: boolean
+- `apply_method`: `easy_apply`, `external_apply`, or `unknown`
+- `apply_method_label`: human-readable label for dashboard display
+
+Older records without this field should be treated as `unknown`, not as
+external apply.
 
 ## Summary Object
 

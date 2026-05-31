@@ -70,6 +70,8 @@ class LiveDashboardWriterTests(unittest.TestCase):
                     "source_stage": "ai_scored",
                     "reason": "Strong junior UX fit.",
                     "ai_model": "gemini:gemini-2.5-flash",
+                    "easy_apply": True,
+                    "apply_method": "easy_apply",
                 }
             )
 
@@ -77,8 +79,14 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(job["decision_label"], "APPLY FIRST")
             self.assertEqual(job["domain_category"], "UX_UI_PRODUCT_DESIGN")
             self.assertEqual(job["job_id"], "123456789")
+            self.assertTrue(job["easy_apply"])
+            self.assertEqual(job["apply_method"], "easy_apply")
+            self.assertEqual(job["apply_method_label"], "Easy Apply")
+            self.assertIn("easy_apply", job["flags"])
             self.assertEqual(writer.data["summary"]["by_decision"]["APPLY_FIRST"], 1)
+            self.assertEqual(writer.data["summary"]["by_apply_method"]["easy_apply"], 1)
             self.assertIn("UX_UI_PRODUCT_DESIGN", writer.data["filter_options"]["domains"])
+            self.assertIn("easy_apply", writer.data["filter_options"]["apply_methods"])
 
     def test_fresh_run_progress_tracks_goals_and_page_quality(self):
         with tempfile.TemporaryDirectory() as tmp:

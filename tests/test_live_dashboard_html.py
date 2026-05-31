@@ -30,11 +30,14 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "decisionFilter",
             "domainFilter",
             "flagFilter",
+            "applyMethodFilter",
             "manualStatusFilter",
             "sortFilter",
             "boardViewButton",
             "listViewButton",
             "undoButton",
+            "quickPresets",
+            "runScoutButton",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
 
@@ -64,12 +67,23 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn(" - empty", self.html)
 
     def test_dashboard_has_applying_workflow_tools(self):
-        self.assertIn("Needs action", self.html)
+        self.assertIn("Actionable jobs", self.html)
+        self.assertIn("Actionable jobs are unreviewed Apply First and Good Options", self.html)
         self.assertIn('value="needs_action"', self.html)
+        self.assertIn('actionScope: "needs_action"', self.html)
         self.assertIn("needsAction", self.html)
         self.assertIn("Open job", self.html)
         self.assertIn("Copy link", self.html)
         self.assertIn("copyJobLink", self.html)
+        self.assertIn("Easy Apply", self.html)
+        self.assertIn("applyMethodFilter", self.html)
+        self.assertIn("applyMethodBadge", self.html)
+        self.assertIn("applyMethod(job)", self.html)
+        self.assertIn("Best Next Jobs", self.html)
+        self.assertIn("bestNextJobs", self.html)
+        self.assertIn("renderBestNextJobs", self.html)
+        self.assertIn("QUICK_PRESETS", self.html)
+        self.assertIn("applyQuickPreset", self.html)
 
     def test_dashboard_has_board_and_compact_list_layouts(self):
         self.assertIn('id="boardView"', self.html)
@@ -83,7 +97,9 @@ class LiveDashboardHtmlTests(unittest.TestCase):
     def test_dashboard_has_fresh_scout_progress_panel(self):
         for element_id in [
             "freshPanel",
+            "freshTitle",
             "freshStatus",
+            "freshCompleteSummary",
             "freshApply",
             "freshGood",
             "freshJobs",
@@ -93,8 +109,32 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
         self.assertIn("renderFreshProgress", self.html)
+        self.assertIn("renderFreshCompleteSummary", self.html)
+        self.assertIn("Filter to this run", self.html)
+        self.assertIn("Show details", self.html)
         self.assertIn("selectedFreshRun", self.html)
         self.assertIn("freshPageCard", self.html)
+        self.assertIn("Run History", self.html)
+        self.assertIn("renderRunHistory", self.html)
+
+    def test_dashboard_has_run_scout_overlay(self):
+        for element_id in [
+            "runScoutOverlay",
+            "runWorkflow",
+            "runLocation",
+            "runQuery",
+            "runMaxPages",
+            "runBrowser",
+            "runHumanMode",
+            "runFreshMode",
+            "runResumeMode",
+            "startRunButton",
+            "runLogTail",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('const API_RUN_CONTROL_URL = "/api/run-control"', self.html)
+        self.assertIn("startDashboardRun", self.html)
+        self.assertIn("stopDashboardRun", self.html)
 
     def test_dashboard_has_required_decision_columns(self):
         for decision in ["APPLY_FIRST", "GOOD_OPTIONS", "LOW_PROBABILITY", "REJECTED"]:

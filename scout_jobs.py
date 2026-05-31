@@ -2,6 +2,7 @@ import argparse
 import asyncio
 from datetime import datetime
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -27,6 +28,7 @@ from agent.recommended_jobs_dashboard import update_recommended_jobs_html
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.scout_run_logger import ScoutRunLogger
+from agent.scout_stop import clear_stop_request, stop_requested
 
 load_dotenv()
 console = Console()
@@ -165,6 +167,8 @@ async def main():
     )
     parser.add_argument("--headless", action="store_true", help="Run browser headlessly")
     args = parser.parse_args()
+    if os.getenv("DASHBOARD_STARTED_SCOUT") != "1":
+        clear_stop_request()
     board_mode = resolve_board_mode(args)
     board_name = board_display_name(board_mode)
     if requires_description_only(board_mode):
@@ -405,6 +409,8 @@ async def main():
                 description_only=args.description_only,
                 fresh_policy=fresh_policy,
             )
+            if stop_requested():
+                live_completion_status = "stopped"
             stats_for_progress = report.get("stats", {})
             save_progress(
                 status="completed",
@@ -459,7 +465,7 @@ async def main():
             completed_at=report.get("completed_at", report.get("generated_at", "")),
         )
         if live_dashboard and live_run:
-            live_dashboard.complete_run(live_run["run_id"], status="completed")
+            live_dashboard.complete_run(live_run["run_id"], status=live_completion_status if live_completion_status == "stopped" else "completed")
             live_run_completed = True
     except KeyboardInterrupt:
         live_completion_status = "stopped"

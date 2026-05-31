@@ -27,6 +27,9 @@ class LiveDashboardScoutEventTests(unittest.TestCase):
                 "url": "https://www.linkedin.com/jobs/view/123456789/",
                 "page_number": 2,
                 "description": "Junior UX role using Figma and prototypes.",
+                "easy_apply": True,
+                "apply_method": "easy_apply",
+                "apply_method_detection_source": "detail_apply_button",
             },
             terminal_status="accepted",
             source_stage="ai_scored",
@@ -51,6 +54,9 @@ class LiveDashboardScoutEventTests(unittest.TestCase):
         self.assertEqual(event["source_stage"], "ai_scored")
         self.assertEqual(event["job_id"], "123456789")
         self.assertEqual(event["match_tier"], "strong_match")
+        self.assertTrue(event["easy_apply"])
+        self.assertEqual(event["apply_method"], "easy_apply")
+        self.assertEqual(event["apply_method_detection_source"], "detail_apply_button")
         self.assertTrue(event["used_cv_second_stage"])
 
     def test_build_live_rejected_event_uses_filter_reason(self):

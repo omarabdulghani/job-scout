@@ -14,6 +14,7 @@ from agent.description_log import DescriptionLogWriter
 from agent.fresh_scout_policy import FreshScoutPolicy
 from agent.scout_collected_jobs import ScoutCollectedJobsStore
 from agent.scout_console_reporter import NullScoutConsoleReporter
+from agent.scout_stop import stop_reason, stop_requested
 from agent.scout_run_history import ScoutRunHistoryStore
 from agent.job_tracking import JobTrackingStore
 from scrapers.linkedin import LinkedInScraper
@@ -832,6 +833,13 @@ class LinkedInJobScout:
                 finalize=False,
             )
             next_job_index += len(page_summaries)
+            if stop_requested("after_current_page", "after_current_job", "now"):
+                self._report(
+                    "STOP",
+                    stop_reason() or "Dashboard stop requested; finalizing current scout output.",
+                    style="yellow",
+                )
+                break
 
         return await self._process_summaries_to_output(
             query=query,
@@ -1136,6 +1144,9 @@ class LinkedInJobScout:
             "filter_notes": filter_notes,
             "description_preview": self._description_preview(description, max_chars=260),
             "flags": flags or [],
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "ai_model": ai_result.get("model", self.brain.scoring_model_label if ai_result else ""),
             "match_tier": ai_result.get("match_tier", ""),
             "cache_status": ai_result.get("cache_status", ""),
@@ -1197,6 +1208,9 @@ class LinkedInJobScout:
                             "job_id": (job.get("job_id") or self._linkedin_job_id(job.get("url", ""))).strip(),
                             "description": "",
                             "description_debug": {},
+                            "easy_apply": bool(job.get("easy_apply")),
+                            "apply_method": job.get("apply_method", "unknown"),
+                            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
                             "collected_at": cached_entry.get("first_seen_at", "") or cached_entry.get("scored_at", "") or now,
                             "last_seen_at": now,
                             "analyzed_at": cached_entry.get("first_seen_at", "") or cached_entry.get("scored_at", "") or now,
@@ -1219,6 +1233,9 @@ class LinkedInJobScout:
                                 "job_id": (job.get("job_id") or self._linkedin_job_id(job.get("url", ""))).strip(),
                                 "description": "",
                                 "description_debug": {},
+                                "easy_apply": bool(job.get("easy_apply")),
+                                "apply_method": job.get("apply_method", "unknown"),
+                                "apply_method_detection_source": job.get("apply_method_detection_source", ""),
                                 "collected_at": now,
                                 "last_seen_at": now,
                                 "analyzed_at": now,
@@ -1354,6 +1371,13 @@ class LinkedInJobScout:
         batch_start_index = max(1, int(start_index or 1))
         batch_display_total = max(len(summaries), batch_start_index + len(summaries) - 1)
         for index, summary in enumerate(summaries, start=batch_start_index):
+            if stop_requested("after_current_job", "now"):
+                self._report(
+                    "STOP",
+                    stop_reason() or "Dashboard stop requested after the current job.",
+                    style="yellow",
+                )
+                break
             found_at = datetime.now().astimezone().isoformat()
             summary = dict(summary)
             already_analyzed, _ = self._is_globally_analyzed(summary)
@@ -1458,7 +1482,7 @@ class LinkedInJobScout:
                         details.get("url", ""),
                         summary.get("url", ""),
                     )
-                    for field in ("title", "company", "location", "preview_text"):
+                    for field in ("title", "company", "location", "preview_text", "easy_apply", "apply_method"):
                         if not details.get(field) and summary.get(field):
                             details[field] = summary.get(field)
                     if summary.get("page_number"):
@@ -1514,7 +1538,7 @@ class LinkedInJobScout:
                             details.get("url", ""),
                             summary.get("url", ""),
                         )
-                        for field in ("title", "company", "location", "preview_text"):
+                        for field in ("title", "company", "location", "preview_text", "easy_apply", "apply_method"):
                             if not details.get(field) and summary.get(field):
                                 details[field] = summary.get(field)
                         if summary.get("page_number"):
@@ -2452,6 +2476,8 @@ class LinkedInJobScout:
         except Exception:
             pass
 
+        details.update(await self._detect_linkedin_apply_method(details))
+
         extraction = await self._extract_linkedin_job_description()
         if not extraction.get("text"):
             await asyncio.sleep(1.2)
@@ -2471,6 +2497,88 @@ class LinkedInJobScout:
             extracted=bool(details.get("description")),
         )
         return details
+
+    async def _detect_linkedin_apply_method(self, job: dict) -> dict:
+        """Inspect visible LinkedIn apply controls without clicking anything."""
+        fallback_method = "easy_apply" if bool(job.get("easy_apply")) else self._normalize_apply_method(job.get("apply_method"))
+        if fallback_method not in {"easy_apply", "external_apply"}:
+            fallback_method = "unknown"
+
+        try:
+            state = await self.browser.page.evaluate(
+                """() => {
+                    const normalize = (value) => (value || "").replace(/\\s+/g, " ").trim();
+                    const visible = (el) => {
+                        if (!el) return false;
+                        const style = window.getComputedStyle(el);
+                        const rect = el.getBoundingClientRect();
+                        return style.visibility !== "hidden" &&
+                            style.display !== "none" &&
+                            rect.width > 0 &&
+                            rect.height > 0;
+                    };
+                    const selectors = [
+                        ".jobs-apply-button--top-card",
+                        "button.jobs-apply-button",
+                        "a.jobs-apply-button",
+                        "button[aria-label*='Easy Apply']",
+                        "button[aria-label*='easy apply']",
+                        "button[aria-label*='Apply']",
+                        "a[aria-label*='Apply']",
+                        "a[href*='offsite-apply']"
+                    ];
+                    const controls = Array.from(document.querySelectorAll(selectors.join(",")))
+                        .filter(visible)
+                        .map((el) => ({
+                            text: normalize(el.innerText || el.textContent || ""),
+                            aria: normalize(el.getAttribute("aria-label") || ""),
+                            href: normalize(el.getAttribute("href") || ""),
+                            className: normalize(el.className || ""),
+                        }));
+                    return { controls };
+                }"""
+            )
+        except Exception:
+            return self._apply_method_payload(fallback_method, "card_or_existing_data")
+
+        controls = state.get("controls", []) if isinstance(state, dict) else []
+        for control in controls:
+            combined = self._apply_control_text(control)
+            if "easy apply" in combined:
+                return self._apply_method_payload("easy_apply", "detail_apply_button")
+
+        for control in controls:
+            combined = self._apply_control_text(control)
+            href = (control.get("href") or "").strip().lower() if isinstance(control, dict) else ""
+            if "apply" not in combined and "offsite-apply" not in href:
+                continue
+            return self._apply_method_payload("external_apply", "detail_apply_button")
+
+        return self._apply_method_payload(fallback_method, "card_or_existing_data")
+
+    def _apply_control_text(self, control: dict) -> str:
+        if not isinstance(control, dict):
+            return ""
+        return " ".join(
+            str(control.get(key, "") or "").strip().lower()
+            for key in ("text", "aria", "href", "className")
+        )
+
+    def _normalize_apply_method(self, value: str | None) -> str:
+        method = re.sub(r"\s+", "_", (value or "").strip().lower().replace("-", "_"))
+        if method in {"easy", "easy_apply", "linkedin_easy_apply"}:
+            return "easy_apply"
+        if method in {"external", "external_apply", "company_site", "company_website"}:
+            return "external_apply"
+        return "unknown"
+
+    def _apply_method_payload(self, method: str, source: str = "") -> dict:
+        normalized = self._normalize_apply_method(method)
+        return {
+            "easy_apply": normalized == "easy_apply",
+            "apply_method": normalized,
+            "apply_method_detection_source": source,
+        }
 
     def _reset_human_mode_state(self, enabled: bool) -> None:
         self.human_mode = bool(enabled)
@@ -3495,6 +3603,9 @@ class LinkedInJobScout:
                 "title": job.get("title", ""),
                 "company": job.get("company", ""),
                 "location": job.get("location", ""),
+                "easy_apply": bool(job.get("easy_apply")),
+                "apply_method": job.get("apply_method", "unknown"),
+                "apply_method_detection_source": job.get("apply_method_detection_source", ""),
                 "interview_probability_score": ai_payload["interview_probability_score"],
                 "short_ai_reasoning": ai_payload["reason"],
                 "scored_at": now,
@@ -3611,6 +3722,9 @@ class LinkedInJobScout:
             "description_fingerprint": description_fingerprint,
             "description_length": len((job.get("description") or "").strip()),
             "description_preview": self._description_preview(job.get("description", ""), max_chars=260),
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "cache_status": cache_status,
             "interview_probability_score": ai_payload.get("interview_probability_score", 0),
             "short_ai_reasoning": ai_payload.get("reason", ""),
@@ -3638,6 +3752,9 @@ class LinkedInJobScout:
             "language": verdict.get("language", ""),
             "matched_query_terms": verdict.get("matched_terms", []),
             "filter_notes": verdict.get("reasons", []),
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "interview_probability_score": ai_result.get("interview_probability_score", 0),
             "interview_probability_reason": ai_result.get("reason", ""),
             "ai_match_tier": ai_result.get("match_tier", "weak_match"),
@@ -3816,6 +3933,9 @@ class LinkedInJobScout:
             "job_id": (job.get("job_id") or self._linkedin_job_id(job.get("url", ""))).strip(),
             "description": (job.get("description") or "").strip(),
             "description_debug": dict(job.get("description_debug", {}) or {}),
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "collected_at": (existing or {}).get("collected_at", "") or now,
             "last_seen_at": now,
             "analyzed_at": now,
@@ -3859,6 +3979,9 @@ class LinkedInJobScout:
             "job_id": self._linkedin_job_id(job.get("url", "")),
             "description": (job.get("description") or "").strip(),
             "description_debug": dict(job.get("description_debug", {}) or {}),
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "collected_at": datetime.now().astimezone().isoformat(),
             "last_seen_at": datetime.now().astimezone().isoformat(),
             "identity_keys": identity_keys,
@@ -3903,6 +4026,9 @@ class LinkedInJobScout:
             "location": job.get("location", ""),
             "url": self._canonicalize_linkedin_job_url(job.get("url", "")),
             "found_at": job.get("_found_at", datetime.now().astimezone().isoformat()),
+            "easy_apply": bool(job.get("easy_apply")),
+            "apply_method": job.get("apply_method", "unknown"),
+            "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "rejection_category": self._rejection_category_label(verdict.get("status", "")),
             "rejection_reason": reasons[0] if reasons else "Rejected by non-AI filter",
             "description_extracted": self._description_extracted(job),

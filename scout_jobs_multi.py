@@ -2,6 +2,7 @@ import argparse
 import asyncio
 from datetime import datetime
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ from agent.query_learning import order_queries_with_learning
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.job_tracking import JobTrackingStore
 from agent.scout_run_logger import ScoutRunLogger
+from agent.scout_stop import clear_stop_request, stop_reason, stop_requested
 
 load_dotenv()
 console = Console()
@@ -713,6 +715,8 @@ async def main():
     )
     parser.add_argument("--headless", action="store_true", help="Run browser headlessly")
     args = parser.parse_args()
+    if os.getenv("DASHBOARD_STARTED_SCOUT") != "1":
+        clear_stop_request()
     board_mode = resolve_board_mode(args)
     board_name = board_display_name(board_mode)
     if requires_description_only(board_mode):
@@ -1122,6 +1126,25 @@ async def main():
                         stop_reason=fresh_stop_reason,
                     )
                     break
+            if stop_requested():
+                fresh_stop_reason = stop_reason() or "Dashboard stop requested."
+                fresh_stop_counts = fresh_counts_so_far()
+                live_completion_status = "stopped"
+                console.print(f"[yellow][STOP][/yellow] {fresh_stop_reason}")
+                update_live_progress(
+                    phase="dashboard_stopped",
+                    current_query_index=index + 1,
+                    total_queries=len(queries),
+                    current_query=query,
+                    pages_scanned=cumulative_pages,
+                    fresh_jobs_seen=int(fresh_stop_counts.get("new_jobs_seen", 0) or cumulative_jobs),
+                    ai_scored=int(fresh_stop_counts.get("ai_calls", 0) or 0),
+                    apply_first=int(fresh_stop_counts.get("apply_first", 0) or 0),
+                    good_or_better=int(fresh_stop_counts.get("good_or_better", 0) or 0),
+                    stopped_early=True,
+                    stop_reason=fresh_stop_reason,
+                )
+                break
 
         if args.description_only:
             completed_at = datetime.now().astimezone().isoformat()
@@ -1236,7 +1259,10 @@ async def main():
                 stopped_early=bool(fresh_stop_reason),
                 stop_reason=fresh_stop_reason,
             )
-            live_dashboard.complete_run(live_run["run_id"], status="completed")
+            live_dashboard.complete_run(
+                live_run["run_id"],
+                status=live_completion_status if live_completion_status == "stopped" else "completed",
+            )
             live_run_completed = True
     except KeyboardInterrupt:
         live_completion_status = "stopped"

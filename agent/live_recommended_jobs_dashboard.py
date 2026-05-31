@@ -39,6 +39,12 @@ DOMAIN_LABELS = {
     "OTHER": "Other",
 }
 
+APPLY_METHOD_LABELS = {
+    "easy_apply": "Easy Apply",
+    "external_apply": "External Apply",
+    "unknown": "Unknown",
+}
+
 
 class LiveRecommendedJobsDashboard:
     """Maintain the live dashboard JSON state with atomic writes."""
@@ -260,10 +266,23 @@ class LiveRecommendedJobsDashboard:
                 description=event.get("description") or event.get("description_preview") or "",
             )
 
+        apply_method = normalize_apply_method(event)
+        apply_method_flags = []
+        if apply_method == "easy_apply":
+            apply_method_flags.append("easy_apply")
+        elif apply_method == "external_apply":
+            apply_method_flags.append("external_apply")
+        inferred_flags = infer_flags(event, score=score, decision_category=decision_category)
         flags = _merge_unique_strings(
             event.get("flags", []),
-            infer_flags(event, score=score, decision_category=decision_category),
+            apply_method_flags,
+            inferred_flags,
         )
+        normalized_flags = {flag.lower() for flag in flags}
+        if apply_method == "unknown" and "easy_apply" in normalized_flags:
+            apply_method = "easy_apply"
+        elif apply_method == "unknown" and "external_apply" in normalized_flags:
+            apply_method = "external_apply"
 
         normalized = {
             "event_id": _clean_text(event.get("event_id")) or identity,
@@ -290,6 +309,10 @@ class LiveRecommendedJobsDashboard:
                 or event.get("short_ai_reasoning")
                 or event.get("why")
             ),
+            "easy_apply": apply_method == "easy_apply",
+            "apply_method": apply_method,
+            "apply_method_label": APPLY_METHOD_LABELS[apply_method],
+            "apply_method_detection_source": _clean_text(event.get("apply_method_detection_source")),
             "flags": flags,
             "source_stage": source_stage,
             "terminal_status": terminal_status,
@@ -357,13 +380,17 @@ class LiveRecommendedJobsDashboard:
         jobs = [job for job in self.data.get("jobs", []) if isinstance(job, dict)]
         by_decision = {key: 0 for key in DECISION_LABELS}
         by_domain = {key: 0 for key in DOMAIN_LABELS}
+        by_apply_method = {key: 0 for key in APPLY_METHOD_LABELS}
         for job in jobs:
             decision = job.get("decision_category")
             domain = job.get("domain_category")
+            apply_method = normalize_apply_method(job)
             if decision in by_decision:
                 by_decision[decision] += 1
             if domain in by_domain:
                 by_domain[domain] += 1
+            if apply_method in by_apply_method:
+                by_apply_method[apply_method] += 1
         active_run_id = self.data.get("active_run_id", "")
         return {
             "total_runs": len(self.data.get("runs", [])),
@@ -371,6 +398,7 @@ class LiveRecommendedJobsDashboard:
             "active_run_jobs": len([job for job in jobs if job.get("run_id") == active_run_id]),
             "by_decision": by_decision,
             "by_domain": by_domain,
+            "by_apply_method": by_apply_method,
             "last_event_at": max((job.get("processed_at", "") for job in jobs), default=""),
         }
 
@@ -406,6 +434,7 @@ class LiveRecommendedJobsDashboard:
             "decisions": list(DECISION_LABELS),
             "domains": sorted({job.get("domain_category", "OTHER") for job in jobs if job.get("domain_category")}),
             "flags": sorted({flag for job in jobs for flag in job.get("flags", []) if flag}),
+            "apply_methods": list(APPLY_METHOD_LABELS),
         }
 
     def _decision_category(self, score: int, terminal_status: str, source_stage: str) -> str:
@@ -684,6 +713,22 @@ def infer_flags(event: dict[str, Any], *, score: int, decision_category: str) ->
     if score and score < 50:
         flags.append("manual_review_needed")
     return flags
+
+
+def normalize_apply_method(event: dict[str, Any] | str | None) -> str:
+    if isinstance(event, dict):
+        raw = _clean_text(event.get("apply_method")).lower().replace("-", "_").replace(" ", "_")
+        flags = {str(flag).strip().lower() for flag in event.get("flags", []) if str(flag).strip()}
+        if raw in APPLY_METHOD_LABELS:
+            return raw
+        if bool(event.get("easy_apply")) or "easy_apply" in flags:
+            return "easy_apply"
+        if "external_apply" in flags:
+            return "external_apply"
+        return "unknown"
+
+    raw = _clean_text(event).lower().replace("-", "_").replace(" ", "_")
+    return raw if raw in APPLY_METHOD_LABELS else "unknown"
 
 
 def _canonical_job_url(value: Any) -> str:
