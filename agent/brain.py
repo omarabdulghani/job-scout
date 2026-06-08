@@ -89,8 +89,14 @@ Rules:
 class JobBrain:
     """Claude-powered decision engine for the job agent."""
 
-    LEARNED_ANSWERS_PATH = Path("data/learned_answers.json")
-    PORTFOLIO_NOTES_PATH = Path("data/portfolio_site_notes.txt")
+    LEARNED_ANSWERS_PATHS = (
+        Path("data/user_workspace/learned_answers.json"),
+        Path("data/learned_answers.json"),
+    )
+    PORTFOLIO_NOTES_PATHS = (
+        Path("data/user_workspace/portfolio_notes.txt"),
+        Path("data/portfolio_site_notes.txt"),
+    )
     LMSTUDIO_SCORING_BASE_MAX_TOKENS = 350
     LMSTUDIO_SCORING_REASONING_MAX_TOKENS = 900
     LMSTUDIO_SCORING_INITIAL_RETRY_DELAY_SECONDS = 5
@@ -2620,11 +2626,16 @@ class JobBrain:
         return self.client
 
     def _load_learned_answers(self) -> dict:
-        try:
-            if self.LEARNED_ANSWERS_PATH.exists():
-                return json.loads(self.LEARNED_ANSWERS_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        for path in self.LEARNED_ANSWERS_PATHS:
+            try:
+                if path.exists():
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    if isinstance(payload, dict):
+                        self.learned_answers_path = path
+                        return payload
+            except Exception:
+                continue
+        self.learned_answers_path = self.LEARNED_ANSWERS_PATHS[0]
         return {}
 
     def save_learned_answer(self, question: str, answer: str):
@@ -2633,8 +2644,8 @@ class JobBrain:
         if not normalized or not cleaned_answer:
             return
         self.learned_answers[normalized] = cleaned_answer
-        self.LEARNED_ANSWERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        self.LEARNED_ANSWERS_PATH.write_text(
+        self.learned_answers_path.parent.mkdir(parents=True, exist_ok=True)
+        self.learned_answers_path.write_text(
             json.dumps(self.learned_answers, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
@@ -2781,13 +2792,14 @@ class JobBrain:
         return "\n\n".join(texts)[:5000]
 
     def _load_local_portfolio_notes(self) -> str:
-        try:
-            if self.PORTFOLIO_NOTES_PATH.exists():
-                return self._normalize_knowledge_text(
-                    self.PORTFOLIO_NOTES_PATH.read_text(encoding="utf-8")
-                )
-        except Exception:
-            return ""
+        for path in self.PORTFOLIO_NOTES_PATHS:
+            try:
+                if path.exists():
+                    return self._normalize_knowledge_text(
+                        path.read_text(encoding="utf-8")
+                    )
+            except Exception:
+                continue
         return ""
 
     def _portfolio_candidate_urls(self, base_url: str) -> list[str]:
@@ -2866,15 +2878,15 @@ class JobBrain:
             if normalized_learned:
                 if normalized_learned != learned_answer:
                     self.learned_answers[learned_key] = normalized_learned
-                    self.LEARNED_ANSWERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-                    self.LEARNED_ANSWERS_PATH.write_text(
+                    self.learned_answers_path.parent.mkdir(parents=True, exist_ok=True)
+                    self.learned_answers_path.write_text(
                         json.dumps(self.learned_answers, indent=2, ensure_ascii=False),
                         encoding="utf-8",
                     )
                 return normalized_learned
             del self.learned_answers[learned_key]
-            self.LEARNED_ANSWERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            self.LEARNED_ANSWERS_PATH.write_text(
+            self.learned_answers_path.parent.mkdir(parents=True, exist_ok=True)
+            self.learned_answers_path.write_text(
                 json.dumps(self.learned_answers, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )

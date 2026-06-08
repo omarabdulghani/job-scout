@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import sys
 from datetime import datetime
@@ -56,7 +57,8 @@ class _TeeTextStream(io.TextIOBase):
 
 class ScoutRunLogger:
     def __init__(self, log_dir: Path | str = "logs", prefix: str = "scout_log"):
-        self.log_dir = Path(log_dir)
+        configured_log_dir = os.getenv("JOB_SCOUT_LOG_DIR", "").strip()
+        self.log_dir = Path(configured_log_dir or log_dir)
         self.prefix = prefix
         self.log_path: Path | None = None
         self._log_handle = None
@@ -93,4 +95,3 @@ class ScoutRunLogger:
                 self._log_handle.flush()
                 self._log_handle.close()
         self._installed = False
-

@@ -16,6 +16,7 @@ class FreshScoutPolicyTests(unittest.TestCase):
         self.assertEqual(policy.target_apply_first_jobs, 8)
         self.assertEqual(policy.target_good_or_better_jobs, 20)
         self.assertEqual(policy.global_new_jobs_soft_cap, 80)
+        self.assertEqual(policy.ai_budget_mode, "smart")
         self.assertTrue(policy.ai_budget_guard_enabled)
         self.assertEqual(policy.ai_calls_quality_check, 40)
         self.assertEqual(policy.min_apply_first_after_ai_quality_check, 2)
@@ -37,6 +38,7 @@ class FreshScoutPolicyTests(unittest.TestCase):
                     "target_apply_first_jobs": 6,
                     "target_good_or_better_jobs": 15,
                     "global_new_jobs_soft_cap": 60,
+                    "ai_budget_mode": "deep",
                     "ai_budget_guard_enabled": False,
                     "ai_calls_quality_check": 30,
                     "min_apply_first_after_ai_quality_check": 1,
@@ -58,7 +60,8 @@ class FreshScoutPolicyTests(unittest.TestCase):
         self.assertEqual(policy.target_apply_first_jobs, 6)
         self.assertEqual(policy.target_good_or_better_jobs, 15)
         self.assertEqual(policy.global_new_jobs_soft_cap, 60)
-        self.assertFalse(policy.ai_budget_guard_enabled)
+        self.assertEqual(policy.ai_budget_mode, "deep")
+        self.assertTrue(policy.ai_budget_guard_enabled)
         self.assertEqual(policy.ai_calls_quality_check, 30)
         self.assertEqual(policy.min_apply_first_after_ai_quality_check, 1)
         self.assertEqual(policy.min_good_or_better_after_ai_quality_check, 3)
@@ -87,6 +90,27 @@ class FreshScoutPolicyTests(unittest.TestCase):
         self.assertEqual(policy.global_new_jobs_soft_cap, 140)
         self.assertEqual(policy.ai_calls_soft_cap, 120)
 
+    def test_legacy_disabled_guard_preference_maps_to_off_mode(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {"fresh_scout": {"ai_budget_guard_enabled": False}},
+            enabled=True,
+        )
+
+        self.assertEqual(policy.ai_budget_mode, "off")
+        self.assertFalse(policy.ai_budget_guard_enabled)
+
+    def test_cli_ai_budget_mode_override_can_disable_guard_for_one_run(self):
+        policy = FreshScoutPolicy.from_preferences({}, enabled=True, ai_budget_mode="off")
+
+        self.assertEqual(policy.ai_budget_mode, "off")
+        self.assertFalse(policy.ai_budget_guard_enabled)
+
+    def test_deep_search_keeps_guard_enabled_without_early_smart_stop(self):
+        policy = FreshScoutPolicy.from_preferences({}, enabled=True, ai_budget_mode="deep")
+
+        self.assertEqual(policy.ai_budget_mode, "deep")
+        self.assertTrue(policy.ai_budget_guard_enabled)
+
     def test_panel_label_is_clear_when_enabled_or_disabled(self):
         self.assertEqual(FreshScoutPolicy.from_preferences({}, enabled=False).panel_label(), "disabled")
 
@@ -94,7 +118,7 @@ class FreshScoutPolicyTests(unittest.TestCase):
         self.assertIn("max 4 pages/query", enabled_label)
         self.assertIn("8 APPLY FIRST", enabled_label)
         self.assertIn("20 good+", enabled_label)
-        self.assertIn("AI guard on", enabled_label)
+        self.assertIn("AI budget Smart Guard", enabled_label)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,16 @@ class ScoutCollectedJobsStore:
                 normalized.get("analysis_reason", ""),
                 existing.get("analysis_reason", ""),
             )
+            normalized["easy_apply"] = bool(existing.get("easy_apply")) or bool(normalized.get("easy_apply"))
+            normalized["apply_method"] = self._prefer_apply_method(
+                normalized.get("apply_method", ""),
+                existing.get("apply_method", ""),
+                normalized.get("easy_apply", False),
+            )
+            normalized["apply_method_detection_source"] = self._prefer_non_empty(
+                normalized.get("apply_method_detection_source", ""),
+                existing.get("apply_method_detection_source", ""),
+            )
             self.jobs = [
                 normalized
                 if self._same_record(existing, job)
@@ -184,6 +194,10 @@ class ScoutCollectedJobsStore:
             analyzed_at = ""
             analysis_status = ""
             analysis_reason = ""
+        apply_method = self._normalize_apply_method(record.get("apply_method", ""))
+        easy_apply = bool(record.get("easy_apply")) or apply_method == "easy_apply"
+        if easy_apply:
+            apply_method = "easy_apply"
 
         return {
             "query": query,
@@ -196,6 +210,11 @@ class ScoutCollectedJobsStore:
             "job_id": self._clean_string(record.get("job_id", "")),
             "description": self._clean_string(record.get("description", "")),
             "description_debug": dict(record.get("description_debug", {}) or {}),
+            "easy_apply": easy_apply,
+            "apply_method": apply_method,
+            "apply_method_detection_source": self._clean_string(
+                record.get("apply_method_detection_source", "")
+            ),
             "collected_at": self._clean_string(record.get("collected_at", "")) or now,
             "last_seen_at": self._clean_string(record.get("last_seen_at", "")) or now,
             "analyzed_at": analyzed_at,
@@ -215,6 +234,25 @@ class ScoutCollectedJobsStore:
             return max(0, int(value or 0))
         except (TypeError, ValueError):
             return 0
+
+    def _normalize_apply_method(self, value) -> str:
+        method = re.sub(r"\s+", "_", self._clean_string(value).lower().replace("-", "_"))
+        if method in {"easy", "easy_apply", "linkedin_easy_apply"}:
+            return "easy_apply"
+        if method in {"external", "external_apply", "company_site", "company_website"}:
+            return "external_apply"
+        return "unknown"
+
+    def _prefer_apply_method(self, new_value, existing_value, easy_apply=False) -> str:
+        new_method = self._normalize_apply_method(new_value)
+        existing_method = self._normalize_apply_method(existing_value)
+        if easy_apply or "easy_apply" in {new_method, existing_method}:
+            return "easy_apply"
+        if new_method != "unknown":
+            return new_method
+        if existing_method != "unknown":
+            return existing_method
+        return "unknown"
 
     def _merge_unique_strings(self, left: list, right: list) -> list[str]:
         merged = []

@@ -25,39 +25,29 @@ from agent.scout_cli_modes import (
 )
 from agent.scout_console_reporter import ScoutConsoleReporter
 from agent.scout_progress import ScoutProgressStore
-from agent.recommended_jobs_dashboard import update_recommended_jobs_html
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.query_learning import order_queries_with_learning
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.job_tracking import JobTrackingStore
 from agent.scout_run_logger import ScoutRunLogger
 from agent.scout_stop import clear_stop_request, stop_reason, stop_requested
+from agent.user_workspace import active_search_queries_path, load_user_config
 
 load_dotenv()
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 
-PROFILE_PATH = Path("config/profile.json")
-PREFERENCES_PATH = Path("config/preferences.json")
 DEFAULT_QUERY_FILE = Path("search_queries.txt")
 OUTPUT_PATH = Path("high_success_probability_jobs_multi.json")
 PROGRESS_MODE = "multi_query_scout"
 FRESH_COUNT_KEYS = ("apply_first", "good_or_better", "new_jobs_seen", "ai_calls")
 
 
-def _load_json_file(path: Path, label: str) -> dict:
-    if not path.exists():
-        raise SystemExit(f"{label} not found at {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{label} contains invalid JSON: {exc}")
-
-
 def load_config() -> tuple[dict, dict]:
-    profile = _load_json_file(PROFILE_PATH, "Profile config")
-    preferences = _load_json_file(PREFERENCES_PATH, "Preferences config")
-    return profile, preferences
+    try:
+        return load_user_config()
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _parse_max_pages(value: str | int | None) -> tuple[int | None, str]:
@@ -303,9 +293,11 @@ def _fresh_ai_budget_stop_reason(counts: dict[str, int], policy: FreshScoutPolic
     ai_calls = int(counts.get("ai_calls", 0) or 0)
     apply_first = int(counts.get("apply_first", 0) or 0)
     good_or_better = int(counts.get("good_or_better", 0) or 0)
+    budget_mode = getattr(policy, "ai_budget_mode", "smart")
 
     if (
-        policy.ai_calls_quality_check
+        budget_mode == "smart"
+        and policy.ai_calls_quality_check
         and ai_calls >= policy.ai_calls_quality_check
         and apply_first < policy.min_apply_first_after_ai_quality_check
         and good_or_better < policy.min_good_or_better_after_ai_quality_check
@@ -603,6 +595,127 @@ def _write_output(output: dict) -> None:
     )
 
 
+def _recover_reports_from_live_dashboard(
+    progress: dict,
+    *,
+    data_path: Path = Path("recommended_jobs_dashboard_data.json"),
+) -> tuple[list[dict], dict]:
+    """Rebuild final merge inputs when every query finished before finalization failed."""
+    if not data_path.exists():
+        return [], {}
+    try:
+        payload = json.loads(data_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return [], {}
+    if not isinstance(payload, dict):
+        return [], {}
+
+    expected_queries = [
+        _normalize_query(query)
+        for query in progress.get("queries", [])
+        if isinstance(query, str) and _normalize_query(query)
+    ]
+    expected_location = str(progress.get("location") or "").strip()
+    candidates = []
+    for run in payload.get("runs", []):
+        if not isinstance(run, dict):
+            continue
+        run_queries = [
+            _normalize_query(query)
+            for query in run.get("queries", [])
+            if isinstance(query, str) and _normalize_query(query)
+        ]
+        if run_queries != expected_queries:
+            continue
+        if str(run.get("location") or "").strip() != expected_location:
+            continue
+        if run.get("status") not in {"running", "failed", "stopped"}:
+            continue
+        candidates.append(run)
+    if not candidates:
+        return [], {}
+
+    run = max(candidates, key=lambda item: str(item.get("started_at") or ""))
+    run_id = str(run.get("run_id") or "")
+    jobs = [
+        job
+        for job in payload.get("jobs", [])
+        if isinstance(job, dict) and str(job.get("run_id") or "") == run_id
+    ]
+    if not jobs and int(progress.get("total_jobs_processed", 0) or 0) > 0:
+        return [], {}
+
+    jobs_by_query: dict[str, list[dict]] = {query: [] for query in progress.get("queries", [])}
+    query_lookup = {_normalize_query(query): query for query in jobs_by_query}
+    for event in jobs:
+        query = query_lookup.get(_normalize_query(event.get("query", "")))
+        if not query:
+            continue
+        score = int(event.get("score", 0) or 0)
+        accepted = str(event.get("terminal_status") or "").strip().lower() in {
+            "accepted",
+            "duplicate_suppressed",
+        }
+        jobs_by_query[query].append(
+            {
+                "title": event.get("title", ""),
+                "company": event.get("company", ""),
+                "location": event.get("location", ""),
+                "url": event.get("url", ""),
+                "job_id": event.get("job_id", ""),
+                "found_at": event.get("processed_at", ""),
+                "first_seen_at": event.get("processed_at", ""),
+                "last_seen_at": event.get("processed_at", ""),
+                "interview_probability_score": score,
+                "interview_probability_reason": event.get("reason", ""),
+                "ai_match_tier": (event.get("ai") or {}).get("match_tier", ""),
+                "output_status": "accepted" if accepted else "below_threshold",
+                "ai_status": "accepted" if accepted else "below_threshold",
+                "tracking_status": event.get("tracking_status", ""),
+                "tracking_updated_at": event.get("tracking_updated_at", ""),
+            }
+        )
+
+    latest_event_at = max(
+        (str(job.get("processed_at") or "") for job in jobs),
+        default=str(run.get("completed_at") or run.get("started_at") or ""),
+    )
+    reports = []
+    for query in progress.get("queries", []):
+        query_jobs = jobs_by_query.get(query, [])
+        accepted_jobs = [job for job in query_jobs if job["output_status"] == "accepted"]
+        rejected_jobs = [job for job in query_jobs if job["output_status"] != "accepted"]
+        reports.append(
+            {
+                "query": query,
+                "started_at": run.get("started_at", ""),
+                "generated_at": latest_event_at,
+                "pages_scanned": 0,
+                "stats": {
+                    "pages_scanned": 0,
+                    "job_cards_collected": len(query_jobs),
+                    "new_recommendations": len(accepted_jobs),
+                    "cached_previous_recommendations": 0,
+                    "rejected_or_below_threshold": len(rejected_jobs),
+                },
+                "new_recommendations": {
+                    "strong_match": [
+                        job for job in accepted_jobs if int(job["interview_probability_score"]) >= 70
+                    ],
+                    "possible_match": [
+                        job for job in accepted_jobs if int(job["interview_probability_score"]) < 70
+                    ],
+                },
+                "cached_previous_recommendations": {
+                    "strong_match": [],
+                    "possible_match": [],
+                },
+                "rejected_or_below_threshold": rejected_jobs,
+            }
+        )
+    return reports, dict(run)
+
+
 def _first_description_log_path(reports: list[dict]) -> str:
     for report in reports:
         path = (report.get("description_log_path") or "").strip()
@@ -634,10 +747,6 @@ def _merge_description_only_stats(reports: list[dict]) -> dict:
 
 async def main():
     global console, ACTIVE_RUN_LOGGER
-    ACTIVE_RUN_LOGGER = ScoutRunLogger()
-    ACTIVE_RUN_LOGGER.install()
-    console = Console()
-
     parser = argparse.ArgumentParser(
         description="Run the trusted job scout across a curated list of queries and merge overlaps."
     )
@@ -661,6 +770,15 @@ async def main():
         "--fresh",
         action="store_true",
         help="Enable Smart Fresh Scout mode. Dynamic fresh-run behavior is added in follow-up steps.",
+    )
+    parser.add_argument(
+        "--ai-budget-mode",
+        choices=["smart", "deep", "off"],
+        default=None,
+        help=(
+            "Fresh-mode AI budget behavior: smart keeps the normal early guard, "
+            "deep skips the first low-yield stop but keeps later caps, off disables budget guard stops."
+        ),
     )
     parser.add_argument(
         "--no-query-learning",
@@ -715,6 +833,9 @@ async def main():
     )
     parser.add_argument("--headless", action="store_true", help="Run browser headlessly")
     args = parser.parse_args()
+    ACTIVE_RUN_LOGGER = ScoutRunLogger()
+    ACTIVE_RUN_LOGGER.install()
+    console = Console()
     if os.getenv("DASHBOARD_STARTED_SCOUT") != "1":
         clear_stop_request()
     board_mode = resolve_board_mode(args)
@@ -728,12 +849,20 @@ async def main():
     if executable_warning:
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
-    query_file = Path(args.query_file)
+    query_file = (
+        active_search_queries_path()
+        if args.query_file == str(DEFAULT_QUERY_FILE)
+        else Path(args.query_file)
+    )
     base_queries = _load_queries(query_file)
     queries = list(base_queries)
     effective_pages, page_label = _parse_max_pages(args.max_pages)
     profile, preferences = load_config()
-    fresh_policy = FreshScoutPolicy.from_preferences(preferences, enabled=args.fresh)
+    fresh_policy = FreshScoutPolicy.from_preferences(
+        preferences,
+        enabled=args.fresh,
+        ai_budget_mode=args.ai_budget_mode,
+    )
     if fresh_policy.enabled:
         effective_pages = fresh_policy.max_pages_per_query
         page_label = f"smart up to {fresh_policy.max_pages_per_query}"
@@ -786,9 +915,12 @@ async def main():
         )
     expected_queries = [_normalize_query(query) for query in queries]
     start_query_index = int(progress.get("current_query_index", 0) or 0) if resume_active else 0
-    if start_query_index >= len(queries):
-        resume_active = False
-        start_query_index = 0
+    resume_finalization_only = bool(
+        resume_active
+        and queries
+        and start_query_index >= len(queries)
+        and int(progress.get("last_completed_query_index", -1) or -1) >= len(queries) - 1
+    )
     stable_pages = int(progress.get("stable_total_pages_processed", 0) or 0) if resume_active else 0
     stable_jobs = int(progress.get("stable_total_jobs_processed", 0) or 0) if resume_active else 0
     base_fresh_counts = (
@@ -798,7 +930,7 @@ async def main():
     )
 
     profile_dir = args.browser_profile_dir or default_browser_profile_dir(board_mode, args.browser)
-    browser = None if args.process_only else BrowserController(
+    browser = None if args.process_only or resume_finalization_only else BrowserController(
         headless=args.headless,
         profile_dir=profile_dir,
         use_automation_overrides=(board_mode == "linkedin" and args.browser == "chromium"),
@@ -816,18 +948,31 @@ async def main():
     live_run = None
     live_run_completed = False
     live_completion_status = "failed"
+    recovered_reports: list[dict] = []
+    recovered_live_run: dict = {}
+    if resume_finalization_only and not args.description_only:
+        recovered_reports, recovered_live_run = _recover_reports_from_live_dashboard(progress)
+        if not recovered_reports:
+            raise RuntimeError(
+                "All queries are marked complete, but saved live results could not be recovered for finalization."
+            )
+
     if not args.description_only:
         try:
             live_dashboard = LiveRecommendedJobsDashboard()
-            live_run = live_dashboard.start_run(
-                mode=f"{board_mode}_multi_query_scout",
-                board=board_mode,
-                location=args.location,
-                max_pages=page_label,
-                queries=queries,
-                started_at=run_started_at,
-                fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
-            )
+            if recovered_live_run:
+                live_run = live_dashboard.resume_run(recovered_live_run["run_id"])
+                run_started_at = str(live_run.get("started_at") or run_started_at)
+            else:
+                live_run = live_dashboard.start_run(
+                    mode=f"{board_mode}_multi_query_scout",
+                    board=board_mode,
+                    location=args.location,
+                    max_pages=page_label,
+                    queries=queries,
+                    started_at=run_started_at,
+                    fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
+                )
             console.print(
                 "[green]Live dashboard:[/green] "
                 "recommended_jobs_dashboard.html"
@@ -904,7 +1049,7 @@ async def main():
             title="Multi-Scouting Configuration",
         )
     )
-    reports: list[dict] = []
+    reports: list[dict] = list(recovered_reports)
     same_run_job_registry: dict[str, dict] = {}
     fresh_stop_reason = ""
     fresh_stop_counts: dict[str, int] = {}
@@ -942,6 +1087,8 @@ async def main():
         progress_store.save(progress_state)
 
     def fresh_counts_so_far(extra_new_jobs_seen: int = 0) -> dict[str, int]:
+        if resume_finalization_only:
+            return dict(base_fresh_counts)
         current_counts = _fresh_recommendation_counts(reports, scout)
         if extra_new_jobs_seen:
             current_counts = dict(current_counts)
@@ -951,7 +1098,12 @@ async def main():
     try:
         if browser:
             await browser.start()
-        if resume_active:
+        if resume_finalization_only:
+            console.print(
+                "[yellow]Resuming finalization only.[/yellow] "
+                "All saved queries are complete, so LinkedIn will not be reopened."
+            )
+        elif resume_active:
             console.print(
                 "[yellow]Resuming from the unfinished query in safe restart mode.[/yellow] "
                 f"Last seen query index {start_query_index + 1}, "
@@ -959,6 +1111,7 @@ async def main():
             )
         cumulative_pages = stable_pages
         cumulative_jobs = stable_jobs
+        index = max(-1, start_query_index - 1)
         for index, query in enumerate(queries):
             if index < start_query_index:
                 continue
@@ -1206,21 +1359,6 @@ async def main():
             )
         _write_output(merged_output)
         review_writer.write(merged_output, reports=reports)
-        try:
-            dashboard_result = update_recommended_jobs_html()
-            if dashboard_result.get("updated"):
-                console.print(
-                    "[green]Updated recommended_jobs.html[/green] "
-                    f"(+{dashboard_result.get('new_go_jobs_added', 0)} GO, "
-                    f"+{dashboard_result.get('new_consider_jobs_added', 0)} CONSIDER)."
-                )
-            else:
-                console.print(
-                    "[yellow]Recommended jobs dashboard was not updated:[/yellow] "
-                    f"{dashboard_result.get('reason', 'unknown reason')}"
-                )
-        except Exception as exc:
-            console.print(f"[yellow]Could not update recommended_jobs.html:[/yellow] {exc}")
 
         stats = merged_output.get("stats", {})
         reporter.finish_run(
@@ -1266,7 +1404,13 @@ async def main():
             live_run_completed = True
     except KeyboardInterrupt:
         live_completion_status = "stopped"
+        save_progress(status="stopped", phase="stopped")
         console.print("\n[yellow]Multi-scout stopped by user.[/yellow]")
+    except Exception as exc:
+        live_completion_status = "failed"
+        save_progress(status="failed", phase="failed", last_error=str(exc))
+        update_live_progress(phase="failed", stop_reason=str(exc))
+        raise
     finally:
         if live_dashboard and live_run and not live_run_completed:
             try:

@@ -4,6 +4,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
+AI_BUDGET_MODES = {"smart", "deep", "off"}
+AI_BUDGET_MODE_LABELS = {
+    "smart": "Smart Guard",
+    "deep": "Deep Search",
+    "off": "Off",
+}
+
+
 @dataclass(frozen=True)
 class FreshScoutPolicy:
     """Smart Fresh Scout defaults shared by CLI and future page-decision logic."""
@@ -17,6 +25,7 @@ class FreshScoutPolicy:
     target_apply_first_jobs: int = 8
     target_good_or_better_jobs: int = 20
     global_new_jobs_soft_cap: int = 80
+    ai_budget_mode: str = "smart"
     ai_budget_guard_enabled: bool = True
     ai_calls_quality_check: int = 40
     min_apply_first_after_ai_quality_check: int = 2
@@ -27,7 +36,13 @@ class FreshScoutPolicy:
     ai_calls_soft_cap: int = 120
 
     @classmethod
-    def from_preferences(cls, preferences: dict[str, Any] | None, *, enabled: bool = False) -> "FreshScoutPolicy":
+    def from_preferences(
+        cls,
+        preferences: dict[str, Any] | None,
+        *,
+        enabled: bool = False,
+        ai_budget_mode: str | None = None,
+    ) -> "FreshScoutPolicy":
         raw = {}
         preferences = preferences or {}
         if isinstance(preferences.get("fresh_scout"), dict):
@@ -35,6 +50,15 @@ class FreshScoutPolicy:
         linkedin = preferences.get("job_boards", {}).get("linkedin", {})
         if isinstance(linkedin.get("fresh_scout"), dict):
             raw.update(linkedin["fresh_scout"])
+        guard_enabled = _bool_setting(
+            raw,
+            "ai_budget_guard_enabled",
+            cls.ai_budget_guard_enabled,
+        )
+        mode_override = _ai_budget_mode_setting(ai_budget_mode)
+        configured_mode = _ai_budget_mode_setting(raw.get("ai_budget_mode"))
+        resolved_mode = mode_override or configured_mode or ("smart" if guard_enabled else "off")
+        guard_enabled = resolved_mode != "off"
 
         policy = cls(
             enabled=enabled,
@@ -71,11 +95,8 @@ class FreshScoutPolicy:
                 "global_new_jobs_soft_cap",
                 cls.global_new_jobs_soft_cap,
             ),
-            ai_budget_guard_enabled=_bool_setting(
-                raw,
-                "ai_budget_guard_enabled",
-                cls.ai_budget_guard_enabled,
-            ),
+            ai_budget_mode=resolved_mode,
+            ai_budget_guard_enabled=guard_enabled,
             ai_calls_quality_check=_int_setting(
                 raw,
                 "ai_calls_quality_check",
@@ -124,6 +145,8 @@ class FreshScoutPolicy:
     def _normalized(self) -> "FreshScoutPolicy":
         target_good = max(self.target_good_or_better_jobs, self.target_apply_first_jobs)
         duplicate_stop = max(self.duplicate_heavy_stop_threshold, self.known_ratio_continue_threshold)
+        budget_mode = _ai_budget_mode_setting(self.ai_budget_mode) or ("smart" if self.ai_budget_guard_enabled else "off")
+        budget_guard_enabled = bool(self.ai_budget_guard_enabled) and budget_mode != "off"
         return FreshScoutPolicy(
             enabled=self.enabled,
             max_pages_per_query=max(1, self.max_pages_per_query),
@@ -134,7 +157,8 @@ class FreshScoutPolicy:
             target_apply_first_jobs=max(1, self.target_apply_first_jobs),
             target_good_or_better_jobs=max(1, target_good),
             global_new_jobs_soft_cap=max(1, self.global_new_jobs_soft_cap),
-            ai_budget_guard_enabled=bool(self.ai_budget_guard_enabled),
+            ai_budget_mode=budget_mode,
+            ai_budget_guard_enabled=budget_guard_enabled,
             ai_calls_quality_check=max(0, self.ai_calls_quality_check),
             min_apply_first_after_ai_quality_check=max(0, self.min_apply_first_after_ai_quality_check),
             min_good_or_better_after_ai_quality_check=max(0, self.min_good_or_better_after_ai_quality_check),
@@ -155,6 +179,7 @@ class FreshScoutPolicy:
             "target_apply_first_jobs": self.target_apply_first_jobs,
             "target_good_or_better_jobs": self.target_good_or_better_jobs,
             "global_new_jobs_soft_cap": self.global_new_jobs_soft_cap,
+            "ai_budget_mode": self.ai_budget_mode,
             "ai_budget_guard_enabled": self.ai_budget_guard_enabled,
             "ai_calls_quality_check": self.ai_calls_quality_check,
             "min_apply_first_after_ai_quality_check": self.min_apply_first_after_ai_quality_check,
@@ -177,7 +202,7 @@ class FreshScoutPolicy:
             f"targets {self.target_apply_first_jobs} APPLY FIRST / "
             f"{self.target_good_or_better_jobs} good+; "
             f"cap {self.global_new_jobs_soft_cap} new jobs; "
-            f"AI guard {'on' if self.ai_budget_guard_enabled else 'off'})"
+            f"AI budget {AI_BUDGET_MODE_LABELS.get(self.ai_budget_mode, self.ai_budget_mode)})"
         )
 
     @staticmethod
@@ -213,6 +238,24 @@ def _bool_setting(settings: dict[str, Any], key: str, default: bool) -> bool:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return bool(value)
+
+
+def _ai_budget_mode_setting(value: Any) -> str:
+    cleaned = str(value or "").strip().lower().replace("_", "-")
+    aliases = {
+        "smart-guard": "smart",
+        "guard": "smart",
+        "on": "smart",
+        "true": "smart",
+        "deep-search": "deep",
+        "deep": "deep",
+        "relaxed": "deep",
+        "off": "off",
+        "none": "off",
+        "false": "off",
+        "disabled": "off",
+    }
+    return aliases.get(cleaned, cleaned if cleaned in AI_BUDGET_MODES else "")
 
 
 def _clamp_ratio(value: float) -> float:

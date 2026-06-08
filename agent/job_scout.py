@@ -42,6 +42,7 @@ class LinkedInJobScout:
     AI_THRESHOLD = 50
     AI_STRONG_MATCH_THRESHOLD = 70
     PERFECT_JOB_PROFILE_CANDIDATES = (
+        Path("data/user_workspace/job_strategy.txt"),
         Path("PERFECT SUITABLE JOB PROFILE.txt"),
         Path("The Perfect Suitable Job.txt"),
         Path("The Perfect Suitable Job"),

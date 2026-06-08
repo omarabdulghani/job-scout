@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 from datetime import datetime
-import json
 import os
 from pathlib import Path
 import sys
@@ -24,34 +23,24 @@ from agent.scout_cli_modes import (
 )
 from agent.scout_console_reporter import ScoutConsoleReporter
 from agent.scout_progress import ScoutProgressStore
-from agent.recommended_jobs_dashboard import update_recommended_jobs_html
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.scout_run_logger import ScoutRunLogger
 from agent.scout_stop import clear_stop_request, stop_requested
+from agent.user_workspace import load_user_config
 
 load_dotenv()
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 
-PROFILE_PATH = Path("config/profile.json")
-PREFERENCES_PATH = Path("config/preferences.json")
 PROGRESS_MODE = "single_query_scout"
 
 
-def _load_json_file(path: Path, label: str) -> dict:
-    if not path.exists():
-        raise SystemExit(f"{label} not found at {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{label} contains invalid JSON: {exc}")
-
-
 def load_config() -> tuple[dict, dict]:
-    profile = _load_json_file(PROFILE_PATH, "Profile config")
-    preferences = _load_json_file(PREFERENCES_PATH, "Preferences config")
-    return profile, preferences
+    try:
+        return load_user_config()
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _parse_max_pages(value: str | int | None) -> tuple[int | None, str]:
@@ -94,10 +83,6 @@ def _ai_backend_label(scout: LinkedInJobScout) -> str:
 
 async def main():
     global console, ACTIVE_RUN_LOGGER
-    ACTIVE_RUN_LOGGER = ScoutRunLogger()
-    ACTIVE_RUN_LOGGER.install()
-    console = Console()
-
     parser = argparse.ArgumentParser(
         description="Scout job descriptions and keep only high-quality entry-level candidates."
     )
@@ -117,6 +102,15 @@ async def main():
         "--fresh",
         action="store_true",
         help="Enable Smart Fresh Scout mode. Dynamic fresh-run behavior is added in follow-up steps.",
+    )
+    parser.add_argument(
+        "--ai-budget-mode",
+        choices=["smart", "deep", "off"],
+        default=None,
+        help=(
+            "Fresh-mode AI budget behavior: smart keeps the normal early guard, "
+            "deep skips the first low-yield stop but keeps later caps, off disables budget guard stops."
+        ),
     )
     parser.add_argument("--pages", dest="legacy_pages", help=argparse.SUPPRESS)
     parser.add_argument(
@@ -167,6 +161,9 @@ async def main():
     )
     parser.add_argument("--headless", action="store_true", help="Run browser headlessly")
     args = parser.parse_args()
+    ACTIVE_RUN_LOGGER = ScoutRunLogger()
+    ACTIVE_RUN_LOGGER.install()
+    console = Console()
     if os.getenv("DASHBOARD_STARTED_SCOUT") != "1":
         clear_stop_request()
     board_mode = resolve_board_mode(args)
@@ -181,7 +178,11 @@ async def main():
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
     profile, preferences = load_config()
-    fresh_policy = FreshScoutPolicy.from_preferences(preferences, enabled=args.fresh)
+    fresh_policy = FreshScoutPolicy.from_preferences(
+        preferences,
+        enabled=args.fresh,
+        ai_budget_mode=args.ai_budget_mode,
+    )
     max_pages_value = args.legacy_pages if args.legacy_pages is not None else args.max_pages
     effective_pages, page_label = _parse_max_pages(max_pages_value)
     if fresh_policy.enabled:
@@ -443,21 +444,6 @@ async def main():
                 console.print(f"[green]Description log:[/green] {description_log_path}")
         else:
             review_writer.write(report)
-            try:
-                dashboard_result = update_recommended_jobs_html()
-                if dashboard_result.get("updated"):
-                    console.print(
-                        "[green]Updated recommended_jobs.html[/green] "
-                        f"(+{dashboard_result.get('new_go_jobs_added', 0)} GO, "
-                        f"+{dashboard_result.get('new_consider_jobs_added', 0)} CONSIDER)."
-                    )
-                else:
-                    console.print(
-                        "[yellow]Recommended jobs dashboard was not updated:[/yellow] "
-                        f"{dashboard_result.get('reason', 'unknown reason')}"
-                    )
-            except Exception as exc:
-                console.print(f"[yellow]Could not update recommended_jobs.html:[/yellow] {exc}")
         reporter.finish_query(stats)
         reporter.finish_run(
             output_path=report.get("description_log_path") if args.description_only else scout.output_path,

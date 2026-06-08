@@ -42,6 +42,66 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
 
+    def test_dashboard_has_application_shell_navigation(self):
+        for page in [
+            "home",
+            "jobs",
+            "scout",
+            "profile",
+            "strategy",
+            "applications",
+            "runs",
+            "settings",
+        ]:
+            self.assertIn(f'data-app-page="{page}"', self.html)
+            self.assertIn(f'data-page-id="{page}"', self.html)
+        self.assertIn("navigateToPage", self.html)
+        self.assertIn('localStorage.getItem("jobScoutCurrentPage")', self.html)
+        self.assertIn('id="homeFocusTitle"', self.html)
+        self.assertIn('id="homeStartScoutButton"', self.html)
+        self.assertIn("renderHome", self.html)
+
+    def test_dashboard_has_profile_and_cv_editor(self):
+        for element_id in [
+            "profileForm",
+            "saveProfileButton",
+            "profileReadinessRing",
+            "profileReadinessList",
+            "cvUploadInput",
+            "uploadCvButton",
+            "openCvPreview",
+            "experienceRepeater",
+            "educationRepeater",
+            "languageRepeater",
+            "profileSkills",
+            "profileWorkAuthorization",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('const API_PROFILE_URL = "/api/profile"', self.html)
+        self.assertIn("loadProfileData", self.html)
+        self.assertIn("saveProfile", self.html)
+        self.assertIn("uploadCv", self.html)
+
+    def test_dashboard_has_strategy_and_query_editor(self):
+        for element_id in [
+            "strategyForm",
+            "saveStrategyButton",
+            "strategyCoreGoal",
+            "strategyPrimaryPaths",
+            "strategyBridgeRoles",
+            "strategyHardBlockers",
+            "strategyLocations",
+            "strategyQueries",
+            "strategyQueryLearningEnabled",
+            "strategyFreshMaxPages",
+            "strategyFullText",
+            "strategyPortfolioNotes",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('const API_STRATEGY_URL = "/api/strategy"', self.html)
+        self.assertIn("loadStrategyData", self.html)
+        self.assertIn("saveStrategy", self.html)
+
     def test_dashboard_has_persistent_light_dark_theme_toggle(self):
         self.assertIn('localStorage.getItem("jobDashboardTheme")', self.html)
         self.assertIn('const THEME_STORAGE_KEY = "jobDashboardTheme"', self.html)
@@ -137,6 +197,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "runLocation",
             "runQuery",
             "runMaxPages",
+            "runAiBudgetMode",
             "runBrowser",
             "runHumanMode",
             "runFreshMode",
@@ -148,6 +209,31 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn('const API_RUN_CONTROL_URL = "/api/run-control"', self.html)
         self.assertIn("startDashboardRun", self.html)
         self.assertIn("stopDashboardRun", self.html)
+        self.assertIn("Smart Guard", self.html)
+        self.assertIn("Deep Search", self.html)
+        self.assertIn("ai_budget_mode", self.html)
+        self.assertIn("trapRunScoutFocus", self.html)
+        self.assertIn('aria-label="Close run scout dialog"', self.html)
+
+    def test_applications_render_in_scalable_batches(self):
+        for element_id in [
+            "applicationsVisibleCount",
+            "loadMoreApplicationsButton",
+            "applicationsTableFooter",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn("applicationVisibleLimit: 50", self.html)
+        self.assertIn("filtered.slice(0, state.applicationVisibleLimit)", self.html)
+        self.assertIn("state.applicationVisibleLimit += 50", self.html)
+
+    def test_hidden_workspaces_load_on_demand(self):
+        startup = self.html.split("bindControls();", 1)[1]
+        startup = startup.split("window.setInterval", 1)[0]
+        self.assertNotIn("loadStrategyData();", startup)
+        self.assertNotIn("loadAiSettings();", startup)
+        self.assertNotIn("loadBoardSettings();", startup)
+        self.assertNotIn("loadAssistant();", startup)
+        self.assertNotIn("loadMaintenance();", startup)
 
     def test_dashboard_has_required_decision_columns(self):
         for decision in ["APPLY_FIRST", "GOOD_OPTIONS", "LOW_PROBABILITY", "REJECTED"]:

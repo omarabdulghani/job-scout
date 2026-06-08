@@ -1,0 +1,265 @@
+"""Run logs, diagnostics, backups, and conservative maintenance tools."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+import json
+from pathlib import Path
+import shutil
+from typing import Any
+import zipfile
+
+from agent.user_workspace import UserWorkspace, now_iso
+
+
+class MaintenanceService:
+    """Expose operational health without exposing credentials or browser profiles."""
+
+    LOG_SUFFIXES = {".txt", ".log"}
+    BACKUP_SOURCE_FILES = (
+        "recommended_jobs_dashboard_user_state.json",
+        "recommended_jobs_dashboard_data.json",
+        "scout_run_history.json",
+        "scored_jobs_cache.json",
+        "scout_collected_jobs.json",
+        "job_tracking_status.json",
+    )
+
+    def __init__(self, workspace: UserWorkspace) -> None:
+        self.workspace = workspace.ensure_initialized()
+        self.root = workspace.root
+        self.logs_dir = self.root / "logs"
+        self.backups_dir = self.root / "backups"
+        self.backups_dir.mkdir(parents=True, exist_ok=True)
+
+    def payload(self) -> dict[str, Any]:
+        logs = self.log_records()
+        runs = self.run_history()
+        return {
+            "logs": logs,
+            "runs": runs,
+            "diagnostics": self.diagnostics(logs=logs, runs=runs),
+            "backups": self.backup_records(),
+        }
+
+    def log_records(self) -> list[dict[str, Any]]:
+        if not self.logs_dir.exists():
+            return []
+        records = []
+        for path in self.logs_dir.iterdir():
+            if not path.is_file() or path.suffix.lower() not in self.LOG_SUFFIXES:
+                continue
+            stat = path.stat()
+            records.append(
+                {
+                    "name": path.name,
+                    "size_bytes": stat.st_size,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(),
+                    "kind": self._log_kind(path.name),
+                }
+            )
+        return sorted(records, key=lambda item: item["modified_at"], reverse=True)
+
+    def read_log(self, name: str, *, max_chars: int = 200_000) -> dict[str, Any]:
+        path = self._safe_child(self.logs_dir, name, allowed_suffixes=self.LOG_SUFFIXES)
+        text = path.read_text(encoding="utf-8", errors="replace")
+        truncated = len(text) > max_chars
+        if truncated:
+            text = text[-max_chars:]
+        return {
+            "name": path.name,
+            "text": text,
+            "truncated": truncated,
+            "size_bytes": path.stat().st_size,
+        }
+
+    def run_history(self) -> list[dict[str, Any]]:
+        path = self.root / "scout_run_history.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return []
+        runs = payload.get("runs", []) if isinstance(payload, dict) else []
+        if not isinstance(runs, list):
+            return []
+        output = [dict(item) for item in runs if isinstance(item, dict)]
+        return sorted(
+            output,
+            key=lambda item: str(
+                item.get("completed_at")
+                or item.get("timestamp")
+                or item.get("started_at")
+                or ""
+            ),
+            reverse=True,
+        )[:200]
+
+    def diagnostics(
+        self,
+        *,
+        logs: list[dict[str, Any]] | None = None,
+        runs: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        logs = logs if logs is not None else self.log_records()
+        runs = runs if runs is not None else self.run_history()
+        progress = self._read_json(self.root / "scout_progress.json")
+        latest_error = self._latest_error(logs)
+        important_paths = {
+            "profile": self.workspace.profile_path,
+            "preferences": self.workspace.preferences_path,
+            "strategy": self.workspace.strategy_path,
+            "queries": self.workspace.search_queries_path,
+            "dashboard_data": self.root / "recommended_jobs_dashboard_data.json",
+            "dashboard_state": self.root / "recommended_jobs_dashboard_user_state.json",
+            "operational_database": self.workspace.path / "job_scout.db",
+        }
+        files = {
+            label: {
+                "exists": path.exists(),
+                "size_bytes": path.stat().st_size if path.exists() else 0,
+            }
+            for label, path in important_paths.items()
+        }
+        return {
+            "checked_at": now_iso(),
+            "workspace_ready": all(
+                files[label]["exists"]
+                for label in ("profile", "preferences", "strategy", "queries")
+            ),
+            "dashboard_ready": files["dashboard_data"]["exists"],
+            "operational_database": files["operational_database"],
+            "resume_available": bool(progress and progress.get("status") != "completed"),
+            "progress_status": str(progress.get("status") or "none"),
+            "log_count": len(logs),
+            "log_size_bytes": sum(int(item.get("size_bytes") or 0) for item in logs),
+            "run_history_count": len(runs),
+            "latest_error": latest_error,
+            "files": files,
+        }
+
+    def create_backup(self) -> dict[str, Any]:
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+        destination = self.backups_dir / f"job_scout_backup_{timestamp}.zip"
+        manifest = {
+            "created_at": now_iso(),
+            "contains_secrets": False,
+            "note": "API keys, browser profiles, cookies, and logs are intentionally excluded.",
+            "files": [],
+        }
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            if self.workspace.path.exists():
+                for path in self.workspace.path.rglob("*"):
+                    if not path.is_file() or self.workspace.backup_dir in path.parents:
+                        continue
+                    if path.name.endswith((".db", ".db-wal", ".db-shm", ".sqlite", ".sqlite3")):
+                        continue
+                    relative = path.relative_to(self.root)
+                    archive.write(path, relative.as_posix())
+                    manifest["files"].append(relative.as_posix())
+            for name in self.BACKUP_SOURCE_FILES:
+                path = self.root / name
+                if path.exists() and path.is_file():
+                    archive.write(path, path.name)
+                    manifest["files"].append(path.name)
+            archive.writestr(
+                "backup_manifest.json",
+                json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            )
+        return self._backup_record(destination)
+
+    def backup_records(self) -> list[dict[str, Any]]:
+        records = [
+            self._backup_record(path)
+            for path in self.backups_dir.glob("job_scout_backup_*.zip")
+            if path.is_file()
+        ]
+        return sorted(records, key=lambda item: item["modified_at"], reverse=True)
+
+    def backup_path(self, name: str) -> Path:
+        return self._safe_child(self.backups_dir, name, allowed_suffixes={".zip"})
+
+    def prune_logs(self, *, older_than_days: int = 90, keep_latest: int = 10) -> dict[str, Any]:
+        older_than_days = max(7, min(3650, int(older_than_days)))
+        keep_latest = max(5, min(100, int(keep_latest)))
+        records = self.log_records()
+        protected = {item["name"] for item in records[:keep_latest]}
+        cutoff = datetime.now().astimezone() - timedelta(days=older_than_days)
+        deleted: list[str] = []
+        bytes_removed = 0
+        for record in records:
+            if record["name"] in protected:
+                continue
+            modified = datetime.fromisoformat(record["modified_at"])
+            if modified >= cutoff:
+                continue
+            path = self._safe_child(
+                self.logs_dir,
+                record["name"],
+                allowed_suffixes=self.LOG_SUFFIXES,
+            )
+            bytes_removed += path.stat().st_size
+            path.unlink()
+            deleted.append(path.name)
+        return {
+            "deleted_count": len(deleted),
+            "bytes_removed": bytes_removed,
+            "older_than_days": older_than_days,
+            "kept_latest": keep_latest,
+        }
+
+    def _latest_error(self, logs: list[dict[str, Any]]) -> dict[str, str]:
+        markers = ("fatal error", "traceback", "resource_exhausted", "timeout")
+        for record in logs[:20]:
+            try:
+                payload = self.read_log(record["name"], max_chars=40_000)
+            except OSError:
+                continue
+            lines = payload["text"].splitlines()
+            for line in reversed(lines):
+                lowered = line.lower()
+                if any(marker in lowered for marker in markers):
+                    return {"log": record["name"], "message": line.strip()[:500]}
+        return {}
+
+    def _log_kind(self, name: str) -> str:
+        lowered = name.lower()
+        if lowered.startswith("dashboard_run_"):
+            return "dashboard_run"
+        if lowered.startswith("scout_log_"):
+            return "scout"
+        if "server" in lowered:
+            return "server"
+        return "other"
+
+    def _backup_record(self, path: Path) -> dict[str, Any]:
+        stat = path.stat()
+        return {
+            "name": path.name,
+            "size_bytes": stat.st_size,
+            "modified_at": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(),
+        }
+
+    def _safe_child(
+        self,
+        directory: Path,
+        name: str,
+        *,
+        allowed_suffixes: set[str],
+    ) -> Path:
+        clean_name = Path(str(name or "")).name
+        if not clean_name or clean_name != str(name or ""):
+            raise ValueError("Invalid file name")
+        path = (directory / clean_name).resolve()
+        directory_resolved = directory.resolve()
+        if path.parent != directory_resolved or path.suffix.lower() not in allowed_suffixes:
+            raise ValueError("File is outside the allowed directory")
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(clean_name)
+        return path
+
+    def _read_json(self, path: Path) -> dict[str, Any]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}

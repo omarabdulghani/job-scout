@@ -1,0 +1,66 @@
+import json
+import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
+import os
+import unittest
+import zipfile
+
+from agent.maintenance_service import MaintenanceService
+from agent.user_workspace import UserWorkspace
+
+
+class MaintenanceServiceTests(unittest.TestCase):
+    def _service(self, root: Path) -> MaintenanceService:
+        (root / "config").mkdir(parents=True)
+        (root / "data").mkdir(parents=True)
+        (root / "config" / "profile.json").write_text('{"cv_path": ""}', encoding="utf-8")
+        (root / "config" / "preferences.json").write_text("{}", encoding="utf-8")
+        (root / "search_queries.txt").write_text("ux designer\n", encoding="utf-8")
+        (root / "PERFECT SUITABLE JOB PROFILE.txt").write_text("Strategy", encoding="utf-8")
+        (root / "data" / "portfolio_site_notes.txt").write_text("Portfolio", encoding="utf-8")
+        return MaintenanceService(UserWorkspace(root))
+
+    def test_backup_excludes_env_and_browser_profiles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            (root / ".env").write_text("SECRET=value", encoding="utf-8")
+            (root / "data" / "browser_profile").mkdir()
+            (root / "data" / "browser_profile" / "Cookies").write_text("secret", encoding="utf-8")
+            (root / "recommended_jobs_dashboard_user_state.json").write_text("{}", encoding="utf-8")
+
+            record = service.create_backup()
+
+            with zipfile.ZipFile(root / "backups" / record["name"]) as archive:
+                names = archive.namelist()
+            self.assertIn("backup_manifest.json", names)
+            self.assertIn("recommended_jobs_dashboard_user_state.json", names)
+            self.assertNotIn(".env", names)
+            self.assertFalse(any("browser_profile" in name for name in names))
+
+    def test_log_reader_rejects_traversal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            service = self._service(Path(temporary))
+            with self.assertRaises(ValueError):
+                service.read_log("../secret.txt")
+
+    def test_prune_keeps_recent_and_latest_logs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            old_time = (datetime.now() - timedelta(days=120)).timestamp()
+            for index in range(7):
+                path = service.logs_dir / f"scout_log_{index}.txt"
+                path.write_text("log", encoding="utf-8")
+                os.utime(path, (old_time + index, old_time + index))
+
+            result = service.prune_logs(older_than_days=90, keep_latest=5)
+
+            self.assertEqual(result["deleted_count"], 2)
+            self.assertEqual(len(list(service.logs_dir.glob("*.txt"))), 5)
+
+
+if __name__ == "__main__":
+    unittest.main()

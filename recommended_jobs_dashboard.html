@@ -159,8 +159,19 @@
 
     button,
     input,
-    select {
+    select,
+    textarea {
       font: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
     }
 
     .icon-sprite {
@@ -191,10 +202,998 @@
       height: 1.15em;
     }
 
+    .app-frame {
+      display: grid;
+      grid-template-columns: 224px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .app-sidebar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      height: 100vh;
+      flex-direction: column;
+      gap: 18px;
+      padding: 20px 14px;
+      border-right: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .app-sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 0 8px;
+    }
+
+    .app-sidebar-brand img {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--brand-icon-border);
+      border-radius: 8px;
+      background: var(--brand-icon-bg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .app-sidebar-brand strong,
+    .app-sidebar-brand span {
+      display: block;
+    }
+
+    .app-sidebar-brand strong {
+      font-size: 1rem;
+    }
+
+    .app-sidebar-brand span {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.73rem;
+    }
+
+    .app-nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .app-nav-button {
+      display: flex;
+      width: 100%;
+      min-height: 42px;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 11px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--muted);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .app-nav-button:hover {
+      color: var(--ink);
+      background: var(--surface-2);
+    }
+
+    .app-nav-button.active {
+      border-color: var(--blue-border);
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-weight: 750;
+    }
+
+    .app-sidebar-footer {
+      margin-top: auto;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .app-theme-button {
+      margin-top: 8px;
+    }
+
+    .app-content {
+      min-width: 0;
+    }
+
     .shell {
-      width: min(1440px, calc(100vw - 32px));
+      width: min(1440px, calc(100% - 32px));
       margin: 0 auto;
       padding: 20px 0 36px;
+    }
+
+    .app-page[hidden] {
+      display: none;
+    }
+
+    .workspace-page {
+      min-height: 100vh;
+    }
+
+    .workspace-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 22px 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .workspace-header h1 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .workspace-header p {
+      max-width: 700px;
+      margin: 6px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      padding-top: 18px;
+    }
+
+    .workspace-card {
+      min-height: 150px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .workspace-card h2 {
+      margin: 0 0 7px;
+      font-size: 1rem;
+    }
+
+    .workspace-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .workspace-card.wide {
+      grid-column: span 2;
+    }
+
+    .workspace-card.action-card {
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+    }
+
+    .workspace-card.compact {
+      min-height: 0;
+    }
+
+    .workspace-card-head,
+    .provider-card-head,
+    .settings-summary {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .workspace-card-head h2,
+    .provider-card-head h2 {
+      margin: 0;
+    }
+
+    .workspace-card-value {
+      margin-top: 10px;
+      color: var(--ink);
+      font-size: 1.35rem;
+      font-weight: 850;
+      line-height: 1.2;
+    }
+
+    .workspace-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .home-focus {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.6fr);
+      gap: 18px;
+      align-items: stretch;
+      padding-top: 18px;
+    }
+
+    .home-focus-card {
+      display: grid;
+      min-height: 230px;
+      align-content: space-between;
+      gap: 24px;
+      padding: 24px;
+      border: 1px solid var(--blue-border);
+      border-radius: 8px;
+      color: var(--ink);
+      background: linear-gradient(135deg, var(--blue-soft), var(--surface) 68%);
+      box-shadow: var(--shadow);
+    }
+
+    .home-focus-card h2 {
+      max-width: 760px;
+      margin: 8px 0 0;
+      font-size: clamp(1.55rem, 2vw, 2.15rem);
+      line-height: 1.15;
+    }
+
+    .home-focus-card p {
+      max-width: 720px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .home-eyebrow {
+      color: var(--blue);
+      font-size: 0.75rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .home-focus-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .home-focus-metric {
+      display: grid;
+      gap: 4px;
+      min-height: 74px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .home-focus-metric span {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .home-focus-metric strong {
+      font-size: 1.45rem;
+    }
+
+    .home-side-card {
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+      min-height: 230px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .home-side-card h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .home-side-card strong {
+      display: block;
+      margin-top: 12px;
+      font-size: 1.35rem;
+      line-height: 1.25;
+    }
+
+    .home-side-card p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .home-card-status {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .scout-status-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      margin-top: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .scout-status-copy {
+      display: grid;
+      gap: 6px;
+    }
+
+    .scout-status-copy strong {
+      font-size: 1.15rem;
+    }
+
+    .scout-status-copy span {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .settings-layout {
+      display: grid;
+      gap: 16px;
+      padding-top: 18px;
+    }
+
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .provider-card {
+      display: grid;
+      gap: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .provider-card[data-configured="true"] {
+      border-top: 3px solid var(--green);
+    }
+
+    .provider-card[data-configured="false"] {
+      border-top: 3px solid var(--line);
+    }
+
+    .provider-copy {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .provider-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 27px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 0.75rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .provider-status.configured,
+    .provider-status.success {
+      border-color: var(--green-border);
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .provider-status.error {
+      border-color: var(--red-border);
+      color: var(--red);
+      background: var(--red-soft);
+    }
+
+    .provider-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .provider-test-result {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .provider-test-result.success {
+      color: var(--green);
+    }
+
+    .provider-test-result.error {
+      color: var(--red);
+    }
+
+    .secret-field-note,
+    .security-note {
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.4;
+    }
+
+    .security-note {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--blue-border);
+      border-radius: 8px;
+      color: var(--workflow-text);
+      background: var(--blue-soft);
+    }
+
+    .fallback-order-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .fallback-order-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-3);
+    }
+
+    .fallback-order-row strong {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 0.78rem;
+    }
+
+    .application-summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+      padding-top: 18px;
+    }
+
+    .application-stat {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .application-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .application-stat strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 1.45rem;
+    }
+
+    .application-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px);
+      gap: 12px;
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .application-table-wrap {
+      margin-top: 14px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .application-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 940px;
+    }
+
+    .application-table th,
+    .application-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .application-table th {
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 0.72rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .application-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .application-table-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--surface-3);
+      font-size: 0.82rem;
+    }
+
+    .application-job-title {
+      display: grid;
+      gap: 4px;
+      min-width: 210px;
+    }
+
+    .application-job-title a {
+      color: var(--ink);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .application-job-title a:hover {
+      color: var(--blue);
+      text-decoration: underline;
+    }
+
+    .application-row-note {
+      max-width: 260px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .application-edit {
+      display: grid;
+      grid-template-columns: minmax(130px, 170px) minmax(130px, 170px);
+      gap: 8px;
+    }
+
+    .application-edit select,
+    .application-edit input,
+    .application-toolbar input,
+    .application-toolbar select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      color: var(--ink);
+      background: var(--surface-plain);
+    }
+
+    .empty-workspace {
+      padding: 38px 20px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .board-settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .board-settings-card {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-3);
+    }
+
+    .board-settings-card h3 {
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    .assistant-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+      gap: 16px;
+      padding-top: 18px;
+      align-items: start;
+    }
+
+    .answer-editor {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.75fr) minmax(240px, 1.25fr) auto;
+      gap: 8px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-3);
+    }
+
+    .answer-editor input,
+    .answer-editor textarea,
+    .document-studio textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      color: var(--ink);
+      background: var(--surface-plain);
+    }
+
+    .answer-editor textarea {
+      min-height: 70px;
+      resize: vertical;
+    }
+
+    .document-studio {
+      display: grid;
+      gap: 12px;
+    }
+
+    .document-studio textarea {
+      min-height: 360px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    .assistant-answer-result {
+      min-height: 92px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--surface-3);
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    .diagnostic-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 10px;
+      padding-top: 18px;
+    }
+
+    .diagnostic-card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .diagnostic-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .diagnostic-card strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 1.05rem;
+    }
+
+    .operations-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.7fr) minmax(0, 1.3fr);
+      gap: 16px;
+      padding-top: 16px;
+      align-items: start;
+    }
+
+    .log-list,
+    .run-list,
+    .backup-list {
+      display: grid;
+      gap: 8px;
+      max-height: 520px;
+      overflow: auto;
+    }
+
+    .log-list-button,
+    .run-list-item,
+    .backup-list-item {
+      display: grid;
+      gap: 4px;
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface-3);
+      text-align: left;
+    }
+
+    .log-list-button {
+      cursor: pointer;
+    }
+
+    .log-list-button:hover,
+    .log-list-button.active {
+      border-color: var(--primary-border);
+      background: var(--blue-soft);
+    }
+
+    .log-list-button strong,
+    .run-list-item strong,
+    .backup-list-item strong {
+      overflow-wrap: anywhere;
+      font-size: 0.86rem;
+    }
+
+    .operations-log {
+      min-height: 520px;
+      max-height: 70vh;
+      overflow: auto;
+      margin: 0;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--log-ink);
+      background: var(--log-bg);
+      font: 0.78rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      white-space: pre-wrap;
+    }
+
+    .maintenance-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .editor-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+      gap: 16px;
+      padding-top: 18px;
+      align-items: start;
+    }
+
+    .editor-sidebar,
+    .editor-main {
+      display: grid;
+      gap: 14px;
+    }
+
+    .form-section {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .form-section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .form-section h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .form-section p {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 10px 11px;
+      color: var(--ink);
+      background: var(--surface-plain);
+    }
+
+    .field textarea {
+      min-height: 100px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      outline: 3px solid var(--focus-ring);
+      border-color: var(--primary-border);
+    }
+
+    .readiness-ring {
+      display: grid;
+      width: 92px;
+      height: 92px;
+      place-items: center;
+      margin: 4px auto 14px;
+      border-radius: 50%;
+      background: conic-gradient(var(--green) var(--readiness, 0%), var(--surface-2) 0);
+    }
+
+    .readiness-ring::before {
+      display: grid;
+      width: 72px;
+      height: 72px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--surface);
+      content: attr(data-label);
+      font-weight: 850;
+    }
+
+    .readiness-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.83rem;
+    }
+
+    .readiness-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+    }
+
+    .readiness-list li.complete {
+      color: var(--green);
+    }
+
+    .cv-drop {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px dashed var(--blue-border-strong);
+      border-radius: 8px;
+      background: var(--blue-wash);
+      text-align: center;
+    }
+
+    .cv-drop input {
+      width: 100%;
+      font-size: 0.8rem;
+    }
+
+    .cv-file-name {
+      overflow-wrap: anywhere;
+      font-weight: 750;
+    }
+
+    .repeater {
+      display: grid;
+      gap: 10px;
+    }
+
+    .repeater-item {
+      display: grid;
+      gap: 10px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-3);
+    }
+
+    .repeater-item-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .repeater-item-head strong {
+      font-size: 0.88rem;
+    }
+
+    .remove-item-button {
+      border: 0;
+      color: var(--red);
+      background: transparent;
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .profile-status {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .profile-status.success {
+      color: var(--green);
+    }
+
+    .profile-status.error {
+      color: var(--red);
     }
 
     .topbar {
@@ -1575,7 +2574,41 @@
       display: none !important;
     }
 
-    @media (max-width: 1180px) {
+    @media (max-width: 1380px) {
+      .app-frame {
+        display: block;
+      }
+
+      .app-sidebar {
+        position: relative;
+        height: auto;
+        gap: 10px;
+        padding: 10px 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .app-sidebar-brand {
+        display: none;
+      }
+
+      .app-nav {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+
+      .app-nav-button {
+        width: auto;
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .app-sidebar-footer {
+        display: none;
+      }
+
       .stats {
         grid-template-columns: repeat(3, minmax(130px, 1fr));
       }
@@ -1654,6 +2687,124 @@
       .run-history-panel.compact .run-history-item {
         grid-template-columns: 1fr;
       }
+
+      .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .home-focus {
+        grid-template-columns: 1fr;
+      }
+
+      .provider-grid,
+      .board-settings-grid,
+      .scout-status-hero {
+        grid-template-columns: 1fr;
+      }
+
+      .application-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .application-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .application-table-wrap {
+        overflow: visible;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .application-table {
+        display: block;
+        min-width: 0;
+      }
+
+      .application-table thead {
+        display: none;
+      }
+
+      .application-table tbody {
+        display: grid;
+        gap: 10px;
+      }
+
+      .application-table tr {
+        display: grid;
+        gap: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .application-table td {
+        display: grid;
+        gap: 7px;
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .application-table td:last-child {
+        border-bottom: 0;
+      }
+
+      .application-table td[data-label]::before {
+        color: var(--muted);
+        content: attr(data-label);
+        font-size: 0.68rem;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .application-edit {
+        grid-template-columns: 1fr;
+      }
+
+      .application-row-note {
+        width: 100%;
+        max-width: none;
+      }
+
+      .application-table td:last-child .button {
+        width: 100%;
+      }
+
+      .application-table-footer {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .assistant-layout,
+      .operations-layout,
+      .answer-editor {
+        grid-template-columns: 1fr;
+      }
+
+      .diagnostic-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .workspace-card.wide {
+        grid-column: auto;
+      }
+
+      .workspace-header {
+        display: block;
+      }
+
+      .home-focus-metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-layout,
+      .form-grid,
+      .form-grid.three {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -1682,9 +2833,32 @@
     <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></symbol>
     <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
     <symbol id="icon-trending-down" viewBox="0 0 24 24"><path d="M22 17l-8-8-4 4-6-6"/><path d="M16 17h6v-6"/></symbol>
+    <symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1z"/></symbol>
     <symbol id="icon-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></symbol>
   </svg>
-  <main class="shell">
+  <div class="app-frame">
+    <aside class="app-sidebar" aria-label="Application navigation">
+      <div class="app-sidebar-brand">
+        <img src="icon-dashboard.png" alt="" aria-hidden="true" />
+        <div><strong>Job Scout</strong><span>Personal job-search workspace</span></div>
+      </div>
+      <nav id="appNavigation" class="app-nav">
+        <button class="app-nav-button" type="button" data-app-page="home"><svg class="icon"><use href="#icon-spark"></use></svg>Home</button>
+        <button class="app-nav-button active" type="button" data-app-page="jobs"><svg class="icon"><use href="#icon-briefcase"></use></svg>Jobs</button>
+        <button class="app-nav-button" type="button" data-app-page="scout"><svg class="icon"><use href="#icon-search"></use></svg>Scout</button>
+        <button class="app-nav-button" type="button" data-app-page="profile"><svg class="icon"><use href="#icon-file-text"></use></svg>Profile &amp; CV</button>
+        <button class="app-nav-button" type="button" data-app-page="strategy"><svg class="icon"><use href="#icon-target"></use></svg>Job Strategy</button>
+        <button class="app-nav-button" type="button" data-app-page="applications"><svg class="icon"><use href="#icon-check-circle"></use></svg>Applications</button>
+        <button class="app-nav-button" type="button" data-app-page="assistant"><svg class="icon"><use href="#icon-file-text"></use></svg>Assistant</button>
+        <button class="app-nav-button" type="button" data-app-page="runs"><svg class="icon"><use href="#icon-clock"></use></svg>Runs &amp; Logs</button>
+        <button class="app-nav-button" type="button" data-app-page="settings"><svg class="icon"><use href="#icon-settings"></use></svg>Settings</button>
+        <button id="themeToggle" class="app-nav-button app-theme-button" type="button" aria-pressed="false" title="Switch to dark mode"><svg id="themeToggleIcon" class="icon"><use href="#icon-moon"></use></svg><span id="themeToggleText">Dark mode</span></button>
+      </nav>
+      <div class="app-sidebar-footer">Local workspace<br />Private by default</div>
+    </aside>
+    <div class="app-content">
+  <main id="jobsPage" class="shell app-page" data-page-id="jobs">
     <header class="topbar">
       <div class="brand">
         <img class="brand-icon" src="icon-dashboard.png" alt="" aria-hidden="true" />
@@ -1695,7 +2869,6 @@
       </div>
       <div class="top-actions">
         <div class="top-button-row">
-          <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false" title="Switch to dark mode"><svg id="themeToggleIcon" class="icon icon-sm"><use href="#icon-moon"></use></svg><span id="themeToggleText">Dark</span></button>
           <button id="runScoutButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Run Scout</button>
         </div>
         <div class="meta" aria-live="polite">
@@ -1858,6 +3031,486 @@
 
     <section id="compactList" class="compact-list hidden" aria-label="Compact recommended jobs list"></section>
   </main>
+  <main id="homePage" class="shell app-page workspace-page" data-page-id="home" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-spark"></use></svg>Home</h1><p>Your daily starting point for strong jobs, run health, and application progress.</p></div>
+      <button id="homeStartScoutButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Run Scout</button>
+    </header>
+    <section class="home-focus">
+      <article class="home-focus-card">
+        <div>
+          <span class="home-eyebrow">Your next move</span>
+          <h2 id="homeFocusTitle">Loading your strongest next actions...</h2>
+          <p id="homeFocusCopy">The dashboard is checking recent jobs and your review progress.</p>
+        </div>
+        <div>
+          <div class="home-focus-metrics" aria-label="Home job summary">
+            <div class="home-focus-metric"><span>Actionable</span><strong id="homeActionableCount">0</strong></div>
+            <div class="home-focus-metric"><span>Apply first</span><strong id="homeApplyCount">0</strong></div>
+            <div class="home-focus-metric"><span>Good options</span><strong id="homeGoodCount">0</strong></div>
+          </div>
+          <div class="workspace-card-actions" style="margin-top:14px;">
+            <button id="homeReviewJobsButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-briefcase"></use></svg>Review jobs</button>
+            <button id="homeApplicationsButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg>Applications</button>
+          </div>
+        </div>
+      </article>
+      <article class="home-side-card">
+        <div>
+          <span id="homeRunBadge" class="home-card-status">Checking scout</span>
+          <strong id="homeRunTitle">Reading the latest run</strong>
+          <p id="homeRunCopy">Run status and recovery information will appear here.</p>
+        </div>
+        <button id="homeRunDetailsButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-activity"></use></svg>Open Scout</button>
+      </article>
+    </section>
+    <section class="workspace-grid">
+      <article class="workspace-card action-card">
+        <div><div class="workspace-card-head"><h2>Setup health</h2><svg class="icon icon-lg"><use href="#icon-file-text"></use></svg></div><div id="homeSetupValue" class="workspace-card-value">Checking...</div><p id="homeSetupHealth">Checking your profile and CV...</p></div>
+        <div class="workspace-card-actions"><button id="openProfileSetupButton" class="button secondary" type="button">Review setup</button></div>
+      </article>
+      <article class="workspace-card action-card">
+        <div><div class="workspace-card-head"><h2>Application progress</h2><svg class="icon icon-lg"><use href="#icon-check"></use></svg></div><div id="homeAppliedValue" class="workspace-card-value">0 applied</div><p id="homeAppliedCopy">Track interviews, offers, and follow-up notes in one place.</p></div>
+        <div class="workspace-card-actions"><button id="homeTrackApplicationsButton" class="button secondary" type="button">Track applications</button></div>
+      </article>
+      <article class="workspace-card action-card">
+        <div><div class="workspace-card-head"><h2>Latest activity</h2><svg class="icon icon-lg"><use href="#icon-clock"></use></svg></div><div id="homeLatestRunValue" class="workspace-card-value">No run loaded</div><p id="homeLatestRunCopy">Recent scout results and saved terminal logs remain available for review.</p></div>
+        <div class="workspace-card-actions"><button id="homeRunsButton" class="button secondary" type="button">Runs &amp; logs</button></div>
+      </article>
+    </section>
+  </main>
+  <main id="scoutPage" class="shell app-page workspace-page" data-page-id="scout" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-search"></use></svg>Scout</h1><p>Configure, start, stop, and resume approved job searches without using terminal commands.</p></div>
+      <button id="openScoutWorkspaceRunButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Start a run</button>
+    </header>
+    <section class="scout-status-hero" aria-live="polite">
+      <div class="scout-status-copy">
+        <span id="scoutWorkspaceEyebrow" class="subline">Checking local controller...</span>
+        <strong id="scoutWorkspaceStatus">Scout status is loading</strong>
+        <span id="scoutWorkspaceDetail">The dashboard only launches approved local workflows. Login and verification remain manual.</span>
+      </div>
+      <span id="scoutWorkspaceBadge" class="decision-chip">Idle</span>
+    </section>
+    <section class="workspace-grid">
+      <article class="workspace-card action-card wide">
+        <div>
+          <div class="workspace-card-head"><h2>Recommended daily run</h2><svg class="icon icon-lg"><use href="#icon-spark"></use></svg></div>
+          <div class="workspace-card-value">LinkedIn multi-query fresh</div>
+          <p>Uses your saved query strategy, skips known jobs, adapts page depth when results are duplicate-heavy, and updates the Jobs dashboard live.</p>
+        </div>
+        <div class="workspace-card-actions">
+          <button id="startRecommendedScoutButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Configure run</button>
+          <button id="openSearchStrategyButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-target"></use></svg>Edit search strategy</button>
+        </div>
+      </article>
+      <article class="workspace-card action-card">
+        <div>
+          <div class="workspace-card-head"><h2>Search coverage</h2><svg class="icon icon-lg"><use href="#icon-search"></use></svg></div>
+          <div id="scoutQueryCount" class="workspace-card-value">Loading...</div>
+          <p id="scoutLocationSummary">Reading your saved locations and query-learning settings.</p>
+        </div>
+      </article>
+      <article class="workspace-card action-card">
+        <div>
+          <div class="workspace-card-head"><h2>AI scoring</h2><svg class="icon icon-lg"><use href="#icon-activity"></use></svg></div>
+          <div id="scoutAiBackend" class="workspace-card-value">Loading...</div>
+          <p id="scoutAiFallbacks">Checking configured providers and fallback order.</p>
+        </div>
+        <div class="workspace-card-actions"><button id="openAiSettingsButton" class="button secondary" type="button">Manage AI</button></div>
+      </article>
+      <article class="workspace-card action-card">
+        <div>
+          <div class="workspace-card-head"><h2>Resume &amp; recovery</h2><svg class="icon icon-lg"><use href="#icon-rotate-ccw"></use></svg></div>
+          <div id="scoutResumeStatus" class="workspace-card-value">Checking...</div>
+          <p>Interrupted runs keep progress so the next run can continue without reopening already processed jobs.</p>
+        </div>
+        <div class="workspace-card-actions"><button id="resumeScoutButton" class="button secondary" type="button">Resume last run</button></div>
+      </article>
+      <article class="workspace-card action-card">
+        <div>
+          <div class="workspace-card-head"><h2>Safety boundary</h2><svg class="icon icon-lg"><use href="#icon-check-circle"></use></svg></div>
+          <div class="workspace-card-value">Manual login stays manual</div>
+          <p>The app does not store credentials or bypass verification, CAPTCHA, access controls, or rate limits.</p>
+        </div>
+      </article>
+    </section>
+  </main>
+  <main id="profilePage" class="shell app-page workspace-page" data-page-id="profile" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-file-text"></use></svg>Profile &amp; CV</h1><p>Manage the information the scout and application assistant use to represent you.</p></div>
+      <button id="saveProfileButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-check"></use></svg>Save profile</button>
+    </header>
+    <div id="profileStatus" class="profile-status" role="status" aria-live="polite">Loading your private profile...</div>
+    <div class="editor-layout">
+      <aside class="editor-sidebar">
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Profile readiness</h2><p>The information currently available to the scout.</p></div></div>
+          <div id="profileReadinessRing" class="readiness-ring" data-label="0%" style="--readiness: 0%"></div>
+          <ul id="profileReadinessList" class="readiness-list"></ul>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Active CV</h2><p>PDF used when the AI compares jobs with your background.</p></div></div>
+          <div class="cv-drop">
+            <span id="activeCvName" class="cv-file-name">No CV selected</span>
+            <span id="activeCvSize" class="subline"></span>
+            <input id="cvUploadInput" type="file" accept="application/pdf,.pdf" />
+            <button id="uploadCvButton" class="button secondary" type="button">Upload PDF</button>
+            <a id="openCvPreview" class="job-action hidden" href="/api/profile/cv/file" target="_blank" rel="noopener">Open CV</a>
+          </div>
+          <details id="cvTextDetails" class="form-section" style="margin-top:12px;padding:12px;">
+            <summary>Text the AI can read</summary>
+            <p id="cvExtractedText" style="max-height:260px;overflow:auto;white-space:pre-wrap;"></p>
+          </details>
+        </section>
+      </aside>
+      <form id="profileForm" class="editor-main">
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Personal information</h2><p>Used for applications and eligibility questions.</p></div></div>
+          <div class="form-grid three">
+            <div class="field"><label for="profileFirstName">First name</label><input id="profileFirstName" required /></div>
+            <div class="field"><label for="profileLastName">Last name</label><input id="profileLastName" required /></div>
+            <div class="field"><label for="profileGender">Gender</label><input id="profileGender" /></div>
+            <div class="field"><label for="profileEmail">Email</label><input id="profileEmail" type="email" required /></div>
+            <div class="field"><label for="profilePhone">Phone</label><input id="profilePhone" required /></div>
+            <div class="field"><label for="profilePostalCode">Postal code</label><input id="profilePostalCode" /></div>
+            <div class="field"><label for="profileCity">City</label><input id="profileCity" required /></div>
+            <div class="field"><label for="profileCountry">Country</label><input id="profileCountry" required /></div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Professional summary</h2><p>This strongly influences job scoring and generated application text.</p></div></div>
+          <div class="form-grid">
+            <div class="field full"><label for="profileAbout">About me</label><textarea id="profileAbout"></textarea></div>
+            <div class="field"><label for="profileLinkedin">LinkedIn URL</label><input id="profileLinkedin" type="url" /></div>
+            <div class="field"><label for="profilePortfolio">Portfolio URL</label><input id="profilePortfolio" type="url" /></div>
+            <div class="field"><label for="profileGithub">GitHub URL</label><input id="profileGithub" type="url" /></div>
+            <div class="field"><label for="profileCoverLetterStyle">Cover-letter style</label><input id="profileCoverLetterStyle" /></div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Work experience</h2><p>Add the roles and responsibilities the AI should consider.</p></div><button id="addExperienceButton" class="button secondary" type="button">Add experience</button></div>
+          <div id="experienceRepeater" class="repeater"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Education</h2><p>Degrees, programmes, grades, and completion years.</p></div><button id="addEducationButton" class="button secondary" type="button">Add education</button></div>
+          <div id="educationRepeater" class="repeater"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Skills and evidence</h2><p>Use commas or new lines to separate items.</p></div></div>
+          <div class="form-grid">
+            <div class="field full"><label for="profileSkills">Skills</label><textarea id="profileSkills"></textarea></div>
+            <div class="field"><label for="profileTools">Tools</label><textarea id="profileTools"></textarea></div>
+            <div class="field"><label for="profileCertifications">Certifications</label><textarea id="profileCertifications"></textarea></div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Languages</h2><p>Be precise because language requirements affect filtering and scoring.</p></div><button id="addLanguageButton" class="button secondary" type="button">Add language</button></div>
+          <div id="languageRepeater" class="repeater"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Work preferences</h2><p>Salary, availability, and work authorization.</p></div></div>
+          <div class="form-grid three">
+            <div class="field"><label for="profileSalaryMinimum">Minimum salary</label><input id="profileSalaryMinimum" type="number" min="0" /></div>
+            <div class="field"><label for="profileSalaryTarget">Target salary</label><input id="profileSalaryTarget" type="number" min="0" /></div>
+            <div class="field"><label for="profileSalaryCurrency">Currency</label><input id="profileSalaryCurrency" /></div>
+            <div class="field"><label for="profileStartDate">Availability</label><input id="profileStartDate" /></div>
+            <div class="field"><label for="profileNoticeWeeks">Notice period (weeks)</label><input id="profileNoticeWeeks" type="number" min="0" /></div>
+            <div class="field"><label for="profileVisaStatus">Visa/status</label><input id="profileVisaStatus" /></div>
+            <div class="field full"><label for="profileWorkAuthorization">Work authorization summary</label><textarea id="profileWorkAuthorization"></textarea></div>
+          </div>
+        </section>
+      </form>
+  </main>
+  <main id="strategyPage" class="shell app-page workspace-page" data-page-id="strategy" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-target"></use></svg>Job Strategy</h1><p>Shape target roles, realistic bridge opportunities, blockers, salary, and location preferences.</p></div>
+      <button id="saveStrategyButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-check"></use></svg>Save strategy</button>
+    </header>
+    <div id="strategyStatus" class="profile-status" role="status" aria-live="polite">Loading search strategy...</div>
+    <form id="strategyForm" class="editor-main" style="padding-top:18px;">
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Career direction</h2><p>Tell the scout what a good long-term outcome looks like, not only which titles sound attractive.</p></div></div>
+        <div class="form-grid">
+          <div class="field full"><label for="strategyCoreGoal">Core goal</label><textarea id="strategyCoreGoal"></textarea></div>
+          <div class="field full"><label for="strategyOpenness">Openness to other paths</label><textarea id="strategyOpenness"></textarea></div>
+          <div class="field"><label for="strategyPrimaryPaths">Primary career paths</label><textarea id="strategyPrimaryPaths" placeholder="One role family per line"></textarea></div>
+          <div class="field"><label for="strategyBridgeRoles">Strong bridge roles</label><textarea id="strategyBridgeRoles" placeholder="One role family per line"></textarea></div>
+          <div class="field full"><label for="strategyFallbackRoles">Fallback income roles</label><textarea id="strategyFallbackRoles" placeholder="One role family per line"></textarea></div>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Filtering rules</h2><p>Hard blockers reject jobs; soft concerns reduce confidence but still allow AI review.</p></div></div>
+        <div class="form-grid">
+          <div class="field"><label for="strategyHardBlockers">Hard blockers</label><textarea id="strategyHardBlockers"></textarea></div>
+          <div class="field"><label for="strategySoftRisks">Soft concerns</label><textarea id="strategySoftRisks"></textarea></div>
+          <div class="field"><label for="strategyFallbackKeywords">Fallback keywords</label><textarea id="strategyFallbackKeywords"></textarea></div>
+          <div class="field"><label for="strategyLocations">Locations</label><textarea id="strategyLocations"></textarea></div>
+          <div class="field"><label for="strategyCompanyBlacklist">Company blacklist</label><textarea id="strategyCompanyBlacklist"></textarea></div>
+          <div class="field"><label for="strategyCompanyWhitelist">Priority companies</label><textarea id="strategyCompanyWhitelist"></textarea></div>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Scoring and practical limits</h2><p>These values guide score categories, commute range, pay expectations, and company discipline.</p></div></div>
+        <div class="form-grid three">
+          <div class="field"><label for="strategyApplyScore">Apply First score</label><input id="strategyApplyScore" type="number" min="0" max="100" /></div>
+          <div class="field"><label for="strategyReviewScore">Human review score</label><input id="strategyReviewScore" type="number" min="0" max="100" /></div>
+          <div class="field"><label for="strategyDistance">Search distance (miles)</label><input id="strategyDistance" type="number" min="1" /></div>
+          <div class="field"><label for="strategyPreferredSalary">Preferred monthly salary</label><input id="strategyPreferredSalary" type="number" min="0" /></div>
+          <div class="field"><label for="strategyBridgeSalary">Bridge-role minimum</label><input id="strategyBridgeSalary" type="number" min="0" /></div>
+          <div class="field"><label for="strategyHourlySalary">Part-time hourly minimum</label><input id="strategyHourlySalary" type="number" min="0" step="0.5" /></div>
+          <div class="field"><label for="strategyCompanyLimit">Applications/company in 14 days</label><input id="strategyCompanyLimit" type="number" min="1" /></div>
+          <label class="check-row" for="strategyAvoidUnrelated"><input id="strategyAvoidUnrelated" type="checkbox" />Avoid unrelated roles at one company</label>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Search queries</h2><p>One query per line. Query learning can prioritize historically productive searches while still exploring others.</p></div><span id="strategyQueryCount" class="decision-chip">0 queries</span></div>
+        <div class="form-grid">
+          <div class="field full"><label for="strategyQueries">Active search queries</label><textarea id="strategyQueries" style="min-height:260px;"></textarea></div>
+          <label class="check-row" for="strategyQueryLearningEnabled"><input id="strategyQueryLearningEnabled" type="checkbox" />Use query-learning order</label>
+          <div class="field"><label for="strategyExplorationInterval">Explore a lower-ranked query every</label><input id="strategyExplorationInterval" type="number" min="1" /></div>
+          <div class="field full"><label>What the app has learned</label><div id="strategyQueryLearningSummary" class="workflow-hint"></div></div>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Fresh Scout behavior</h2><p>Advanced stopping targets. The Run Scout screen can still override AI budget mode per run.</p></div></div>
+        <div class="form-grid three">
+          <div class="field"><label for="strategyFreshMaxPages">Maximum pages/query</label><input id="strategyFreshMaxPages" type="number" min="1" /></div>
+          <div class="field"><label for="strategyKnownContinue">Continue when known ratio reaches</label><input id="strategyKnownContinue" type="number" min="0" max="100" /></div>
+          <div class="field"><label for="strategyDuplicateStop">Duplicate-heavy threshold</label><input id="strategyDuplicateStop" type="number" min="0" max="100" /></div>
+          <div class="field"><label for="strategyTargetApply">Target Apply First jobs</label><input id="strategyTargetApply" type="number" min="1" /></div>
+          <div class="field"><label for="strategyTargetGood">Target Good-or-better jobs</label><input id="strategyTargetGood" type="number" min="1" /></div>
+          <div class="field"><label for="strategyFreshCap">Fresh-job soft cap</label><input id="strategyFreshCap" type="number" min="1" /></div>
+        </div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head"><div><h2>Recruiter instructions and evidence</h2><p>The complete nuanced guidance and portfolio evidence used by the scoring prompt.</p></div></div>
+        <div class="form-grid">
+          <div class="field full"><label for="strategyFullText">Full recruiter instructions</label><textarea id="strategyFullText" style="min-height:360px;"></textarea></div>
+          <div class="field full"><label for="strategyPortfolioNotes">Portfolio evidence notes</label><textarea id="strategyPortfolioNotes" style="min-height:200px;"></textarea></div>
+        </div>
+      </section>
+    </form>
+  </main>
+  <main id="applicationsPage" class="shell app-page workspace-page" data-page-id="applications" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-check-circle"></use></svg>Applications</h1><p>Track active applications, interviews, outcomes, notes, and follow-ups in one place.</p></div>
+      <button id="refreshApplicationsButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh</button>
+    </header>
+    <div id="applicationsStatus" class="profile-status" role="status" aria-live="polite">Loading applications...</div>
+    <section class="application-summary" aria-label="Application pipeline summary">
+      <article class="application-stat"><span>Total tracked</span><strong id="applicationStatTotal">0</strong></article>
+      <article class="application-stat"><span>Preparing</span><strong id="applicationStatPreparing">0</strong></article>
+      <article class="application-stat"><span>Applied</span><strong id="applicationStatApplied">0</strong></article>
+      <article class="application-stat"><span>Interviews</span><strong id="applicationStatInterview">0</strong></article>
+      <article class="application-stat"><span>Offers</span><strong id="applicationStatOffer">0</strong></article>
+    </section>
+    <section class="application-toolbar">
+      <div class="field"><label for="applicationSearch">Search applications</label><input id="applicationSearch" placeholder="Title, company, location, notes" /></div>
+      <div class="field"><label for="applicationStageFilter">Stage</label><select id="applicationStageFilter"><option value="all">All stages</option><option value="preparing">Preparing</option><option value="applied">Applied</option><option value="interview">Interview</option><option value="offer">Offer</option><option value="rejected">Rejected</option><option value="withdrawn">Withdrawn</option></select></div>
+    </section>
+    <section id="applicationsTableWrap" class="application-table-wrap">
+      <table class="application-table">
+        <caption class="sr-only">Tracked job applications with stage, follow-up date, notes, and save action</caption>
+        <thead><tr><th>Job</th><th>Stage &amp; follow-up</th><th>Notes</th><th>Updated</th><th>Action</th></tr></thead>
+        <tbody id="applicationsTableBody"></tbody>
+      </table>
+      <div id="applicationsEmpty" class="empty-workspace hidden">No applications match this view. Mark a job Applied from the Jobs page to begin tracking it here.</div>
+      <div id="applicationsTableFooter" class="application-table-footer hidden">
+        <span id="applicationsVisibleCount">Showing 0 applications</span>
+        <button id="loadMoreApplicationsButton" class="button secondary" type="button">Show 50 more</button>
+      </div>
+    </section>
+  </main>
+  <main id="assistantPage" class="shell app-page workspace-page" data-page-id="assistant" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-file-text"></use></svg>Application Assistant</h1><p>Manage truthful reusable answers and prepare job-specific documents without automatic submission.</p></div>
+      <button id="saveAssistantKnowledgeButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-check"></use></svg>Save answer library</button>
+    </header>
+    <div id="assistantStatus" class="profile-status" role="status" aria-live="polite">Loading application knowledge...</div>
+    <div class="security-note"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg>Final submission always pauses for your review. Generated text is a draft, not a factual source.</div>
+    <div class="assistant-layout">
+      <div class="editor-main">
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Structured application answers</h2><p>Stable facts from your profile, such as sponsorship, notice period, language, and work authorization.</p></div><button id="addApplicationAnswerButton" class="button secondary" type="button">Add answer</button></div>
+          <div id="applicationAnswersEditor" class="repeater"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Learned question answers</h2><p>Answers captured or added for recurring application questions. Review these carefully before relying on them.</p></div><button id="addLearnedAnswerButton" class="button secondary" type="button">Add learned answer</button></div>
+          <div id="learnedAnswersEditor" class="repeater"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Question helper</h2><p>Checks deterministic saved answers first. It will not invent an answer when your profile does not support one.</p></div></div>
+          <div class="form-grid">
+            <div class="field full"><label for="assistantQuestion">Application question</label><textarea id="assistantQuestion" placeholder="For example: Are you authorized to work in the Netherlands?"></textarea></div>
+            <div class="field full"><label for="assistantQuestionContext">Optional context or available choices</label><textarea id="assistantQuestionContext"></textarea></div>
+          </div>
+          <div class="workspace-card-actions" style="margin-top:12px;"><button id="findAssistantAnswerButton" class="button secondary" type="button">Find saved answer</button></div>
+          <div id="assistantAnswerResult" class="assistant-answer-result" style="margin-top:12px;">No question checked yet.</div>
+        </section>
+      </div>
+      <aside class="editor-sidebar">
+        <section class="form-section document-studio">
+          <div class="form-section-head"><div><h2>Cover-letter studio</h2><p>Create a free local draft, then optionally improve it with Claude.</p></div></div>
+          <div class="field"><label for="assistantJobSelect">Job</label><select id="assistantJobSelect"></select></div>
+          <div class="field"><label for="assistantCoverStyle">Writing style</label><textarea id="assistantCoverStyle"></textarea></div>
+          <div class="workspace-card-actions">
+            <button id="createLocalDraftButton" class="button secondary" type="button">Create free draft</button>
+            <button id="createAiDraftButton" class="button secondary" type="button">Improve with Claude</button>
+          </div>
+          <div id="assistantAiNote" class="subline"></div>
+          <div class="field"><label for="assistantDraft">Draft</label><textarea id="assistantDraft" placeholder="Choose a job and create a draft."></textarea></div>
+          <div class="workspace-card-actions">
+            <button id="copyAssistantDraftButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-copy"></use></svg>Copy</button>
+            <button id="downloadAssistantDraftButton" class="button secondary" type="button">Download .txt</button>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <main id="runsPage" class="shell app-page workspace-page" data-page-id="runs" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-clock"></use></svg>Runs &amp; Logs</h1><p>Understand what each scout run searched, found, skipped, and why it stopped.</p></div>
+      <button id="refreshMaintenanceButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh</button>
+    </header>
+    <div id="maintenanceStatus" class="profile-status" role="status" aria-live="polite">Loading diagnostics...</div>
+    <section class="diagnostic-grid" aria-label="System diagnostics">
+      <article class="diagnostic-card"><span>Workspace</span><strong id="diagnosticWorkspace">Checking</strong></article>
+      <article class="diagnostic-card"><span>Data index</span><strong id="diagnosticDatabase">Checking</strong></article>
+      <article class="diagnostic-card"><span>Resume</span><strong id="diagnosticResume">Checking</strong></article>
+      <article class="diagnostic-card"><span>Logs</span><strong id="diagnosticLogs">0</strong></article>
+      <article class="diagnostic-card"><span>Run history</span><strong id="diagnosticRuns">0</strong></article>
+    </section>
+    <section id="latestDiagnosticError" class="workflow-hint hidden" style="margin-top:14px;"></section>
+    <div class="operations-layout">
+      <aside class="editor-sidebar">
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Log files</h2><p>Select a saved terminal or dashboard-run log.</p></div></div>
+          <div id="maintenanceLogList" class="log-list"></div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Maintenance</h2><p>Create a secret-free backup or remove old log files conservatively.</p></div></div>
+          <div class="maintenance-actions">
+            <button id="createBackupButton" class="button secondary" type="button">Create backup</button>
+            <button id="pruneLogsButton" class="button secondary" type="button">Delete logs older than 90 days</button>
+          </div>
+          <div class="security-note" style="margin-top:12px;"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg>Backups exclude API keys, cookies, browser profiles, and session data.</div>
+          <div id="maintenanceBackupList" class="backup-list" style="margin-top:12px;"></div>
+        </section>
+      </aside>
+      <div class="editor-main">
+        <section class="form-section">
+          <div class="form-section-head"><div><h2 id="selectedLogTitle">Log viewer</h2><p id="selectedLogMeta">Choose a log file to inspect.</p></div><button id="copyLogButton" class="button secondary" type="button" disabled><svg class="icon icon-sm"><use href="#icon-copy"></use></svg>Copy log</button></div>
+          <pre id="maintenanceLogViewer" class="operations-log">No log selected.</pre>
+        </section>
+        <section class="form-section">
+          <div class="form-section-head"><div><h2>Historical scout activity</h2><p>Query-level run records from the existing scout history.</p></div></div>
+          <div id="maintenanceRunList" class="run-list"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <main id="settingsPage" class="shell app-page workspace-page" data-page-id="settings" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-settings"></use></svg>Settings</h1><p>Configure AI scoring safely. Provider keys remain local and are never sent back to the browser.</p></div>
+      <button id="saveAiSettingsButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-check"></use></svg>Save AI settings</button>
+    </header>
+    <div id="aiSettingsStatus" class="profile-status" role="status" aria-live="polite">Loading AI settings...</div>
+    <div class="settings-layout">
+      <section class="form-section">
+        <div class="form-section-head">
+          <div><h2>Scoring behavior</h2><p>Auto mode tries configured providers in order and falls back when one is unavailable or rate-limited.</p></div>
+        </div>
+        <div class="security-note"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg><span id="aiSecurityNote">Stored API keys are never returned to the browser.</span></div>
+        <div class="form-grid three" style="margin-top:14px;">
+          <div class="field">
+            <label for="aiBackend">Scoring backend</label>
+            <select id="aiBackend">
+              <option value="auto">Auto fallback (recommended)</option>
+              <option value="cerebras">Cerebras only</option>
+              <option value="ollama_cloud">Ollama Cloud only</option>
+              <option value="gemini">Gemini only</option>
+              <option value="claude">Claude only</option>
+              <option value="openai_compatible">OpenAI-compatible only</option>
+              <option value="lmstudio">LM Studio only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="aiRateLimitCooldown">Rate-limit cooldown (seconds)</label>
+            <input id="aiRateLimitCooldown" type="number" min="5" max="3600" />
+          </div>
+          <div class="field">
+            <label>Environment file</label>
+            <div id="aiEnvironmentStatus" class="workflow-hint">Checking local environment...</div>
+          </div>
+        </div>
+        <div class="form-section-head" style="margin-top:18px;margin-bottom:8px;">
+          <div><h2>Automatic fallback order</h2><p>Only enabled providers in this list are attempted when backend is Auto.</p></div>
+        </div>
+        <div id="aiFallbackOrder" class="fallback-order-list"></div>
+      </section>
+      <section>
+        <div class="form-section-head"><div><h2>Providers</h2><p>Leave an API-key field blank to keep the existing key. Enter a new value only when replacing it.</p></div></div>
+        <div id="aiProviderGrid" class="provider-grid"></div>
+      </section>
+      <section class="form-section">
+        <div class="form-section-head">
+          <div><h2>Job boards and browser defaults</h2><p>Control which sources are available and which safe defaults appear when you open Run Scout.</p></div>
+          <button id="saveBoardSettingsButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-check"></use></svg>Save board settings</button>
+        </div>
+        <div id="boardSettingsStatus" class="profile-status" role="status" aria-live="polite">Loading job-board settings...</div>
+        <div class="board-settings-grid">
+          <article class="board-settings-card">
+            <div class="workspace-card-head"><h3>LinkedIn</h3><svg class="icon"><use href="#icon-briefcase"></use></svg></div>
+            <label class="check-row" for="boardLinkedinEnabled"><input id="boardLinkedinEnabled" type="checkbox" />Enable LinkedIn workflows</label>
+            <label class="check-row" for="boardLinkedinEasyApplyOnly"><input id="boardLinkedinEasyApplyOnly" type="checkbox" />Easy Apply only for application automation</label>
+            <div class="form-grid">
+              <div class="field"><label for="boardLinkedinDistance">Distance (miles)</label><input id="boardLinkedinDistance" type="number" min="1" max="100" /></div>
+              <div class="field"><label for="boardLinkedinCollect">Jobs collected/search</label><input id="boardLinkedinCollect" type="number" min="1" max="200" /></div>
+            </div>
+            <div class="field"><label>Experience levels</label><div class="workspace-card-actions"><label class="check-row"><input type="checkbox" data-linkedin-level="internship" />Internship</label><label class="check-row"><input type="checkbox" data-linkedin-level="entry" />Entry</label><label class="check-row"><input type="checkbox" data-linkedin-level="associate" />Associate</label><label class="check-row"><input type="checkbox" data-linkedin-level="mid_senior" />Mid-senior</label></div></div>
+          </article>
+          <article class="board-settings-card">
+            <div class="workspace-card-head"><h3>Indeed Netherlands</h3><svg class="icon"><use href="#icon-search"></use></svg></div>
+            <label class="check-row" for="boardIndeedEnabled"><input id="boardIndeedEnabled" type="checkbox" />Enable Indeed description workflow</label>
+            <div class="field"><label for="boardIndeedUrl">Search URL</label><input id="boardIndeedUrl" type="url" /></div>
+            <div class="form-grid">
+              <div class="field"><label for="boardIndeedRadius">Radius (km)</label><input id="boardIndeedRadius" type="number" min="1" max="100" /></div>
+              <div class="field"><label for="boardIndeedCollect">Jobs collected/search</label><input id="boardIndeedCollect" type="number" min="1" max="200" /></div>
+            </div>
+            <div class="security-note"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg>Login and verification always remain manual.</div>
+          </article>
+          <article class="board-settings-card">
+            <div class="workspace-card-head"><h3>Run defaults</h3><svg class="icon"><use href="#icon-play"></use></svg></div>
+            <div class="form-grid">
+              <div class="field"><label for="boardDefaultBrowser">Browser</label><select id="boardDefaultBrowser"><option value="chromium">Chromium</option><option value="firefox">Firefox</option></select></div>
+              <div class="field"><label for="boardDefaultLocation">Location</label><input id="boardDefaultLocation" /></div>
+              <div class="field"><label for="boardDefaultAiBudget">AI budget</label><select id="boardDefaultAiBudget"><option value="smart">Smart Guard</option><option value="deep">Deep Search</option><option value="off">Off</option></select></div>
+            </div>
+            <label class="check-row" for="boardDefaultHuman"><input id="boardDefaultHuman" type="checkbox" />Human-paced browsing</label>
+            <label class="check-row" for="boardDefaultFresh"><input id="boardDefaultFresh" type="checkbox" />Fresh mode by default</label>
+          </article>
+          <article class="board-settings-card">
+            <div class="workspace-card-head"><h3>Application safety</h3><svg class="icon"><use href="#icon-check-circle"></use></svg></div>
+            <label class="check-row" for="behaviorPauseSubmit"><input id="behaviorPauseSubmit" type="checkbox" disabled checked />Pause before final submission</label>
+            <label class="check-row" for="behaviorSkipApplied"><input id="behaviorSkipApplied" type="checkbox" />Skip already-applied jobs</label>
+            <label class="check-row" for="behaviorCoverLetter"><input id="behaviorCoverLetter" type="checkbox" />Submit cover letters</label>
+            <label class="check-row" for="behaviorGenerateCoverLetter"><input id="behaviorGenerateCoverLetter" type="checkbox" />Generate cover letters with AI</label>
+            <label class="check-row" for="behaviorQuestions"><input id="behaviorQuestions" type="checkbox" />Answer known screening questions</label>
+            <label class="check-row" for="behaviorPauseUnknown"><input id="behaviorPauseUnknown" type="checkbox" />Pause on unknown questions</label>
+            <label class="check-row" for="behaviorHumanDelays"><input id="behaviorHumanDelays" type="checkbox" />Use human-paced delays</label>
+            <div class="form-grid three">
+              <div class="field"><label for="limitApplicationsRun">Applications/run</label><input id="limitApplicationsRun" type="number" min="1" max="50" /></div>
+              <div class="field"><label for="limitJobsRun">Jobs tried/run</label><input id="limitJobsRun" type="number" min="1" max="100" /></div>
+              <div class="field"><label for="limitApplicationsDay">Applications/day</label><input id="limitApplicationsDay" type="number" min="1" max="100" /></div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+    </div>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <div id="runScoutOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="runScoutTitle" aria-describedby="runScoutDescription runWorkflowHint">
@@ -1867,7 +3520,7 @@
           <h2 id="runScoutTitle">Run Scout</h2>
           <p id="runScoutDescription">Start a safe approved scout workflow from the dashboard. Login and verification still stay manual in the browser.</p>
         </div>
-        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog">x</button>
+        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog"><svg class="icon"><use href="#icon-x-circle"></use></svg></button>
       </div>
       <div class="modal-body">
         <div id="runControlNotice" class="subline"></div>
@@ -1914,6 +3567,14 @@
             <input id="runFreshMode" type="checkbox" checked />
             Fresh mode
           </label>
+          <div class="control">
+            <label for="runAiBudgetMode">AI budget</label>
+            <select id="runAiBudgetMode">
+              <option value="smart" selected>Smart Guard</option>
+              <option value="deep">Deep Search</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
           <label class="check-row" for="runResumeMode">
             <input id="runResumeMode" type="checkbox" />
             Resume saved progress
@@ -1947,6 +3608,13 @@
     const API_DATA_URL = "/api/dashboard-data";
     const API_STATUS_URL = "/api/job-status";
     const API_RUN_CONTROL_URL = "/api/run-control";
+    const API_PROFILE_URL = "/api/profile";
+    const API_STRATEGY_URL = "/api/strategy";
+    const API_AI_SETTINGS_URL = "/api/ai-settings";
+    const API_BOARD_SETTINGS_URL = "/api/board-settings";
+    const API_APPLICATIONS_URL = "/api/applications";
+    const API_ASSISTANT_URL = "/api/application-assistant";
+    const API_MAINTENANCE_URL = "/api/maintenance";
     const POLL_MS = 4000;
     const THEME_STORAGE_KEY = "jobDashboardTheme";
     const DEFAULT_THEME = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
@@ -2007,12 +3675,47 @@
       LOW_PROBABILITY: "trending-down",
       REJECTED: "x-circle"
     };
+    const PROFILE_EXPERIENCE_FIELDS = [
+      ["title", "Job title"],
+      ["company", "Company"],
+      ["start_date", "Start date"],
+      ["end_date", "End date"],
+      ["location", "Location"],
+      ["description", "Description", "textarea"]
+    ];
+    const PROFILE_EDUCATION_FIELDS = [
+      ["degree", "Degree or programme"],
+      ["institution", "Institution"],
+      ["graduation_year", "Completion year"],
+      ["grade", "Grade"]
+    ];
+    const PROFILE_LANGUAGE_FIELDS = [
+      ["language", "Language"],
+      ["level", "Level"]
+    ];
 
     const state = {
       data: emptyData(),
       apiAvailable: false,
       runControlAvailable: false,
       runControl: null,
+      profilePayload: null,
+      profileLoading: false,
+      strategyPayload: null,
+      strategyLoading: false,
+      aiSettingsPayload: null,
+      aiSettingsLoading: false,
+      boardSettingsPayload: null,
+      boardSettingsLoading: false,
+      applicationsPayload: null,
+      applicationsLoading: false,
+      applicationFilters: { search: "", stage: "all" },
+      applicationVisibleLimit: 50,
+      assistantPayload: null,
+      assistantLoading: false,
+      maintenancePayload: null,
+      maintenanceLoading: false,
+      selectedLogText: "",
       savingJobKey: "",
       toastTimer: null,
       manualUndoStack: [],
@@ -2020,6 +3723,7 @@
       runHistoryExpanded: false,
       lastFocusedBeforeModal: null,
       theme: DEFAULT_THEME,
+      currentPage: localStorage.getItem("jobScoutCurrentPage") || "jobs",
       filters: {
         search: "",
         actionScope: "needs_action",
@@ -2036,6 +3740,148 @@
     };
 
     const els = {
+      appNavigation: document.getElementById("appNavigation"),
+      appNavButtons: Array.from(document.querySelectorAll("[data-app-page]")),
+      appPages: Array.from(document.querySelectorAll("[data-page-id]")),
+      homeSetupHealth: document.getElementById("homeSetupHealth"),
+      homeSetupValue: document.getElementById("homeSetupValue"),
+      openProfileSetupButton: document.getElementById("openProfileSetupButton"),
+      homeStartScoutButton: document.getElementById("homeStartScoutButton"),
+      homeReviewJobsButton: document.getElementById("homeReviewJobsButton"),
+      homeApplicationsButton: document.getElementById("homeApplicationsButton"),
+      homeRunDetailsButton: document.getElementById("homeRunDetailsButton"),
+      homeTrackApplicationsButton: document.getElementById("homeTrackApplicationsButton"),
+      homeRunsButton: document.getElementById("homeRunsButton"),
+      homeFocusTitle: document.getElementById("homeFocusTitle"),
+      homeFocusCopy: document.getElementById("homeFocusCopy"),
+      homeActionableCount: document.getElementById("homeActionableCount"),
+      homeApplyCount: document.getElementById("homeApplyCount"),
+      homeGoodCount: document.getElementById("homeGoodCount"),
+      homeRunBadge: document.getElementById("homeRunBadge"),
+      homeRunTitle: document.getElementById("homeRunTitle"),
+      homeRunCopy: document.getElementById("homeRunCopy"),
+      homeAppliedValue: document.getElementById("homeAppliedValue"),
+      homeAppliedCopy: document.getElementById("homeAppliedCopy"),
+      homeLatestRunValue: document.getElementById("homeLatestRunValue"),
+      homeLatestRunCopy: document.getElementById("homeLatestRunCopy"),
+      saveProfileButton: document.getElementById("saveProfileButton"),
+      profileStatus: document.getElementById("profileStatus"),
+      profileForm: document.getElementById("profileForm"),
+      profileReadinessRing: document.getElementById("profileReadinessRing"),
+      profileReadinessList: document.getElementById("profileReadinessList"),
+      activeCvName: document.getElementById("activeCvName"),
+      activeCvSize: document.getElementById("activeCvSize"),
+      cvUploadInput: document.getElementById("cvUploadInput"),
+      uploadCvButton: document.getElementById("uploadCvButton"),
+      openCvPreview: document.getElementById("openCvPreview"),
+      cvExtractedText: document.getElementById("cvExtractedText"),
+      addExperienceButton: document.getElementById("addExperienceButton"),
+      experienceRepeater: document.getElementById("experienceRepeater"),
+      addEducationButton: document.getElementById("addEducationButton"),
+      educationRepeater: document.getElementById("educationRepeater"),
+      addLanguageButton: document.getElementById("addLanguageButton"),
+      languageRepeater: document.getElementById("languageRepeater"),
+      saveStrategyButton: document.getElementById("saveStrategyButton"),
+      strategyForm: document.getElementById("strategyForm"),
+      strategyStatus: document.getElementById("strategyStatus"),
+      strategyQueryCount: document.getElementById("strategyQueryCount"),
+      strategyQueryLearningSummary: document.getElementById("strategyQueryLearningSummary"),
+      openScoutWorkspaceRunButton: document.getElementById("openScoutWorkspaceRunButton"),
+      startRecommendedScoutButton: document.getElementById("startRecommendedScoutButton"),
+      openSearchStrategyButton: document.getElementById("openSearchStrategyButton"),
+      openAiSettingsButton: document.getElementById("openAiSettingsButton"),
+      resumeScoutButton: document.getElementById("resumeScoutButton"),
+      scoutWorkspaceEyebrow: document.getElementById("scoutWorkspaceEyebrow"),
+      scoutWorkspaceStatus: document.getElementById("scoutWorkspaceStatus"),
+      scoutWorkspaceDetail: document.getElementById("scoutWorkspaceDetail"),
+      scoutWorkspaceBadge: document.getElementById("scoutWorkspaceBadge"),
+      scoutQueryCount: document.getElementById("scoutQueryCount"),
+      scoutLocationSummary: document.getElementById("scoutLocationSummary"),
+      scoutAiBackend: document.getElementById("scoutAiBackend"),
+      scoutAiFallbacks: document.getElementById("scoutAiFallbacks"),
+      scoutResumeStatus: document.getElementById("scoutResumeStatus"),
+      saveAiSettingsButton: document.getElementById("saveAiSettingsButton"),
+      aiSettingsStatus: document.getElementById("aiSettingsStatus"),
+      aiBackend: document.getElementById("aiBackend"),
+      aiRateLimitCooldown: document.getElementById("aiRateLimitCooldown"),
+      aiEnvironmentStatus: document.getElementById("aiEnvironmentStatus"),
+      aiSecurityNote: document.getElementById("aiSecurityNote"),
+      aiFallbackOrder: document.getElementById("aiFallbackOrder"),
+      aiProviderGrid: document.getElementById("aiProviderGrid"),
+      saveBoardSettingsButton: document.getElementById("saveBoardSettingsButton"),
+      boardSettingsStatus: document.getElementById("boardSettingsStatus"),
+      boardLinkedinEnabled: document.getElementById("boardLinkedinEnabled"),
+      boardLinkedinEasyApplyOnly: document.getElementById("boardLinkedinEasyApplyOnly"),
+      boardLinkedinDistance: document.getElementById("boardLinkedinDistance"),
+      boardLinkedinCollect: document.getElementById("boardLinkedinCollect"),
+      boardIndeedEnabled: document.getElementById("boardIndeedEnabled"),
+      boardIndeedUrl: document.getElementById("boardIndeedUrl"),
+      boardIndeedRadius: document.getElementById("boardIndeedRadius"),
+      boardIndeedCollect: document.getElementById("boardIndeedCollect"),
+      boardDefaultBrowser: document.getElementById("boardDefaultBrowser"),
+      boardDefaultLocation: document.getElementById("boardDefaultLocation"),
+      boardDefaultAiBudget: document.getElementById("boardDefaultAiBudget"),
+      boardDefaultHuman: document.getElementById("boardDefaultHuman"),
+      boardDefaultFresh: document.getElementById("boardDefaultFresh"),
+      behaviorPauseSubmit: document.getElementById("behaviorPauseSubmit"),
+      behaviorSkipApplied: document.getElementById("behaviorSkipApplied"),
+      behaviorCoverLetter: document.getElementById("behaviorCoverLetter"),
+      behaviorGenerateCoverLetter: document.getElementById("behaviorGenerateCoverLetter"),
+      behaviorQuestions: document.getElementById("behaviorQuestions"),
+      behaviorPauseUnknown: document.getElementById("behaviorPauseUnknown"),
+      behaviorHumanDelays: document.getElementById("behaviorHumanDelays"),
+      limitApplicationsRun: document.getElementById("limitApplicationsRun"),
+      limitJobsRun: document.getElementById("limitJobsRun"),
+      limitApplicationsDay: document.getElementById("limitApplicationsDay"),
+      refreshApplicationsButton: document.getElementById("refreshApplicationsButton"),
+      applicationsStatus: document.getElementById("applicationsStatus"),
+      applicationStatTotal: document.getElementById("applicationStatTotal"),
+      applicationStatPreparing: document.getElementById("applicationStatPreparing"),
+      applicationStatApplied: document.getElementById("applicationStatApplied"),
+      applicationStatInterview: document.getElementById("applicationStatInterview"),
+      applicationStatOffer: document.getElementById("applicationStatOffer"),
+      applicationSearch: document.getElementById("applicationSearch"),
+      applicationStageFilter: document.getElementById("applicationStageFilter"),
+      applicationsTableBody: document.getElementById("applicationsTableBody"),
+      applicationsEmpty: document.getElementById("applicationsEmpty"),
+      applicationsTableFooter: document.getElementById("applicationsTableFooter"),
+      applicationsVisibleCount: document.getElementById("applicationsVisibleCount"),
+      loadMoreApplicationsButton: document.getElementById("loadMoreApplicationsButton"),
+      saveAssistantKnowledgeButton: document.getElementById("saveAssistantKnowledgeButton"),
+      assistantStatus: document.getElementById("assistantStatus"),
+      addApplicationAnswerButton: document.getElementById("addApplicationAnswerButton"),
+      applicationAnswersEditor: document.getElementById("applicationAnswersEditor"),
+      addLearnedAnswerButton: document.getElementById("addLearnedAnswerButton"),
+      learnedAnswersEditor: document.getElementById("learnedAnswersEditor"),
+      assistantQuestion: document.getElementById("assistantQuestion"),
+      assistantQuestionContext: document.getElementById("assistantQuestionContext"),
+      findAssistantAnswerButton: document.getElementById("findAssistantAnswerButton"),
+      assistantAnswerResult: document.getElementById("assistantAnswerResult"),
+      assistantJobSelect: document.getElementById("assistantJobSelect"),
+      assistantCoverStyle: document.getElementById("assistantCoverStyle"),
+      createLocalDraftButton: document.getElementById("createLocalDraftButton"),
+      createAiDraftButton: document.getElementById("createAiDraftButton"),
+      assistantAiNote: document.getElementById("assistantAiNote"),
+      assistantDraft: document.getElementById("assistantDraft"),
+      copyAssistantDraftButton: document.getElementById("copyAssistantDraftButton"),
+      downloadAssistantDraftButton: document.getElementById("downloadAssistantDraftButton"),
+      refreshMaintenanceButton: document.getElementById("refreshMaintenanceButton"),
+      maintenanceStatus: document.getElementById("maintenanceStatus"),
+      diagnosticWorkspace: document.getElementById("diagnosticWorkspace"),
+      diagnosticDatabase: document.getElementById("diagnosticDatabase"),
+      diagnosticResume: document.getElementById("diagnosticResume"),
+      diagnosticLogs: document.getElementById("diagnosticLogs"),
+      diagnosticRuns: document.getElementById("diagnosticRuns"),
+      latestDiagnosticError: document.getElementById("latestDiagnosticError"),
+      maintenanceLogList: document.getElementById("maintenanceLogList"),
+      createBackupButton: document.getElementById("createBackupButton"),
+      pruneLogsButton: document.getElementById("pruneLogsButton"),
+      maintenanceBackupList: document.getElementById("maintenanceBackupList"),
+      selectedLogTitle: document.getElementById("selectedLogTitle"),
+      selectedLogMeta: document.getElementById("selectedLogMeta"),
+      copyLogButton: document.getElementById("copyLogButton"),
+      maintenanceLogViewer: document.getElementById("maintenanceLogViewer"),
+      maintenanceRunList: document.getElementById("maintenanceRunList"),
       themeToggle: document.getElementById("themeToggle"),
       themeToggleIcon: document.getElementById("themeToggleIcon"),
       themeToggleText: document.getElementById("themeToggleText"),
@@ -2113,6 +3959,7 @@
       runBrowser: document.getElementById("runBrowser"),
       runHumanMode: document.getElementById("runHumanMode"),
       runFreshMode: document.getElementById("runFreshMode"),
+      runAiBudgetMode: document.getElementById("runAiBudgetMode"),
       runResumeMode: document.getElementById("runResumeMode"),
       startRunButton: document.getElementById("startRunButton"),
       refreshRunControlButton: document.getElementById("refreshRunControlButton"),
@@ -2123,6 +3970,1539 @@
       stopNowButton: document.getElementById("stopNowButton"),
       runLogTail: document.getElementById("runLogTail")
     };
+
+    function navigateToPage(pageId, { persist = true } = {}) {
+      const allowedPages = new Set(els.appPages.map((page) => page.dataset.pageId));
+      const resolvedPage = allowedPages.has(pageId) ? pageId : "jobs";
+      state.currentPage = resolvedPage;
+      for (const page of els.appPages) {
+        page.hidden = page.dataset.pageId !== resolvedPage;
+      }
+      for (const button of els.appNavButtons) {
+        const active = button.dataset.appPage === resolvedPage;
+        button.classList.toggle("active", active);
+        if (active) {
+          button.setAttribute("aria-current", "page");
+        } else {
+          button.removeAttribute("aria-current");
+        }
+      }
+      if (persist) {
+        localStorage.setItem("jobScoutCurrentPage", resolvedPage);
+      }
+      document.title = resolvedPage === "jobs"
+        ? "Job Scout - Jobs"
+        : "Job Scout - " + labelize(resolvedPage);
+      if (resolvedPage === "profile" && !state.profilePayload && !state.profileLoading) {
+        loadProfileData();
+      }
+      if (resolvedPage === "home" && !state.profilePayload && !state.profileLoading) {
+        loadProfileData();
+      }
+      if (resolvedPage === "strategy" && !state.strategyPayload && !state.strategyLoading) {
+        loadStrategyData();
+      }
+      if (resolvedPage === "settings" && !state.aiSettingsPayload && !state.aiSettingsLoading) {
+        loadAiSettings();
+      }
+      if (resolvedPage === "settings" && !state.boardSettingsPayload && !state.boardSettingsLoading) {
+        loadBoardSettings();
+      }
+      if (resolvedPage === "applications" && !state.applicationsLoading) {
+        loadApplications();
+      }
+      if (resolvedPage === "assistant" && !state.assistantPayload && !state.assistantLoading) {
+        loadAssistant();
+      }
+      if (resolvedPage === "runs" && !state.maintenanceLoading) {
+        loadMaintenance();
+      }
+      if (resolvedPage === "scout") {
+        loadRunControl();
+        if (!state.strategyPayload && !state.strategyLoading) loadStrategyData();
+        if (!state.aiSettingsPayload && !state.aiSettingsLoading) loadAiSettings();
+        renderScoutWorkspace();
+      }
+      if (resolvedPage === "home") {
+        renderHome();
+      }
+    }
+
+    async function loadProfileData() {
+      state.profileLoading = true;
+      setProfileStatus("Loading your private profile...");
+      try {
+        const response = await fetch(API_PROFILE_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.profilePayload = await response.json();
+        renderProfileEditor();
+      } catch (error) {
+        setProfileStatus("Profile could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.profileLoading = false;
+      }
+      renderHome();
+    }
+
+    function renderProfileEditor() {
+      const payload = state.profilePayload || {};
+      const profile = payload.profile || {};
+      const personal = profile.personal || {};
+      const location = personal.location || {};
+      const salary = profile.salary || {};
+      const availability = profile.availability || {};
+      const authorization = profile.work_authorization || {};
+
+      setFieldValue("profileFirstName", personal.first_name);
+      setFieldValue("profileLastName", personal.last_name);
+      setFieldValue("profileGender", personal.gender);
+      setFieldValue("profileEmail", personal.email);
+      setFieldValue("profilePhone", personal.phone);
+      setFieldValue("profilePostalCode", location.postal_code);
+      setFieldValue("profileCity", location.city);
+      setFieldValue("profileCountry", location.country);
+      setFieldValue("profileAbout", profile.about_me);
+      setFieldValue("profileLinkedin", personal.linkedin_url);
+      setFieldValue("profilePortfolio", personal.portfolio_url);
+      setFieldValue("profileGithub", personal.github_url);
+      setFieldValue("profileCoverLetterStyle", profile.cover_letter_style);
+      setFieldValue("profileSkills", listEditorText(profile.skills));
+      setFieldValue("profileTools", listEditorText(profile.tools));
+      setFieldValue("profileCertifications", listEditorText(profile.certifications));
+      setFieldValue("profileSalaryMinimum", salary.minimum);
+      setFieldValue("profileSalaryTarget", salary.target);
+      setFieldValue("profileSalaryCurrency", salary.currency || "EUR");
+      setFieldValue("profileStartDate", availability.start_date);
+      setFieldValue("profileNoticeWeeks", availability.notice_period_weeks);
+      setFieldValue("profileVisaStatus", authorization.visa_status);
+      setFieldValue("profileWorkAuthorization", authorization.summary);
+
+      renderStructuredRepeater(
+        els.experienceRepeater,
+        profile.work_experience || [],
+        "experience",
+        PROFILE_EXPERIENCE_FIELDS
+      );
+      renderStructuredRepeater(
+        els.educationRepeater,
+        profile.education || [],
+        "education",
+        PROFILE_EDUCATION_FIELDS
+      );
+      renderStructuredRepeater(
+        els.languageRepeater,
+        profile.languages || [],
+        "language",
+        PROFILE_LANGUAGE_FIELDS
+      );
+      renderProfileReadiness(payload.readiness || {});
+      renderCv(payload.cv || {});
+      setProfileStatus("Changes are stored only in your private local workspace.");
+    }
+
+    function renderProfileReadiness(readiness) {
+      const percent = numeric(readiness.percent);
+      els.profileReadinessRing.style.setProperty("--readiness", percent + "%");
+      els.profileReadinessRing.dataset.label = percent + "%";
+      els.profileReadinessList.replaceChildren();
+      const labels = {
+        identity: "Name",
+        contact: "Contact details",
+        location: "Location",
+        summary: "Professional summary",
+        experience: "Work experience",
+        education: "Education",
+        skills: "Skills",
+        languages: "Languages",
+        cv: "CV"
+      };
+      for (const [key, label] of Object.entries(labels)) {
+        const complete = Boolean((readiness.checks || {})[key]);
+        const item = document.createElement("li");
+        item.className = complete ? "complete" : "";
+        const name = document.createElement("span");
+        name.textContent = label;
+        const value = document.createElement("strong");
+        value.textContent = complete ? "Ready" : "Missing";
+        item.append(name, value);
+        els.profileReadinessList.append(item);
+      }
+      if (els.homeSetupHealth) {
+        els.homeSetupHealth.textContent = readiness.ready
+          ? "Your profile and CV are ready for scoring."
+          : `${readiness.completed || 0} of ${readiness.total || 0} profile checks are complete.`;
+      }
+    }
+
+    function renderCv(cv) {
+      const available = Boolean(cv.available);
+      els.activeCvName.textContent = available ? safe(cv.filename) : "No CV selected";
+      els.activeCvSize.textContent = available ? formatFileSize(cv.size_bytes) : "Upload a PDF to enable CV-aware scoring.";
+      els.openCvPreview.classList.toggle("hidden", !available);
+      els.cvExtractedText.textContent = safe(cv.extracted_text) || "No readable CV text is available.";
+    }
+
+    function renderStructuredRepeater(container, items, kind, fields) {
+      container.replaceChildren();
+      for (const item of items) {
+        container.append(createRepeaterItem(kind, item, fields));
+      }
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.className = "subline";
+        empty.textContent = "No entries yet.";
+        container.append(empty);
+      }
+    }
+
+    function createRepeaterItem(kind, item, fields) {
+      const wrapper = document.createElement("article");
+      wrapper.className = "repeater-item";
+      wrapper.dataset.repeaterKind = kind;
+      const head = document.createElement("div");
+      head.className = "repeater-item-head";
+      const title = document.createElement("strong");
+      title.textContent = labelize(kind);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "remove-item-button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => wrapper.remove());
+      head.append(title, remove);
+      wrapper.append(head);
+
+      const grid = document.createElement("div");
+      grid.className = "form-grid";
+      for (const [key, label, fieldType] of fields) {
+        const field = document.createElement("div");
+        field.className = "field" + (fieldType === "textarea" ? " full" : "");
+        const fieldLabel = document.createElement("label");
+        fieldLabel.textContent = label;
+        const input = document.createElement(fieldType === "textarea" ? "textarea" : "input");
+        input.dataset.profileField = key;
+        input.value = safe(item[key]);
+        field.append(fieldLabel, input);
+        grid.append(field);
+      }
+      wrapper.append(grid);
+      return wrapper;
+    }
+
+    function collectRepeater(container) {
+      return Array.from(container.querySelectorAll(".repeater-item")).map((item) => {
+        const record = {};
+        for (const input of item.querySelectorAll("[data-profile-field]")) {
+          record[input.dataset.profileField] = safe(input.value);
+        }
+        return record;
+      });
+    }
+
+    function addRepeaterEntry(container, kind, fields) {
+      const empty = container.querySelector(".subline");
+      if (empty) empty.remove();
+      container.append(createRepeaterItem(kind, {}, fields));
+    }
+
+    async function saveProfile() {
+      if (!state.profilePayload || !els.profileForm.reportValidity()) return;
+      const profile = JSON.parse(JSON.stringify(state.profilePayload.profile || {}));
+      profile.personal = profile.personal || {};
+      profile.personal.location = profile.personal.location || {};
+      profile.personal.first_name = fieldValue("profileFirstName");
+      profile.personal.last_name = fieldValue("profileLastName");
+      profile.personal.gender = fieldValue("profileGender");
+      profile.personal.email = fieldValue("profileEmail");
+      profile.personal.phone = fieldValue("profilePhone");
+      profile.personal.location.postal_code = fieldValue("profilePostalCode");
+      profile.personal.location.city = fieldValue("profileCity");
+      profile.personal.location.country = fieldValue("profileCountry");
+      profile.personal.linkedin_url = fieldValue("profileLinkedin");
+      profile.personal.portfolio_url = fieldValue("profilePortfolio");
+      profile.personal.github_url = fieldValue("profileGithub");
+      profile.about_me = fieldValue("profileAbout");
+      profile.cover_letter_style = fieldValue("profileCoverLetterStyle");
+      profile.work_experience = collectRepeater(els.experienceRepeater);
+      profile.education = collectRepeater(els.educationRepeater);
+      profile.languages = collectRepeater(els.languageRepeater);
+      profile.skills = splitListEditor(fieldValue("profileSkills"));
+      profile.tools = splitListEditor(fieldValue("profileTools"));
+      profile.certifications = splitListEditor(fieldValue("profileCertifications"));
+      profile.salary = profile.salary || {};
+      profile.salary.minimum = numeric(fieldValue("profileSalaryMinimum"));
+      profile.salary.target = numeric(fieldValue("profileSalaryTarget"));
+      profile.salary.currency = fieldValue("profileSalaryCurrency") || "EUR";
+      profile.availability = profile.availability || {};
+      profile.availability.start_date = fieldValue("profileStartDate");
+      profile.availability.notice_period_weeks = numeric(fieldValue("profileNoticeWeeks"));
+      profile.work_authorization = profile.work_authorization || {};
+      profile.work_authorization.visa_status = fieldValue("profileVisaStatus");
+      profile.work_authorization.summary = fieldValue("profileWorkAuthorization");
+
+      els.saveProfileButton.disabled = true;
+      setProfileStatus("Saving profile...");
+      try {
+        const response = await fetch(API_PROFILE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Profile save failed");
+        state.profilePayload = result.data;
+        renderProfileEditor();
+        setProfileStatus("Profile saved. The scout will use these details on its next run.", "success");
+      } catch (error) {
+        setProfileStatus(safe(error.message) || "Profile could not be saved.", "error");
+      } finally {
+        els.saveProfileButton.disabled = false;
+      }
+    }
+
+    async function uploadCv() {
+      const file = els.cvUploadInput.files && els.cvUploadInput.files[0];
+      if (!file) {
+        setProfileStatus("Choose a PDF before uploading.", "error");
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setProfileStatus("CV must be 10 MB or smaller.", "error");
+        return;
+      }
+      els.uploadCvButton.disabled = true;
+      setProfileStatus("Uploading CV...");
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await fetch(API_PROFILE_URL + "/cv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            content_base64: dataUrl.split(",", 2)[1] || ""
+          })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "CV upload failed");
+        state.profilePayload = result.data;
+        renderProfileEditor();
+        els.cvUploadInput.value = "";
+        setProfileStatus("CV uploaded and selected for future scoring.", "success");
+      } catch (error) {
+        setProfileStatus(safe(error.message) || "CV upload failed.", "error");
+      } finally {
+        els.uploadCvButton.disabled = false;
+      }
+    }
+
+    function setProfileStatus(message, kind = "") {
+      if (!els.profileStatus) return;
+      els.profileStatus.textContent = message;
+      els.profileStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    function setFieldValue(id, value) {
+      const field = document.getElementById(id);
+      if (field) field.value = value ?? "";
+    }
+
+    function fieldValue(id) {
+      const field = document.getElementById(id);
+      return field ? String(field.value || "").trim() : "";
+    }
+
+    function listEditorText(values) {
+      return Array.isArray(values) ? values.join("\n") : "";
+    }
+
+    function splitListEditor(value) {
+      const output = [];
+      const seen = new Set();
+      for (const item of String(value || "").split(/[\n,;]+/)) {
+        const cleaned = safe(item);
+        const key = cleaned.toLowerCase();
+        if (cleaned && !seen.has(key)) {
+          seen.add(key);
+          output.push(cleaned);
+        }
+      }
+      return output;
+    }
+
+    function formatFileSize(bytes) {
+      const size = numeric(bytes);
+      if (!size) return "";
+      if (size < 1024) return size + " bytes";
+      if (size < 1024 * 1024) return Math.round(size / 1024) + " KB";
+      return (size / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read the selected file"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function loadStrategyData() {
+      state.strategyLoading = true;
+      setStrategyStatus("Loading job strategy...");
+      try {
+        const response = await fetch(API_STRATEGY_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.strategyPayload = await response.json();
+        renderStrategyEditor();
+      } catch (error) {
+        setStrategyStatus("Strategy could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.strategyLoading = false;
+      }
+    }
+
+    function renderStrategyEditor() {
+      const payload = state.strategyPayload || {};
+      const career = payload.career_strategy || {};
+      const preferences = payload.preferences || {};
+      const fresh = preferences.fresh_scout || {};
+      const learning = preferences.query_learning || {};
+
+      setFieldValue("strategyCoreGoal", career.core_goal);
+      setFieldValue("strategyOpenness", career.openness);
+      setFieldValue("strategyPrimaryPaths", listEditorText(career.primary_paths));
+      setFieldValue("strategyBridgeRoles", listEditorText(career.strong_bridge_roles));
+      setFieldValue("strategyFallbackRoles", listEditorText(career.fallback_roles_for_income));
+      setFieldValue("strategyHardBlockers", listEditorText(preferences.hard_exclude_keywords));
+      setFieldValue("strategySoftRisks", listEditorText(preferences.soft_negative_keywords));
+      setFieldValue("strategyFallbackKeywords", listEditorText(preferences.fallback_keywords));
+      setFieldValue("strategyLocations", listEditorText(preferences.locations));
+      setFieldValue("strategyCompanyBlacklist", listEditorText(preferences.companies_blacklist));
+      setFieldValue("strategyCompanyWhitelist", listEditorText(preferences.companies_whitelist));
+      setFieldValue("strategyApplyScore", preferences.min_match_score);
+      setFieldValue("strategyReviewScore", preferences.human_review_score_min);
+      setFieldValue("strategyDistance", preferences.distance_miles);
+      setFieldValue("strategyPreferredSalary", preferences.salary_preferred_monthly_full_time);
+      setFieldValue("strategyBridgeSalary", preferences.salary_bridge_minimum_monthly_full_time);
+      setFieldValue("strategyHourlySalary", preferences.salary_part_time_hourly_minimum);
+      setFieldValue("strategyCompanyLimit", preferences.max_active_applications_per_company_14_days);
+      setCheckedValue("strategyAvoidUnrelated", preferences.avoid_multiple_unrelated_roles_same_company);
+      setFieldValue("strategyQueries", listEditorText(payload.queries));
+      setCheckedValue("strategyQueryLearningEnabled", learning.enabled !== false);
+      setFieldValue("strategyExplorationInterval", learning.exploration_interval || 5);
+      setFieldValue("strategyFreshMaxPages", fresh.max_pages_per_query || 4);
+      setFieldValue("strategyKnownContinue", ratioPercent(fresh.known_ratio_continue_threshold, 80));
+      setFieldValue("strategyDuplicateStop", ratioPercent(fresh.duplicate_heavy_stop_threshold, 90));
+      setFieldValue("strategyTargetApply", fresh.target_apply_first_jobs || 8);
+      setFieldValue("strategyTargetGood", fresh.target_good_or_better_jobs || 20);
+      setFieldValue("strategyFreshCap", fresh.global_new_jobs_soft_cap || 140);
+      setFieldValue("strategyFullText", payload.strategy_text);
+      setFieldValue("strategyPortfolioNotes", payload.portfolio_notes);
+      renderQueryLearningSummary(payload.query_learning || {});
+      updateStrategyQueryCount();
+      setStrategyStatus("Strategy changes are versioned in your private workspace.");
+      renderScoutWorkspace();
+    }
+
+    function renderQueryLearningSummary(learning) {
+      els.strategyQueryLearningSummary.replaceChildren();
+      const title = document.createElement("strong");
+      title.textContent = learning.enabled === false ? "Query learning is disabled" : "Query learning is active";
+      const description = document.createElement("span");
+      const top = Array.isArray(learning.top_queries) ? learning.top_queries.slice(0, 5) : [];
+      description.textContent = top.length
+        ? "Current leaders: " + top.map((item) => `${item.query} (${numeric(item.score)})`).join(", ")
+        : safe(learning.reason) || "The app needs more completed runs before it can rank queries.";
+      els.strategyQueryLearningSummary.append(title, description);
+    }
+
+    function updateStrategyQueryCount() {
+      const queries = splitListEditor(fieldValue("strategyQueries"));
+      els.strategyQueryCount.textContent = `${queries.length} quer${queries.length === 1 ? "y" : "ies"}`;
+    }
+
+    async function saveStrategy() {
+      if (!state.strategyPayload || !els.strategyForm.reportValidity()) return;
+      const payload = JSON.parse(JSON.stringify(state.strategyPayload));
+      payload.career_strategy = payload.career_strategy || {};
+      payload.career_strategy.core_goal = fieldValue("strategyCoreGoal");
+      payload.career_strategy.openness = fieldValue("strategyOpenness");
+      payload.career_strategy.primary_paths = splitListEditor(fieldValue("strategyPrimaryPaths"));
+      payload.career_strategy.strong_bridge_roles = splitListEditor(fieldValue("strategyBridgeRoles"));
+      payload.career_strategy.fallback_roles_for_income = splitListEditor(fieldValue("strategyFallbackRoles"));
+      payload.preferences = payload.preferences || {};
+      payload.preferences.hard_exclude_keywords = splitListEditor(fieldValue("strategyHardBlockers"));
+      payload.preferences.soft_negative_keywords = splitListEditor(fieldValue("strategySoftRisks"));
+      payload.preferences.fallback_keywords = splitListEditor(fieldValue("strategyFallbackKeywords"));
+      payload.preferences.locations = splitListEditor(fieldValue("strategyLocations"));
+      payload.preferences.companies_blacklist = splitListEditor(fieldValue("strategyCompanyBlacklist"));
+      payload.preferences.companies_whitelist = splitListEditor(fieldValue("strategyCompanyWhitelist"));
+      payload.preferences.min_match_score = numeric(fieldValue("strategyApplyScore"));
+      payload.preferences.human_review_score_min = numeric(fieldValue("strategyReviewScore"));
+      payload.preferences.distance_miles = numeric(fieldValue("strategyDistance"));
+      payload.preferences.salary_preferred_monthly_full_time = numeric(fieldValue("strategyPreferredSalary"));
+      payload.preferences.salary_bridge_minimum_monthly_full_time = numeric(fieldValue("strategyBridgeSalary"));
+      payload.preferences.salary_part_time_hourly_minimum = numeric(fieldValue("strategyHourlySalary"));
+      payload.preferences.max_active_applications_per_company_14_days = numeric(fieldValue("strategyCompanyLimit"));
+      payload.preferences.avoid_multiple_unrelated_roles_same_company = checkedValue("strategyAvoidUnrelated");
+      payload.preferences.query_learning = payload.preferences.query_learning || {};
+      payload.preferences.query_learning.enabled = checkedValue("strategyQueryLearningEnabled");
+      payload.preferences.query_learning.exploration_interval = numeric(fieldValue("strategyExplorationInterval")) || 5;
+      payload.preferences.fresh_scout = payload.preferences.fresh_scout || {};
+      payload.preferences.fresh_scout.max_pages_per_query = numeric(fieldValue("strategyFreshMaxPages")) || 4;
+      payload.preferences.fresh_scout.known_ratio_continue_threshold = numeric(fieldValue("strategyKnownContinue")) / 100;
+      payload.preferences.fresh_scout.duplicate_heavy_stop_threshold = numeric(fieldValue("strategyDuplicateStop")) / 100;
+      payload.preferences.fresh_scout.target_apply_first_jobs = numeric(fieldValue("strategyTargetApply")) || 8;
+      payload.preferences.fresh_scout.target_good_or_better_jobs = numeric(fieldValue("strategyTargetGood")) || 20;
+      payload.preferences.fresh_scout.global_new_jobs_soft_cap = numeric(fieldValue("strategyFreshCap")) || 140;
+      payload.queries = splitListEditor(fieldValue("strategyQueries"));
+      payload.strategy_text = document.getElementById("strategyFullText").value;
+      payload.portfolio_notes = document.getElementById("strategyPortfolioNotes").value;
+
+      els.saveStrategyButton.disabled = true;
+      setStrategyStatus("Saving strategy...");
+      try {
+        const response = await fetch(API_STRATEGY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Strategy save failed");
+        state.strategyPayload = result.data;
+        renderStrategyEditor();
+        setStrategyStatus("Strategy saved. New scout runs will use these rules and queries.", "success");
+      } catch (error) {
+        setStrategyStatus(safe(error.message) || "Strategy could not be saved.", "error");
+      } finally {
+        els.saveStrategyButton.disabled = false;
+      }
+    }
+
+    function setStrategyStatus(message, kind = "") {
+      els.strategyStatus.textContent = message;
+      els.strategyStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    function setCheckedValue(id, value) {
+      const field = document.getElementById(id);
+      if (field) field.checked = Boolean(value);
+    }
+
+    function checkedValue(id) {
+      const field = document.getElementById(id);
+      return Boolean(field && field.checked);
+    }
+
+    function ratioPercent(value, fallback) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return fallback;
+      return Math.round((number <= 1 ? number * 100 : number));
+    }
+
+    async function loadAiSettings() {
+      state.aiSettingsLoading = true;
+      setAiSettingsStatus("Loading AI settings...");
+      try {
+        const response = await fetch(API_AI_SETTINGS_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.aiSettingsPayload = await response.json();
+        renderAiSettings();
+      } catch (error) {
+        setAiSettingsStatus("AI settings could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.aiSettingsLoading = false;
+      }
+      renderScoutWorkspace();
+    }
+
+    function renderAiSettings() {
+      const payload = state.aiSettingsPayload || {};
+      els.aiBackend.value = payload.backend || "auto";
+      els.aiRateLimitCooldown.value = numeric(payload.rate_limit_cooldown_seconds) || 90;
+      els.aiEnvironmentStatus.replaceChildren();
+      const envTitle = document.createElement("strong");
+      envTitle.textContent = payload.env_exists ? "Local .env is active" : "No .env file yet";
+      const envCopy = document.createElement("span");
+      envCopy.textContent = payload.env_exists
+        ? "Secrets remain on this computer."
+        : "Saving a provider will create the local file.";
+      els.aiEnvironmentStatus.append(envTitle, envCopy);
+      els.aiSecurityNote.textContent = payload.security_note || "Stored API keys are never returned to the browser.";
+      renderAiFallbackOrder();
+      renderAiProviderCards();
+      setAiSettingsStatus("AI settings are local. Existing key values stay hidden.");
+    }
+
+    function renderAiFallbackOrder() {
+      els.aiFallbackOrder.replaceChildren();
+      const payload = state.aiSettingsPayload || {};
+      const providers = Array.isArray(payload.providers) ? payload.providers : [];
+      const currentOrder = Array.isArray(payload.backend_order) ? payload.backend_order : [];
+      providers.forEach((provider, index) => {
+        const position = currentOrder.indexOf(provider.id);
+        const row = document.createElement("label");
+        row.className = "fallback-order-row";
+        const number = document.createElement("strong");
+        number.textContent = position >= 0 ? String(position + 1) : "-";
+        const copy = document.createElement("span");
+        copy.textContent = provider.label;
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.checked = position >= 0;
+        toggle.dataset.aiOrderProvider = provider.id;
+        toggle.dataset.aiOrderRank = String(position >= 0 ? position : index + providers.length);
+        toggle.setAttribute("aria-label", "Use " + provider.label + " in automatic fallback");
+        toggle.addEventListener("change", renderAiFallbackOrderNumbers);
+        row.append(number, copy, toggle);
+        els.aiFallbackOrder.append(row);
+      });
+    }
+
+    function renderAiFallbackOrderNumbers() {
+      const rows = Array.from(els.aiFallbackOrder.querySelectorAll(".fallback-order-row"));
+      let rank = 0;
+      rows.forEach((row) => {
+        const toggle = row.querySelector("input");
+        const number = row.querySelector("strong");
+        if (toggle && toggle.checked) {
+          rank += 1;
+          number.textContent = String(rank);
+          toggle.dataset.aiOrderRank = String(rank - 1);
+        } else {
+          number.textContent = "-";
+        }
+      });
+    }
+
+    function renderAiProviderCards() {
+      els.aiProviderGrid.replaceChildren();
+      const providers = Array.isArray(state.aiSettingsPayload?.providers)
+        ? state.aiSettingsPayload.providers
+        : [];
+      providers.forEach((provider) => {
+        const card = document.createElement("article");
+        card.className = "provider-card";
+        card.dataset.providerId = provider.id;
+        card.dataset.configured = String(Boolean(provider.configured));
+
+        const head = document.createElement("div");
+        head.className = "provider-card-head";
+        const titleWrap = document.createElement("div");
+        const title = document.createElement("h2");
+        title.textContent = provider.label;
+        const copy = document.createElement("div");
+        copy.className = "provider-copy";
+        copy.textContent = provider.description;
+        titleWrap.append(title, copy);
+        const badge = document.createElement("span");
+        badge.className = "provider-status " + (provider.configured ? "configured" : "");
+        badge.textContent = provider.configured ? "Configured" : "Not configured";
+        head.append(titleWrap, badge);
+
+        const grid = document.createElement("div");
+        grid.className = "form-grid";
+        grid.append(
+          createAiField(provider, "model", "Model", provider.model || "", "text"),
+          createAiField(provider, "base_url", "Base URL", provider.base_url || "", "url", !provider.base_url && provider.id !== "gemini" && provider.id !== "claude")
+        );
+        if (!provider.base_url && ["gemini", "claude"].includes(provider.id)) {
+          grid.lastElementChild.remove();
+          grid.firstElementChild.classList.add("full");
+        }
+        if (provider.requires_key) {
+          const keyField = createAiField(provider, "api_key", "API key", "", "password");
+          keyField.classList.add("full");
+          const input = keyField.querySelector("input");
+          input.placeholder = provider.configured ? "Configured - enter a new key to replace it" : "Enter API key";
+          const note = document.createElement("span");
+          note.className = "secret-field-note";
+          note.textContent = provider.configured
+            ? "The existing key is hidden. Leave blank to keep it."
+            : "The key will be stored only in the local .env file.";
+          keyField.append(note);
+          grid.append(keyField);
+        }
+
+        const advanced = document.createElement("details");
+        advanced.className = "form-section";
+        advanced.style.padding = "12px";
+        const summary = document.createElement("summary");
+        summary.textContent = "Advanced provider settings";
+        advanced.append(summary);
+        const extrasGrid = document.createElement("div");
+        extrasGrid.className = "form-grid";
+        extrasGrid.style.marginTop = "12px";
+        Object.entries(provider.extra || {}).forEach(([name, value]) => {
+          const isBoolean = ["structured_outputs", "reasoning_enabled"].includes(name);
+          extrasGrid.append(createAiField(provider, "extra_" + name, labelize(name), value, isBoolean ? "checkbox" : "text"));
+        });
+        if (provider.requires_key) {
+          const remove = document.createElement("label");
+          remove.className = "check-row";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.dataset.aiProviderField = "remove_key";
+          remove.append(checkbox, document.createTextNode("Remove stored API key"));
+          extrasGrid.append(remove);
+        }
+        advanced.append(extrasGrid);
+
+        const actions = document.createElement("div");
+        actions.className = "provider-actions";
+        const testButton = document.createElement("button");
+        testButton.type = "button";
+        testButton.className = "button secondary";
+        testButton.textContent = "Test connection";
+        testButton.dataset.testAiProvider = provider.id;
+        testButton.addEventListener("click", () => testAiProvider(provider.id, testButton));
+        const result = document.createElement("span");
+        result.className = "provider-test-result";
+        result.dataset.aiTestResult = provider.id;
+        renderAiTestResult(result, provider.last_test || {});
+        actions.append(testButton, result);
+        card.append(head, grid, advanced, actions);
+        els.aiProviderGrid.append(card);
+      });
+    }
+
+    function createAiField(provider, fieldName, labelText, value, type = "text") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "field";
+      const label = document.createElement("label");
+      const id = "ai-" + provider.id + "-" + fieldName.replaceAll("_", "-");
+      label.htmlFor = id;
+      label.textContent = labelText;
+      const input = document.createElement("input");
+      input.id = id;
+      input.dataset.aiProviderField = fieldName;
+      input.type = type;
+      if (type === "checkbox") {
+        input.checked = String(value).toLowerCase() === "true";
+      } else {
+        input.value = value ?? "";
+      }
+      wrapper.append(label, input);
+      return wrapper;
+    }
+
+    function renderAiTestResult(element, result) {
+      element.className = "provider-test-result";
+      if (!result || !result.tested_at) {
+        element.textContent = "Not tested from this dashboard yet.";
+        return;
+      }
+      element.classList.add(result.ok ? "success" : "error");
+      element.textContent = safe(result.message) + " - " + (formatDateTime(result.tested_at) || "recently");
+    }
+
+    async function saveAiSettings() {
+      if (!state.aiSettingsPayload) return;
+      const providerCards = Array.from(els.aiProviderGrid.querySelectorAll("[data-provider-id]"));
+      const providers = providerCards.map((card) => {
+        const provider = { id: card.dataset.providerId, extra: {} };
+        card.querySelectorAll("[data-ai-provider-field]").forEach((input) => {
+          const name = input.dataset.aiProviderField;
+          const value = input.type === "checkbox" ? input.checked : input.value;
+          if (name.startsWith("extra_")) {
+            provider.extra[name.slice(6)] = value;
+          } else {
+            provider[name] = value;
+          }
+        });
+        return provider;
+      });
+      const backendOrder = Array.from(els.aiFallbackOrder.querySelectorAll("[data-ai-order-provider]"))
+        .filter((input) => input.checked)
+        .sort((a, b) => numeric(a.dataset.aiOrderRank) - numeric(b.dataset.aiOrderRank))
+        .map((input) => input.dataset.aiOrderProvider);
+      if (!backendOrder.length) {
+        setAiSettingsStatus("Enable at least one provider in the fallback order.", "error");
+        return;
+      }
+      const payload = {
+        backend: els.aiBackend.value,
+        backend_order: backendOrder,
+        rate_limit_cooldown_seconds: numeric(els.aiRateLimitCooldown.value) || 90,
+        providers
+      };
+      els.saveAiSettingsButton.disabled = true;
+      setAiSettingsStatus("Saving AI settings...");
+      try {
+        const response = await fetch(API_AI_SETTINGS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "AI settings save failed");
+        state.aiSettingsPayload = result.data;
+        renderAiSettings();
+        setAiSettingsStatus("AI settings saved. New scout processes will use them.", "success");
+      } catch (error) {
+        setAiSettingsStatus(safe(error.message) || "AI settings could not be saved.", "error");
+      } finally {
+        els.saveAiSettingsButton.disabled = false;
+      }
+      renderScoutWorkspace();
+    }
+
+    async function testAiProvider(providerId, button) {
+      button.disabled = true;
+      const resultElement = els.aiProviderGrid.querySelector(`[data-ai-test-result="${providerId}"]`);
+      resultElement.textContent = "Testing connection...";
+      resultElement.className = "provider-test-result";
+      try {
+        const response = await fetch(API_AI_SETTINGS_URL + "/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: providerId })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.error || "Connection test failed");
+        renderAiTestResult(resultElement, payload.data);
+        const provider = (state.aiSettingsPayload.providers || []).find((item) => item.id === providerId);
+        if (provider) provider.last_test = payload.data;
+      } catch (error) {
+        renderAiTestResult(resultElement, { ok: false, message: safe(error.message), tested_at: new Date().toISOString() });
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function setAiSettingsStatus(message, kind = "") {
+      if (!els.aiSettingsStatus) return;
+      els.aiSettingsStatus.textContent = message;
+      els.aiSettingsStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    async function loadBoardSettings() {
+      state.boardSettingsLoading = true;
+      setBoardSettingsStatus("Loading job-board settings...");
+      try {
+        const response = await fetch(API_BOARD_SETTINGS_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.boardSettingsPayload = await response.json();
+        renderBoardSettings();
+      } catch (error) {
+        setBoardSettingsStatus("Job-board settings could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.boardSettingsLoading = false;
+      }
+    }
+
+    function renderBoardSettings() {
+      const payload = state.boardSettingsPayload || {};
+      const boards = payload.job_boards || {};
+      const linkedin = boards.linkedin || {};
+      const indeed = boards.indeed || {};
+      const behavior = payload.application_behavior || {};
+      const limits = payload.limits || {};
+      const defaults = payload.dashboard_defaults || {};
+      els.boardLinkedinEnabled.checked = linkedin.enabled !== false;
+      els.boardLinkedinEasyApplyOnly.checked = Boolean(linkedin.easy_apply_only);
+      els.boardLinkedinDistance.value = numeric(linkedin.distance_miles) || 25;
+      els.boardLinkedinCollect.value = numeric(linkedin.max_jobs_to_collect) || 25;
+      const levels = new Set(Array.isArray(linkedin.experience_levels) ? linkedin.experience_levels : []);
+      document.querySelectorAll("[data-linkedin-level]").forEach((input) => {
+        input.checked = levels.has(input.dataset.linkedinLevel);
+      });
+      els.boardIndeedEnabled.checked = Boolean(indeed.enabled);
+      els.boardIndeedUrl.value = indeed.search_url || "";
+      els.boardIndeedRadius.value = numeric(indeed.radius_km) || 25;
+      els.boardIndeedCollect.value = numeric(indeed.max_jobs_to_collect) || 25;
+      els.boardDefaultBrowser.value = defaults.browser || "chromium";
+      els.boardDefaultLocation.value = defaults.location || "Amstelveen";
+      els.boardDefaultAiBudget.value = defaults.ai_budget_mode || "smart";
+      els.boardDefaultHuman.checked = defaults.human_mode !== false;
+      els.boardDefaultFresh.checked = defaults.fresh_mode !== false;
+      els.behaviorPauseSubmit.checked = true;
+      els.behaviorSkipApplied.checked = behavior.skip_if_already_applied !== false;
+      els.behaviorCoverLetter.checked = behavior.submit_cover_letter !== false;
+      els.behaviorGenerateCoverLetter.checked = behavior.generate_cover_letter_with_ai !== false;
+      els.behaviorQuestions.checked = behavior.answer_screening_questions !== false;
+      els.behaviorPauseUnknown.checked = behavior.pause_on_unknown_question !== false;
+      els.behaviorHumanDelays.checked = behavior.add_human_like_delays !== false;
+      els.limitApplicationsRun.value = numeric(limits.max_applications_per_run) || 1;
+      els.limitJobsRun.value = numeric(limits.max_jobs_to_try_per_run) || 5;
+      els.limitApplicationsDay.value = numeric(limits.max_applications_per_day) || 10;
+      applyBoardDefaultsToRunModal();
+      setBoardSettingsStatus("Final application submission remains paused for human review.");
+    }
+
+    function applyBoardDefaultsToRunModal() {
+      const defaults = state.boardSettingsPayload?.dashboard_defaults || {};
+      if (defaults.browser) els.runBrowser.value = defaults.browser;
+      if (defaults.location) els.runLocation.value = defaults.location;
+      if (defaults.ai_budget_mode) els.runAiBudgetMode.value = defaults.ai_budget_mode;
+      els.runHumanMode.checked = defaults.human_mode !== false;
+      els.runFreshMode.checked = defaults.fresh_mode !== false;
+      updateWorkflowFields();
+    }
+
+    async function saveBoardSettings() {
+      const payload = {
+        job_boards: {
+          linkedin: {
+            enabled: els.boardLinkedinEnabled.checked,
+            easy_apply_only: els.boardLinkedinEasyApplyOnly.checked,
+            distance_miles: numeric(els.boardLinkedinDistance.value),
+            max_jobs_to_collect: numeric(els.boardLinkedinCollect.value),
+            experience_levels: Array.from(document.querySelectorAll("[data-linkedin-level]"))
+              .filter((input) => input.checked)
+              .map((input) => input.dataset.linkedinLevel)
+          },
+          indeed: {
+            enabled: els.boardIndeedEnabled.checked,
+            search_url: els.boardIndeedUrl.value,
+            radius_km: numeric(els.boardIndeedRadius.value),
+            max_jobs_to_collect: numeric(els.boardIndeedCollect.value)
+          }
+        },
+        dashboard_defaults: {
+          browser: els.boardDefaultBrowser.value,
+          location: els.boardDefaultLocation.value,
+          ai_budget_mode: els.boardDefaultAiBudget.value,
+          human_mode: els.boardDefaultHuman.checked,
+          fresh_mode: els.boardDefaultFresh.checked
+        },
+        application_behavior: {
+          pause_before_final_submit: true,
+          skip_if_already_applied: els.behaviorSkipApplied.checked,
+          submit_cover_letter: els.behaviorCoverLetter.checked,
+          generate_cover_letter_with_ai: els.behaviorGenerateCoverLetter.checked,
+          answer_screening_questions: els.behaviorQuestions.checked,
+          pause_on_unknown_question: els.behaviorPauseUnknown.checked,
+          add_human_like_delays: els.behaviorHumanDelays.checked
+        },
+        limits: {
+          max_applications_per_run: numeric(els.limitApplicationsRun.value),
+          max_jobs_to_try_per_run: numeric(els.limitJobsRun.value),
+          max_applications_per_day: numeric(els.limitApplicationsDay.value)
+        }
+      };
+      els.saveBoardSettingsButton.disabled = true;
+      setBoardSettingsStatus("Saving job-board settings...");
+      try {
+        const response = await fetch(API_BOARD_SETTINGS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Board settings save failed");
+        state.boardSettingsPayload = result.data;
+        renderBoardSettings();
+        setBoardSettingsStatus("Job-board defaults and application safety settings saved.", "success");
+      } catch (error) {
+        setBoardSettingsStatus(safe(error.message) || "Job-board settings could not be saved.", "error");
+      } finally {
+        els.saveBoardSettingsButton.disabled = false;
+      }
+    }
+
+    function setBoardSettingsStatus(message, kind = "") {
+      els.boardSettingsStatus.textContent = message;
+      els.boardSettingsStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    async function loadApplications() {
+      state.applicationsLoading = true;
+      setApplicationsStatus("Loading applications...");
+      try {
+        const response = await fetch(API_APPLICATIONS_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.applicationsPayload = await response.json();
+        renderApplications();
+        setApplicationsStatus("Application progress is saved locally and survives future scout runs.");
+      } catch (error) {
+        setApplicationsStatus("Applications could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.applicationsLoading = false;
+      }
+    }
+
+    function renderApplications() {
+      const payload = state.applicationsPayload || {};
+      const all = Array.isArray(payload.applications) ? payload.applications : [];
+      const counts = payload.by_stage || {};
+      els.applicationStatTotal.textContent = String(all.length);
+      els.applicationStatPreparing.textContent = String(numeric(counts.preparing));
+      els.applicationStatApplied.textContent = String(numeric(counts.applied));
+      els.applicationStatInterview.textContent = String(numeric(counts.interview));
+      els.applicationStatOffer.textContent = String(numeric(counts.offer));
+      const search = safe(state.applicationFilters.search).toLowerCase();
+      const stage = state.applicationFilters.stage;
+      const filtered = all.filter((record) => {
+        if (stage !== "all" && record.application_stage !== stage) return false;
+        if (!search) return true;
+        return [
+          record.title,
+          record.company,
+          record.location,
+          record.notes,
+          record.application_notes
+        ].some((value) => safe(value).toLowerCase().includes(search));
+      });
+      const visible = filtered.slice(0, state.applicationVisibleLimit);
+      els.applicationsTableBody.replaceChildren();
+      visible.forEach((record) => els.applicationsTableBody.append(applicationRow(record)));
+      els.applicationsEmpty.classList.toggle("hidden", filtered.length > 0);
+      els.applicationsTableBody.parentElement.classList.toggle("hidden", filtered.length === 0);
+      els.applicationsTableFooter.classList.toggle("hidden", filtered.length === 0);
+      els.applicationsVisibleCount.textContent = `Showing ${visible.length} of ${filtered.length} matching applications`;
+      els.loadMoreApplicationsButton.classList.toggle("hidden", visible.length >= filtered.length);
+      els.loadMoreApplicationsButton.textContent = `Show ${Math.min(50, filtered.length - visible.length)} more`;
+    }
+
+    function applicationRow(record) {
+      const row = document.createElement("tr");
+      const jobCell = document.createElement("td");
+      jobCell.dataset.label = "Job";
+      const title = document.createElement("div");
+      title.className = "application-job-title";
+      const titleLink = document.createElement(record.url ? "a" : "span");
+      titleLink.textContent = safe(record.title) || "Untitled job";
+      if (record.url) {
+        titleLink.href = record.url;
+        titleLink.target = "_blank";
+        titleLink.rel = "noopener";
+      }
+      const meta = document.createElement("span");
+      meta.className = "subline";
+      meta.textContent = [safe(record.company), safe(record.location)].filter(Boolean).join(" - ");
+      title.append(titleLink, meta);
+      jobCell.append(title);
+
+      const stageCell = document.createElement("td");
+      stageCell.dataset.label = "Stage and follow-up";
+      const edit = document.createElement("div");
+      edit.className = "application-edit";
+      const stage = document.createElement("select");
+      stage.setAttribute("aria-label", "Application stage for " + (safe(record.title) || "job"));
+      [
+        ["preparing", "Preparing"],
+        ["applied", "Applied"],
+        ["interview", "Interview"],
+        ["offer", "Offer"],
+        ["rejected", "Rejected"],
+        ["withdrawn", "Withdrawn"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.selected = value === record.application_stage;
+        stage.append(option);
+      });
+      const followUp = document.createElement("input");
+      followUp.type = "date";
+      followUp.value = safe(record.follow_up_at).slice(0, 10);
+      followUp.setAttribute("aria-label", "Follow-up date for " + (safe(record.title) || "job"));
+      edit.append(stage, followUp);
+      stageCell.append(edit);
+
+      const notesCell = document.createElement("td");
+      notesCell.dataset.label = "Notes";
+      const notes = document.createElement("textarea");
+      notes.className = "application-row-note";
+      notes.rows = 3;
+      notes.value = record.notes || record.application_notes || "";
+      notes.placeholder = "Interview details, contact, next step...";
+      notes.setAttribute("aria-label", "Application notes for " + (safe(record.title) || "job"));
+      notesCell.append(notes);
+
+      const updatedCell = document.createElement("td");
+      updatedCell.dataset.label = "Updated";
+      updatedCell.textContent = formatDateTime(record.application_updated_at || record.updated_at) || "-";
+
+      const actionCell = document.createElement("td");
+      actionCell.dataset.label = "Action";
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = "button secondary";
+      saveButton.textContent = "Save";
+      saveButton.setAttribute("aria-label", "Save application changes for " + (safe(record.title) || "job"));
+      saveButton.addEventListener("click", () => saveApplicationRecord(record, {
+        stage: stage.value,
+        follow_up_at: followUp.value,
+        notes: notes.value
+      }, saveButton));
+      actionCell.append(saveButton);
+      row.append(jobCell, stageCell, notesCell, updatedCell, actionCell);
+      return row;
+    }
+
+    async function saveApplicationRecord(record, updates, button) {
+      button.disabled = true;
+      setApplicationsStatus("Saving application...");
+      try {
+        const response = await fetch("/api/application", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job: record, ...updates })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Application save failed");
+        await loadApplications();
+        await loadData();
+        setApplicationsStatus("Application updated.", "success");
+      } catch (error) {
+        setApplicationsStatus(safe(error.message) || "Application could not be saved.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function setApplicationsStatus(message, kind = "") {
+      els.applicationsStatus.textContent = message;
+      els.applicationsStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    async function loadAssistant() {
+      state.assistantLoading = true;
+      setAssistantStatus("Loading application knowledge...");
+      try {
+        const response = await fetch(API_ASSISTANT_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.assistantPayload = await response.json();
+        renderAssistant();
+        setAssistantStatus("Answers are stored in your private workspace. Final submission remains manual.");
+      } catch (error) {
+        setAssistantStatus("Application assistant could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.assistantLoading = false;
+      }
+    }
+
+    function renderAssistant() {
+      const payload = state.assistantPayload || {};
+      renderAnswerMapping(els.applicationAnswersEditor, payload.application_answers || {}, "application");
+      renderAnswerMapping(els.learnedAnswersEditor, payload.learned_answers || {}, "learned");
+      els.assistantCoverStyle.value = payload.cover_letter_style || "";
+      els.assistantJobSelect.replaceChildren();
+      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+      if (!jobs.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No dashboard jobs available";
+        els.assistantJobSelect.append(option);
+      } else {
+        jobs.forEach((job, index) => {
+          const option = document.createElement("option");
+          option.value = String(index);
+          option.textContent = `${job.title || "Untitled"} - ${job.company || "Unknown company"} (${numeric(job.score)})`;
+          els.assistantJobSelect.append(option);
+        });
+      }
+      els.createAiDraftButton.disabled = !payload.ai_document_configured || !jobs.length;
+      els.createLocalDraftButton.disabled = !jobs.length;
+      els.assistantAiNote.textContent = payload.ai_document_configured
+        ? "Claude is configured. AI improvement runs only when you click the button."
+        : "Claude is not configured. Free local drafts remain available.";
+    }
+
+    function renderAnswerMapping(container, mapping, kind) {
+      container.replaceChildren();
+      Object.entries(mapping || {}).forEach(([key, value]) => {
+        addAnswerEditorRow(container, key, answerEditorValue(value), kind);
+      });
+      if (!container.children.length) {
+        addAnswerEditorRow(container, "", "", kind);
+      }
+    }
+
+    function addAnswerEditorRow(container, key = "", value = "", kind = "application") {
+      const row = document.createElement("div");
+      row.className = "answer-editor";
+      row.dataset.answerKind = kind;
+      const keyInput = document.createElement("input");
+      keyInput.value = key;
+      keyInput.placeholder = kind === "application" ? "Profile field or question key" : "Normalized question";
+      keyInput.setAttribute("aria-label", kind === "application" ? "Application answer key" : "Learned question");
+      const answer = document.createElement("textarea");
+      answer.value = value;
+      answer.placeholder = "Truthful answer";
+      answer.setAttribute("aria-label", "Saved answer");
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "remove-item-button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => row.remove());
+      row.append(keyInput, answer, remove);
+      container.append(row);
+    }
+
+    function answerEditorValue(value) {
+      if (value && typeof value === "object") {
+        return JSON.stringify(value, null, 2);
+      }
+      return String(value ?? "");
+    }
+
+    function collectAnswerMapping(container, { parseJson = false } = {}) {
+      const output = {};
+      container.querySelectorAll(".answer-editor").forEach((row) => {
+        const key = safe(row.querySelector("input")?.value);
+        const raw = String(row.querySelector("textarea")?.value || "").trim();
+        if (!key || !raw) return;
+        if (parseJson && /^[\\[{]/.test(raw)) {
+          try {
+            output[key] = JSON.parse(raw);
+            return;
+          } catch (_error) {
+            // Keep user-authored text when it is not valid JSON.
+          }
+        }
+        output[key] = raw;
+      });
+      return output;
+    }
+
+    async function saveAssistantKnowledge() {
+      const payload = {
+        application_answers: collectAnswerMapping(els.applicationAnswersEditor, { parseJson: true }),
+        learned_answers: collectAnswerMapping(els.learnedAnswersEditor),
+        cover_letter_style: els.assistantCoverStyle.value
+      };
+      els.saveAssistantKnowledgeButton.disabled = true;
+      setAssistantStatus("Saving answer library...");
+      try {
+        const response = await fetch(API_ASSISTANT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Answer library save failed");
+        const existingJobs = state.assistantPayload?.jobs || [];
+        state.assistantPayload = { ...result.data, jobs: result.data.jobs?.length ? result.data.jobs : existingJobs };
+        renderAssistant();
+        setAssistantStatus("Answer library saved.", "success");
+      } catch (error) {
+        setAssistantStatus(safe(error.message) || "Answer library could not be saved.", "error");
+      } finally {
+        els.saveAssistantKnowledgeButton.disabled = false;
+      }
+    }
+
+    function selectedAssistantJob() {
+      const jobs = Array.isArray(state.assistantPayload?.jobs) ? state.assistantPayload.jobs : [];
+      return jobs[numeric(els.assistantJobSelect.value)] || null;
+    }
+
+    async function generateAssistantDraft(mode) {
+      const job = selectedAssistantJob();
+      if (!job) {
+        setAssistantStatus("Choose a job before creating a draft.", "error");
+        return;
+      }
+      const button = mode === "ai" ? els.createAiDraftButton : els.createLocalDraftButton;
+      button.disabled = true;
+      setAssistantStatus(mode === "ai" ? "Improving draft with Claude..." : "Creating local draft...");
+      try {
+        const response = await fetch(API_ASSISTANT_URL + "/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job, mode })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Draft generation failed");
+        els.assistantDraft.value = result.data?.draft || "";
+        setAssistantStatus(mode === "ai" ? "Claude draft created. Review every claim before using it." : "Free local draft created.", "success");
+      } catch (error) {
+        setAssistantStatus(safe(error.message) || "Draft could not be created.", "error");
+      } finally {
+        button.disabled = mode === "ai" && !state.assistantPayload?.ai_document_configured;
+      }
+    }
+
+    async function findAssistantAnswer() {
+      const question = els.assistantQuestion.value.trim();
+      if (!question) {
+        setAssistantStatus("Enter an application question first.", "error");
+        return;
+      }
+      els.findAssistantAnswerButton.disabled = true;
+      els.assistantAnswerResult.textContent = "Checking saved profile facts...";
+      try {
+        const response = await fetch(API_ASSISTANT_URL + "/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            context: els.assistantQuestionContext.value
+          })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Answer lookup failed");
+        const data = result.data || {};
+        els.assistantAnswerResult.textContent = data.answer || data.message || "No saved answer found.";
+        setAssistantStatus(data.needs_ai ? "No deterministic answer found. Human review is required." : "Answer found in saved profile data.", data.needs_ai ? "" : "success");
+      } catch (error) {
+        els.assistantAnswerResult.textContent = safe(error.message) || "Answer lookup failed.";
+        setAssistantStatus("Answer lookup failed.", "error");
+      } finally {
+        els.findAssistantAnswerButton.disabled = false;
+      }
+    }
+
+    async function copyAssistantDraft() {
+      const text = els.assistantDraft.value.trim();
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      setAssistantStatus("Draft copied to clipboard.", "success");
+    }
+
+    function downloadAssistantDraft() {
+      const text = els.assistantDraft.value.trim();
+      if (!text) return;
+      const job = selectedAssistantJob() || {};
+      const filename = `${safe(job.company) || "company"}-${safe(job.title) || "cover-letter"}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 80) + ".txt";
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([text + "\n"], { type: "text/plain;charset=utf-8" }));
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function setAssistantStatus(message, kind = "") {
+      els.assistantStatus.textContent = message;
+      els.assistantStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    async function loadMaintenance() {
+      state.maintenanceLoading = true;
+      setMaintenanceStatus("Loading diagnostics...");
+      try {
+        const response = await fetch(API_MAINTENANCE_URL + "?t=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        state.maintenancePayload = await response.json();
+        renderMaintenance();
+        setMaintenanceStatus("Diagnostics refreshed.");
+      } catch (error) {
+        setMaintenanceStatus("Diagnostics could not be loaded: " + (safe(error.message) || "unknown error"), "error");
+      } finally {
+        state.maintenanceLoading = false;
+      }
+    }
+
+    function renderMaintenance() {
+      const payload = state.maintenancePayload || {};
+      const diagnostics = payload.diagnostics || {};
+      els.diagnosticWorkspace.textContent = diagnostics.workspace_ready ? "Ready" : "Needs attention";
+      const database = diagnostics.operational_database || {};
+      els.diagnosticDatabase.textContent = database.exists
+        ? `SQLite ready (${formatFileSize(database.size_bytes) || "empty"})`
+        : "Not initialized";
+      els.diagnosticResume.textContent = diagnostics.resume_available ? "Progress available" : "No interrupted run";
+      els.diagnosticLogs.textContent = `${numeric(diagnostics.log_count)} (${formatFileSize(diagnostics.log_size_bytes) || "0 bytes"})`;
+      els.diagnosticRuns.textContent = String(numeric(diagnostics.run_history_count));
+      const latestError = diagnostics.latest_error || {};
+      els.latestDiagnosticError.classList.toggle("hidden", !latestError.message);
+      if (latestError.message) {
+        els.latestDiagnosticError.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = "Latest diagnostic signal";
+        const copy = document.createElement("span");
+        copy.textContent = `${latestError.log}: ${latestError.message}`;
+        els.latestDiagnosticError.append(title, copy);
+      }
+      renderMaintenanceLogs(payload.logs || []);
+      renderMaintenanceRuns(payload.runs || []);
+      renderBackups(payload.backups || []);
+    }
+
+    function renderMaintenanceLogs(logs) {
+      els.maintenanceLogList.replaceChildren();
+      (Array.isArray(logs) ? logs.slice(0, 100) : []).forEach((record) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "log-list-button";
+        button.dataset.logName = record.name;
+        const title = document.createElement("strong");
+        title.textContent = record.name;
+        const meta = document.createElement("span");
+        meta.className = "subline";
+        meta.textContent = `${labelize(record.kind)} - ${formatFileSize(record.size_bytes)} - ${formatDateTime(record.modified_at)}`;
+        button.append(title, meta);
+        button.addEventListener("click", () => openMaintenanceLog(record, button));
+        els.maintenanceLogList.append(button);
+      });
+      if (!els.maintenanceLogList.children.length) {
+        els.maintenanceLogList.textContent = "No saved logs found.";
+      }
+    }
+
+    async function openMaintenanceLog(record, button) {
+      els.maintenanceLogList.querySelectorAll(".log-list-button").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      els.selectedLogTitle.textContent = record.name;
+      els.selectedLogMeta.textContent = "Loading log...";
+      els.maintenanceLogViewer.textContent = "Loading...";
+      try {
+        const response = await fetch("/api/log-file?name=" + encodeURIComponent(record.name), { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.ok === false) throw new Error(payload.error || "Log could not be loaded");
+        state.selectedLogText = payload.text || "";
+        els.maintenanceLogViewer.textContent = state.selectedLogText || "This log is empty.";
+        els.selectedLogMeta.textContent = `${formatFileSize(payload.size_bytes)}${payload.truncated ? " - showing the latest section" : ""}`;
+        els.copyLogButton.disabled = !state.selectedLogText;
+      } catch (error) {
+        state.selectedLogText = "";
+        els.maintenanceLogViewer.textContent = safe(error.message) || "Log could not be loaded.";
+        els.copyLogButton.disabled = true;
+      }
+    }
+
+    function renderMaintenanceRuns(runs) {
+      els.maintenanceRunList.replaceChildren();
+      (Array.isArray(runs) ? runs.slice(0, 100) : []).forEach((run) => {
+        const item = document.createElement("article");
+        item.className = "run-list-item";
+        const title = document.createElement("strong");
+        title.textContent = `${safe(run.query) || "Multi-query run"} - ${safe(run.location) || "Location unavailable"}`;
+        const meta = document.createElement("span");
+        meta.className = "subline";
+        meta.textContent = [
+          formatDateTime(run.completed_at || run.timestamp || run.started_at),
+          `${numeric(run.total_scanned)} scanned`,
+          `${numeric(run.new_recommendations)} recommended`,
+          `${numeric(run.rejected_or_below_threshold)} below threshold`
+        ].filter(Boolean).join(" - ");
+        item.append(title, meta);
+        els.maintenanceRunList.append(item);
+      });
+      if (!els.maintenanceRunList.children.length) {
+        els.maintenanceRunList.textContent = "No scout history is available.";
+      }
+    }
+
+    function renderBackups(backups) {
+      els.maintenanceBackupList.replaceChildren();
+      (Array.isArray(backups) ? backups.slice(0, 12) : []).forEach((backup) => {
+        const item = document.createElement("div");
+        item.className = "backup-list-item";
+        const title = document.createElement("strong");
+        title.textContent = backup.name;
+        const meta = document.createElement("span");
+        meta.className = "subline";
+        meta.textContent = `${formatFileSize(backup.size_bytes)} - ${formatDateTime(backup.modified_at)}`;
+        const link = document.createElement("a");
+        link.className = "job-action";
+        link.href = "/api/backup-file?name=" + encodeURIComponent(backup.name);
+        link.textContent = "Download backup";
+        item.append(title, meta, link);
+        els.maintenanceBackupList.append(item);
+      });
+      if (!els.maintenanceBackupList.children.length) {
+        els.maintenanceBackupList.textContent = "No backups created yet.";
+      }
+    }
+
+    async function createMaintenanceBackup() {
+      els.createBackupButton.disabled = true;
+      setMaintenanceStatus("Creating secret-free backup...");
+      try {
+        const response = await fetch(API_MAINTENANCE_URL + "/backup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Backup failed");
+        await loadMaintenance();
+        setMaintenanceStatus("Backup created. API keys and browser sessions were excluded.", "success");
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Backup could not be created.", "error");
+      } finally {
+        els.createBackupButton.disabled = false;
+      }
+    }
+
+    async function pruneMaintenanceLogs() {
+      if (!window.confirm("Delete log files older than 90 days while keeping at least the 10 newest logs?")) return;
+      els.pruneLogsButton.disabled = true;
+      setMaintenanceStatus("Removing old logs...");
+      try {
+        const response = await fetch(API_MAINTENANCE_URL + "/prune-logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ older_than_days: 90, keep_latest: 10 })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Log cleanup failed");
+        await loadMaintenance();
+        setMaintenanceStatus(`Removed ${numeric(result.data?.deleted_count)} old log file(s).`, "success");
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Old logs could not be removed.", "error");
+      } finally {
+        els.pruneLogsButton.disabled = false;
+      }
+    }
+
+    async function copyMaintenanceLog() {
+      if (!state.selectedLogText) return;
+      await navigator.clipboard.writeText(state.selectedLogText);
+      setMaintenanceStatus("Log copied to clipboard.", "success");
+    }
+
+    function setMaintenanceStatus(message, kind = "") {
+      els.maintenanceStatus.textContent = message;
+      els.maintenanceStatus.className = "profile-status" + (kind ? " " + kind : "");
+    }
+
+    function renderScoutWorkspace() {
+      const control = state.runControl || {};
+      const available = state.runControlAvailable;
+      const active = Boolean(control.active);
+      if (els.scoutWorkspaceEyebrow) {
+        els.scoutWorkspaceEyebrow.textContent = available ? "Local controller connected" : "Local controller unavailable";
+        els.scoutWorkspaceStatus.textContent = active
+          ? "A scout run is active"
+          : (control.status === "failed" ? "The last run needs attention" : "Ready for the next scout run");
+        els.scoutWorkspaceDetail.textContent = available
+          ? runControlStatusText(control)
+          : "Start the dashboard with start_dashboard.ps1 to enable run controls.";
+        els.scoutWorkspaceBadge.textContent = active ? "Running" : labelize(control.status || "Idle");
+        els.scoutWorkspaceBadge.className = "decision-chip " + (active ? "APPLY_FIRST" : "");
+      }
+      const queries = Array.isArray(state.strategyPayload?.queries) ? state.strategyPayload.queries : [];
+      const locations = Array.isArray(state.strategyPayload?.preferences?.locations)
+        ? state.strategyPayload.preferences.locations
+        : [];
+      if (els.scoutQueryCount) {
+        els.scoutQueryCount.textContent = queries.length ? `${queries.length} active queries` : "Queries not loaded";
+        els.scoutLocationSummary.textContent = locations.length
+          ? `Searching ${locations.slice(0, 4).join(", ")}${locations.length > 4 ? ` and ${locations.length - 4} more` : ""}.`
+          : "Add target locations in Job Strategy.";
+      }
+      const ai = state.aiSettingsPayload || {};
+      const configured = Array.isArray(ai.providers)
+        ? ai.providers.filter((provider) => provider.configured)
+        : [];
+      if (els.scoutAiBackend) {
+        els.scoutAiBackend.textContent = ai.backend
+          ? (ai.backend === "auto" ? "Automatic fallback" : labelize(ai.backend))
+          : "Settings not loaded";
+        els.scoutAiFallbacks.textContent = configured.length
+          ? `Configured: ${configured.map((provider) => provider.label).join(", ")}.`
+          : "No configured AI provider was detected.";
+      }
+      if (els.scoutResumeStatus) {
+        els.scoutResumeStatus.textContent = control.resume_available ? "Progress available" : "No interrupted run";
+        els.resumeScoutButton.disabled = !available || !control.resume_available || active;
+      }
+    }
+
+    function openScoutModal({ resume = false } = {}) {
+      openRunScoutModal();
+      if (resume && els.runResumeMode && !els.runResumeMode.disabled) {
+        els.runResumeMode.checked = true;
+      }
+    }
 
     function emptyData() {
       return {
@@ -2202,6 +5582,7 @@
 
     function render() {
       renderThemeToggle();
+      renderHome();
       syncFilterOptions();
       renderStats();
       renderFreshProgress();
@@ -2245,6 +5626,65 @@
       els.themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
       els.themeToggle.setAttribute("title", "Switch to " + nextLabel.toLowerCase() + " mode");
       els.themeToggle.setAttribute("aria-label", "Switch to " + nextLabel.toLowerCase() + " mode");
+    }
+
+    function renderHome() {
+      if (!els.homeFocusTitle) return;
+      const allJobs = jobs();
+      const actionable = allJobs.filter((job) => needsAction(job));
+      const applyFirst = actionable.filter((job) => safe(job.decision_category) === "APPLY_FIRST").length;
+      const goodOptions = actionable.filter((job) => safe(job.decision_category) === "GOOD_OPTIONS").length;
+      const manual = (state.data.summary || {}).by_manual_status || manualStatusCounts(allJobs);
+      const activeRun = Boolean(state.runControl?.active || state.data.active_run_id);
+      const runs = Array.isArray(state.data.runs) ? state.data.runs : [];
+      const latestRun = runs.length ? runs[runs.length - 1] : {};
+      const latestStats = latestRun.stats || {};
+
+      els.homeActionableCount.textContent = String(actionable.length);
+      els.homeApplyCount.textContent = String(applyFirst);
+      els.homeGoodCount.textContent = String(goodOptions);
+      if (actionable.length) {
+        els.homeFocusTitle.textContent = `${actionable.length} strong job${actionable.length === 1 ? "" : "s"} are waiting for your review.`;
+        els.homeFocusCopy.textContent = applyFirst
+          ? `Start with ${applyFirst} Apply First role${applyFirst === 1 ? "" : "s"}, then review the strongest Good Options.`
+          : "Your Apply First list is clear, so the strongest Good Options are the next useful place to look.";
+      } else {
+        els.homeFocusTitle.textContent = "Your actionable queue is clear.";
+        els.homeFocusCopy.textContent = "Start a fresh scout run to look for new opportunities, or review your application follow-ups.";
+      }
+
+      els.homeRunBadge.textContent = activeRun ? "Scout running" : (state.runControlAvailable ? "Scout ready" : "Controller offline");
+      els.homeRunBadge.className = "home-card-status" + (activeRun ? " APPLY_FIRST" : "");
+      els.homeRunTitle.textContent = activeRun
+        ? safe(state.runControl?.workflow_label) || "A scout run is active"
+        : (state.runControl?.resume_available ? "A previous run can be resumed" : "Ready for the next scout");
+      els.homeRunCopy.textContent = activeRun
+        ? runControlStatusText(state.runControl || {})
+        : (state.runControlAvailable
+          ? "Run controls are connected. Login and verification remain manual."
+          : "Launch the dashboard with its desktop shortcut to enable local run controls.");
+
+      const readiness = numeric(state.profilePayload?.readiness?.percent);
+      const cvName = safe(state.profilePayload?.cv?.filename);
+      els.homeSetupValue.textContent = readiness ? `${readiness}% ready` : (state.profileLoading ? "Checking..." : "Review setup");
+      els.homeSetupHealth.textContent = state.profilePayload
+        ? `${cvName ? "CV connected" : "Add a CV"}; profile, preferences, and work authorization stay in your private workspace.`
+        : "Open Profile & CV to verify the information used for filtering and AI scoring.";
+
+      const applied = numeric(manual.applied);
+      els.homeAppliedValue.textContent = `${applied} applied`;
+      els.homeAppliedCopy.textContent = applied
+        ? "Keep stages, interview notes, and follow-up dates current so promising applications do not disappear from view."
+        : "Mark jobs as Applied from the Jobs board, then manage their stages here.";
+
+      const runLabel = safe(latestRun.run_label) || "No completed run";
+      els.homeLatestRunValue.textContent = runLabel;
+      const accepted = numeric(latestStats.accepted)
+        || (numeric(latestStats.apply_first) + numeric(latestStats.good_options));
+      const collected = numeric(latestStats.collected) || numeric(latestStats.processed_jobs);
+      els.homeLatestRunCopy.textContent = latestRun.run_id
+        ? `${collected} collected, ${accepted} accepted. Open Runs & Logs for diagnostics and the saved terminal record.`
+        : "Start a scout to build run history and searchable diagnostics.";
     }
 
     function syncFilterOptions() {
@@ -3410,6 +6850,7 @@
         state.runControl = null;
       }
       renderRunControl();
+      renderHome();
     }
 
     function renderRunControl() {
@@ -3443,6 +6884,8 @@
       for (const button of [els.stopAfterJobButton, els.stopAfterPageButton, els.stopNowButton]) {
         if (button) button.disabled = !available || !active;
       }
+      renderScoutWorkspace();
+      renderHome();
     }
 
     function runControlStatusText(control) {
@@ -3470,6 +6913,28 @@
       }
     }
 
+    function trapRunScoutFocus(event) {
+      if (event.key !== "Tab" || els.runScoutOverlay.classList.contains("hidden")) return;
+      const candidates = Array.from(
+        els.runScoutOverlay.querySelectorAll(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((element) => !element.hidden && element.offsetParent !== null);
+      if (!candidates.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = candidates[0];
+      const last = candidates[candidates.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
     function updateWorkflowFields() {
       const workflow = els.runWorkflow.value;
       const needsQuery = ["linkedin_single", "indeed_description"].includes(workflow);
@@ -3481,6 +6946,13 @@
       }
       if (workflow === "indeed_description" || workflow === "linkedin_process_only") {
         els.runFreshMode.checked = false;
+      }
+      if (els.runAiBudgetMode) {
+        const supportsAiBudgetMode = !["indeed_description", "linkedin_process_only"].includes(workflow);
+        els.runAiBudgetMode.disabled = !supportsAiBudgetMode || !els.runFreshMode.checked;
+        els.runAiBudgetMode.title = supportsAiBudgetMode
+          ? "Smart Guard stops low-yield runs early, Deep Search continues longer, Off disables AI budget stops."
+          : "AI budget mode only applies to fresh LinkedIn scouting.";
       }
       if (els.runWorkflowHint) {
         const hints = {
@@ -3507,6 +6979,7 @@
         location: els.runLocation.value,
         max_pages: els.runMaxPages.value,
         browser: els.runBrowser.value,
+        ai_budget_mode: els.runAiBudgetMode ? els.runAiBudgetMode.value : "smart",
         human_mode: els.runHumanMode.checked,
         fresh: els.runFreshMode.checked,
         resume: els.runResumeMode.checked
@@ -3539,6 +7012,71 @@
     }
 
     function bindControls() {
+      for (const button of els.appNavButtons) {
+        button.addEventListener("click", () => navigateToPage(button.dataset.appPage));
+      }
+      els.openProfileSetupButton.addEventListener("click", () => navigateToPage("profile"));
+      els.homeStartScoutButton.addEventListener("click", () => openScoutModal());
+      els.homeReviewJobsButton.addEventListener("click", () => navigateToPage("jobs"));
+      els.homeApplicationsButton.addEventListener("click", () => navigateToPage("applications"));
+      els.homeRunDetailsButton.addEventListener("click", () => navigateToPage("scout"));
+      els.homeTrackApplicationsButton.addEventListener("click", () => navigateToPage("applications"));
+      els.homeRunsButton.addEventListener("click", () => navigateToPage("runs"));
+      els.saveProfileButton.addEventListener("click", saveProfile);
+      els.profileForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        saveProfile();
+      });
+      els.uploadCvButton.addEventListener("click", uploadCv);
+      els.addExperienceButton.addEventListener("click", () => {
+        addRepeaterEntry(els.experienceRepeater, "experience", PROFILE_EXPERIENCE_FIELDS);
+      });
+      els.addEducationButton.addEventListener("click", () => {
+        addRepeaterEntry(els.educationRepeater, "education", PROFILE_EDUCATION_FIELDS);
+      });
+      els.addLanguageButton.addEventListener("click", () => {
+        addRepeaterEntry(els.languageRepeater, "language", PROFILE_LANGUAGE_FIELDS);
+      });
+      els.saveStrategyButton.addEventListener("click", saveStrategy);
+      els.strategyForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        saveStrategy();
+      });
+      document.getElementById("strategyQueries").addEventListener("input", updateStrategyQueryCount);
+      els.openScoutWorkspaceRunButton.addEventListener("click", () => openScoutModal());
+      els.startRecommendedScoutButton.addEventListener("click", () => openScoutModal());
+      els.openSearchStrategyButton.addEventListener("click", () => navigateToPage("strategy"));
+      els.openAiSettingsButton.addEventListener("click", () => navigateToPage("settings"));
+      els.resumeScoutButton.addEventListener("click", () => openScoutModal({ resume: true }));
+      els.saveAiSettingsButton.addEventListener("click", saveAiSettings);
+      els.saveBoardSettingsButton.addEventListener("click", saveBoardSettings);
+      els.refreshApplicationsButton.addEventListener("click", loadApplications);
+      els.applicationSearch.addEventListener("input", () => {
+        state.applicationFilters.search = els.applicationSearch.value;
+        state.applicationVisibleLimit = 50;
+        renderApplications();
+      });
+      els.applicationStageFilter.addEventListener("change", () => {
+        state.applicationFilters.stage = els.applicationStageFilter.value;
+        state.applicationVisibleLimit = 50;
+        renderApplications();
+      });
+      els.loadMoreApplicationsButton.addEventListener("click", () => {
+        state.applicationVisibleLimit += 50;
+        renderApplications();
+      });
+      els.saveAssistantKnowledgeButton.addEventListener("click", saveAssistantKnowledge);
+      els.addApplicationAnswerButton.addEventListener("click", () => addAnswerEditorRow(els.applicationAnswersEditor, "", "", "application"));
+      els.addLearnedAnswerButton.addEventListener("click", () => addAnswerEditorRow(els.learnedAnswersEditor, "", "", "learned"));
+      els.findAssistantAnswerButton.addEventListener("click", findAssistantAnswer);
+      els.createLocalDraftButton.addEventListener("click", () => generateAssistantDraft("local"));
+      els.createAiDraftButton.addEventListener("click", () => generateAssistantDraft("ai"));
+      els.copyAssistantDraftButton.addEventListener("click", copyAssistantDraft);
+      els.downloadAssistantDraftButton.addEventListener("click", downloadAssistantDraft);
+      els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
+      els.createBackupButton.addEventListener("click", createMaintenanceBackup);
+      els.pruneLogsButton.addEventListener("click", pruneMaintenanceLogs);
+      els.copyLogButton.addEventListener("click", copyMaintenanceLog);
       els.themeToggle.addEventListener("click", toggleTheme);
       els.searchInput.addEventListener("input", () => {
         state.filters.search = els.searchInput.value;
@@ -3584,12 +7122,14 @@
         if (event.target === els.runScoutOverlay) closeRunScoutModal();
       });
       els.runWorkflow.addEventListener("change", updateWorkflowFields);
+      els.runFreshMode.addEventListener("change", updateWorkflowFields);
       els.startRunButton.addEventListener("click", startDashboardRun);
       els.refreshRunControlButton.addEventListener("click", loadRunControl);
       els.stopAfterJobButton.addEventListener("click", () => stopDashboardRun("after_current_job"));
       els.stopAfterPageButton.addEventListener("click", () => stopDashboardRun("after_current_page"));
       els.stopNowButton.addEventListener("click", () => stopDashboardRun("now"));
       window.addEventListener("keydown", (event) => {
+        trapRunScoutFocus(event);
         if (event.key === "Escape" && !els.runScoutOverlay.classList.contains("hidden")) {
           closeRunScoutModal();
           return;
@@ -3605,6 +7145,7 @@
     }
 
     bindControls();
+    navigateToPage(state.currentPage, { persist: false });
     applyTheme(state.theme, false);
     render();
     loadData();

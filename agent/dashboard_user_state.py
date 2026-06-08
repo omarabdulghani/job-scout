@@ -24,6 +24,23 @@ STATUS_LABELS = {
     STATUS_APPLIED: "Applied",
     STATUS_IRRELEVANT: "Irrelevant",
 }
+APPLICATION_STAGE_NONE = ""
+APPLICATION_STAGE_PREPARING = "preparing"
+APPLICATION_STAGE_APPLIED = "applied"
+APPLICATION_STAGE_INTERVIEW = "interview"
+APPLICATION_STAGE_OFFER = "offer"
+APPLICATION_STAGE_REJECTED = "rejected"
+APPLICATION_STAGE_WITHDRAWN = "withdrawn"
+APPLICATION_STAGE_LABELS = {
+    APPLICATION_STAGE_NONE: "Not started",
+    APPLICATION_STAGE_PREPARING: "Preparing",
+    APPLICATION_STAGE_APPLIED: "Applied",
+    APPLICATION_STAGE_INTERVIEW: "Interview",
+    APPLICATION_STAGE_OFFER: "Offer",
+    APPLICATION_STAGE_REJECTED: "Rejected",
+    APPLICATION_STAGE_WITHDRAWN: "Withdrawn",
+}
+VALID_APPLICATION_STAGES = set(APPLICATION_STAGE_LABELS)
 
 
 class DashboardUserStateStore:
@@ -70,10 +87,128 @@ class DashboardUserStateStore:
             "last_run_id": clean_text(job.get("run_id")),
             "last_run_label": clean_text(job.get("run_label")),
         }
+        existing = self.data.get("jobs", {}).get(job_key, {})
+        if isinstance(existing, dict):
+            for field in (
+                "application_stage",
+                "application_stage_label",
+                "application_updated_at",
+                "applied_at",
+                "follow_up_at",
+                "notes",
+            ):
+                if field in existing:
+                    record[field] = existing[field]
+        if normalized_status == STATUS_APPLIED and not record.get("application_stage"):
+            record["application_stage"] = APPLICATION_STAGE_APPLIED
+            record["application_stage_label"] = APPLICATION_STAGE_LABELS[APPLICATION_STAGE_APPLIED]
+            record["application_updated_at"] = record["updated_at"]
+            record["applied_at"] = record["updated_at"]
         self.data["jobs"][job_key] = record
         self._refresh_updated_at(record["updated_at"])
         self.write()
         return dict(record)
+
+    def update_application(
+        self,
+        job: dict[str, Any],
+        *,
+        stage: str,
+        notes: str = "",
+        applied_at: str = "",
+        follow_up_at: str = "",
+        updated_at: str | None = None,
+    ) -> dict[str, Any]:
+        normalized_stage = normalize_application_stage(stage)
+        job_key = build_job_key(job)
+        if not job_key:
+            raise ValueError("Could not build a stable dashboard job key")
+        timestamp = updated_at or now_iso()
+        existing = self.data.get("jobs", {}).get(job_key, {})
+        record = dict(existing) if isinstance(existing, dict) else {}
+        record.update(
+            {
+                "job_key": job_key,
+                "status": (
+                    STATUS_UNREVIEWED
+                    if normalized_stage in {APPLICATION_STAGE_NONE, APPLICATION_STAGE_PREPARING}
+                    else STATUS_APPLIED
+                ),
+                "status_label": (
+                    STATUS_LABELS[STATUS_UNREVIEWED]
+                    if normalized_stage in {APPLICATION_STAGE_NONE, APPLICATION_STAGE_PREPARING}
+                    else STATUS_LABELS[STATUS_APPLIED]
+                ),
+                "updated_at": timestamp,
+                "board": clean_text(job.get("board")) or record.get("board") or "linkedin",
+                "job_id": clean_text(job.get("job_id")) or record.get("job_id", ""),
+                "url": canonical_job_url(job.get("url")) or record.get("url", ""),
+                "title": clean_text(job.get("title")) or record.get("title", ""),
+                "company": clean_text(job.get("company")) or record.get("company", ""),
+                "location": clean_text(job.get("location")) or record.get("location", ""),
+                "last_run_id": clean_text(job.get("run_id")) or record.get("last_run_id", ""),
+                "last_run_label": clean_text(job.get("run_label")) or record.get("last_run_label", ""),
+                "application_stage": normalized_stage,
+                "application_stage_label": APPLICATION_STAGE_LABELS[normalized_stage],
+                "application_updated_at": timestamp,
+                "notes": str(notes or "").strip()[:5000],
+                "applied_at": clean_text(applied_at),
+                "follow_up_at": clean_text(follow_up_at),
+            }
+        )
+        if normalized_stage == APPLICATION_STAGE_APPLIED and not record["applied_at"]:
+            record["applied_at"] = timestamp
+        if normalized_stage == APPLICATION_STAGE_NONE and not record["notes"] and not record["follow_up_at"]:
+            self.data["jobs"].pop(job_key, None)
+            self._refresh_updated_at(timestamp)
+            self.write()
+            return {
+                "job_key": job_key,
+                "status": STATUS_UNREVIEWED,
+                "status_label": STATUS_LABELS[STATUS_UNREVIEWED],
+                "application_stage": APPLICATION_STAGE_NONE,
+                "application_stage_label": APPLICATION_STAGE_LABELS[APPLICATION_STAGE_NONE],
+                "updated_at": timestamp,
+            }
+        self.data["jobs"][job_key] = record
+        self._refresh_updated_at(timestamp)
+        self.write()
+        return dict(record)
+
+    def application_records(
+        self,
+        dashboard_data: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        live_jobs: dict[str, dict[str, Any]] = {}
+        if isinstance(dashboard_data, dict):
+            for job in dashboard_data.get("jobs", []):
+                if isinstance(job, dict):
+                    job_key = build_job_key(job)
+                    if job_key:
+                        live_jobs[job_key] = job
+        records: list[dict[str, Any]] = []
+        for job_key, saved in self.data.get("jobs", {}).items():
+            if not isinstance(saved, dict):
+                continue
+            stage = normalize_application_stage(saved.get("application_stage"))
+            if not stage and normalize_status(saved.get("status")) != STATUS_APPLIED:
+                continue
+            if not stage:
+                stage = APPLICATION_STAGE_APPLIED
+            merged = dict(live_jobs.get(job_key, {}))
+            merged.update(saved)
+            merged["job_key"] = job_key
+            merged["application_stage"] = stage
+            merged["application_stage_label"] = APPLICATION_STAGE_LABELS[stage]
+            records.append(merged)
+        return sorted(
+            records,
+            key=lambda item: (
+                clean_text(item.get("application_updated_at") or item.get("updated_at")),
+                clean_text(item.get("title")),
+            ),
+            reverse=True,
+        )
 
     def get_record(self, job: dict[str, Any]) -> dict[str, Any] | None:
         job_key = build_job_key(job)
@@ -99,6 +234,15 @@ class DashboardUserStateStore:
             job["manual_status"] = status
             job["manual_status_label"] = STATUS_LABELS[status]
             job["manual_updated_at"] = clean_text(record.get("updated_at")) if record else ""
+            stage = normalize_application_stage(record.get("application_stage")) if record else ""
+            if not stage and status == STATUS_APPLIED:
+                stage = APPLICATION_STAGE_APPLIED
+            job["application_stage"] = stage
+            job["application_stage_label"] = APPLICATION_STAGE_LABELS[stage]
+            job["application_updated_at"] = clean_text(record.get("application_updated_at")) if record else ""
+            job["applied_at"] = clean_text(record.get("applied_at")) if record else ""
+            job["follow_up_at"] = clean_text(record.get("follow_up_at")) if record else ""
+            job["application_notes"] = str(record.get("notes") or "") if record else ""
 
         summary = merged.setdefault("summary", {})
         if isinstance(summary, dict):
@@ -163,6 +307,11 @@ def manual_status_counts(jobs: list[dict[str, Any]]) -> dict[str, int]:
 def normalize_status(status: Any) -> str:
     value = clean_text(status).lower().replace("-", "_")
     return value if value in VALID_STATUSES else STATUS_UNREVIEWED
+
+
+def normalize_application_stage(stage: Any) -> str:
+    value = clean_text(stage).lower().replace("-", "_")
+    return value if value in VALID_APPLICATION_STAGES else APPLICATION_STAGE_NONE
 
 
 def build_job_key(job: dict[str, Any]) -> str:

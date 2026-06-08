@@ -13,12 +13,21 @@ import subprocess
 import sys
 import threading
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
+from agent.ai_settings_service import AISettingsService
+from agent.application_assistant_service import ApplicationAssistantService
+from agent.board_settings_service import BoardSettingsService
 from agent.dashboard_user_state import (
     DashboardUserStateStore,
     build_job_key,
 )
+from agent.profile_service import ProfileService
+from agent.maintenance_service import MaintenanceService
+from agent.operational_store import OperationalStore
 from agent.scout_stop import clear_stop_request, request_stop
+from agent.strategy_service import StrategyService
+from agent.user_workspace import UserWorkspace
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -39,6 +48,7 @@ class DashboardRunController:
     }
     MAX_PAGE_CHOICES = {"1", "2", "3", "4", "all"}
     BROWSER_CHOICES = {"chromium", "firefox"}
+    AI_BUDGET_MODE_CHOICES = {"smart", "deep", "off"}
 
     def __init__(self, root: Path, *, progress_path: Path = DEFAULT_PROGRESS_PATH) -> None:
         self.root = Path(root).resolve()
@@ -135,6 +145,7 @@ class DashboardRunController:
         query = self._clean_text(payload.get("query") or "", max_length=120)
         max_pages = self._clean_choice(payload.get("max_pages"), self.MAX_PAGE_CHOICES, "1")
         browser = self._clean_choice(payload.get("browser"), self.BROWSER_CHOICES, "chromium")
+        ai_budget_mode = self._clean_choice(payload.get("ai_budget_mode"), self.AI_BUDGET_MODE_CHOICES, "smart")
         human_mode = bool(payload.get("human_mode", True))
         fresh = bool(payload.get("fresh", workflow == "linkedin_multi_fresh"))
         resume = bool(payload.get("resume", False))
@@ -163,6 +174,8 @@ class DashboardRunController:
             command.append("--human-mode")
         if resume and workflow != "linkedin_process_only":
             command.append("--resume")
+        if fresh and ai_budget_mode != "smart" and workflow in {"linkedin_multi_fresh", "linkedin_single"}:
+            command += ["--ai-budget-mode", ai_budget_mode]
         command += ["--browser", browser]
         return command, workflow, self.WORKFLOW_LABELS[workflow]
 
@@ -222,6 +235,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     dashboard_data_path: Path = DEFAULT_DASHBOARD_DATA_PATH
     user_state_path: Path = DEFAULT_USER_STATE_PATH
     run_controller: DashboardRunController | None = None
+    user_workspace: UserWorkspace | None = None
+    operational_store: OperationalStore | None = None
 
     def log_message(self, format: str, *args) -> None:
         return
@@ -244,9 +259,152 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 return
             self._send_json(self.run_controller.status())
             return
+        if self._path_without_query() == "/api/profile":
+            self._send_json(self._profile_service().payload())
+            return
+        if self._path_without_query() == "/api/strategy":
+            self._send_json(self._strategy_service().payload())
+            return
+        if self._path_without_query() == "/api/ai-settings":
+            self._send_json(self._ai_settings_service().payload())
+            return
+        if self._path_without_query() == "/api/board-settings":
+            self._send_json(self._board_settings_service().payload())
+            return
+        if self._path_without_query() == "/api/applications":
+            store = DashboardUserStateStore(self.user_state_path)
+            dashboard = self._read_dashboard_data()
+            if self.operational_store:
+                self.operational_store.sync(dashboard, store.data)
+                records = self.operational_store.application_records()
+                counts = self.operational_store.stage_counts()
+            else:
+                records = store.application_records(dashboard)
+                counts: dict[str, int] = {}
+                for record in records:
+                    stage = str(record.get("application_stage") or "applied")
+                    counts[stage] = counts.get(stage, 0) + 1
+            self._send_json({"applications": records, "by_stage": counts})
+            return
+        if self._path_without_query() == "/api/application-assistant":
+            dashboard = self._load_dashboard_with_user_state()
+            self._send_json(
+                self._application_assistant_service().payload(dashboard.get("jobs", []))
+            )
+            return
+        if self._path_without_query() == "/api/maintenance":
+            self._send_json(self._maintenance_service().payload())
+            return
+        if self._path_without_query() == "/api/log-file":
+            name = self._query_value("name")
+            try:
+                self._send_json(self._maintenance_service().read_log(name))
+            except (ValueError, FileNotFoundError) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=404)
+            return
+        if self._path_without_query() == "/api/backup-file":
+            name = self._query_value("name")
+            try:
+                path = self._maintenance_service().backup_path(name)
+                self._send_binary(
+                    path.read_bytes(),
+                    content_type="application/zip",
+                    filename=path.name,
+                )
+            except (ValueError, FileNotFoundError) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=404)
+            return
+        if self._path_without_query() == "/api/profile/cv/file":
+            cv_path = self._profile_service().active_cv_path()
+            if not cv_path:
+                self.send_error(404, "Active CV not found")
+                return
+            self._send_binary(cv_path.read_bytes(), content_type="application/pdf")
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
+        if not self._local_origin_allowed():
+            self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
+            return
+
+        if self._path_without_query() in {
+            "/api/profile",
+            "/api/profile/cv",
+            "/api/strategy",
+            "/api/ai-settings",
+            "/api/ai-settings/test",
+            "/api/board-settings",
+            "/api/application",
+            "/api/application-assistant",
+            "/api/application-assistant/draft",
+            "/api/application-assistant/answer",
+            "/api/maintenance/backup",
+            "/api/maintenance/prune-logs",
+        }:
+            try:
+                payload = self._read_json_body(max_bytes=12 * 1024 * 1024)
+                if self._path_without_query() == "/api/ai-settings/test":
+                    data = self._ai_settings_service().test_connection(
+                        str(payload.get("provider") or "")
+                    )
+                elif self._path_without_query() == "/api/ai-settings":
+                    data = self._ai_settings_service().save(payload)
+                elif self._path_without_query() == "/api/board-settings":
+                    data = self._board_settings_service().save(payload)
+                elif self._path_without_query() == "/api/application":
+                    job = payload.get("job") if isinstance(payload.get("job"), dict) else {}
+                    data = DashboardUserStateStore(self.user_state_path).update_application(
+                        job,
+                        stage=str(payload.get("stage") or ""),
+                        notes=str(payload.get("notes") or ""),
+                        applied_at=str(payload.get("applied_at") or ""),
+                        follow_up_at=str(payload.get("follow_up_at") or ""),
+                    )
+                    self._sync_operational_store()
+                elif self._path_without_query() == "/api/application-assistant":
+                    data = self._application_assistant_service().save_knowledge(payload)
+                elif self._path_without_query() == "/api/application-assistant/draft":
+                    job = payload.get("job") if isinstance(payload.get("job"), dict) else {}
+                    mode = str(payload.get("mode") or "local").strip().lower()
+                    if mode == "ai":
+                        draft = self._application_assistant_service().ai_cover_letter_draft(job)
+                    elif mode == "local":
+                        draft = self._application_assistant_service().local_cover_letter_draft(job)
+                    else:
+                        raise ValueError("Unsupported document generation mode")
+                    data = {"draft": draft, "mode": mode}
+                elif self._path_without_query() == "/api/application-assistant/answer":
+                    data = self._application_assistant_service().answer_question(
+                        str(payload.get("question") or ""),
+                        str(payload.get("context") or ""),
+                    )
+                elif self._path_without_query() == "/api/maintenance/backup":
+                    data = self._maintenance_service().create_backup()
+                elif self._path_without_query() == "/api/maintenance/prune-logs":
+                    data = self._maintenance_service().prune_logs(
+                        older_than_days=int(payload.get("older_than_days") or 90),
+                        keep_latest=int(payload.get("keep_latest") or 10),
+                    )
+                elif self._path_without_query() == "/api/strategy":
+                    data = self._strategy_service().save(payload)
+                elif self._path_without_query().endswith("/cv"):
+                    data = self._profile_service().upload_cv(
+                        str(payload.get("filename") or ""),
+                        str(payload.get("content_base64") or ""),
+                    )
+                else:
+                    profile = payload.get("profile")
+                    if not isinstance(profile, dict):
+                        raise ValueError("Profile object is required")
+                    data = self._profile_service().save_profile(profile)
+                self._send_json({"ok": True, "data": data})
+            except ValueError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
         if self._path_without_query() in {"/api/run-control/start", "/api/run-control/stop"}:
             if not self.run_controller:
                 self._send_json({"ok": False, "error": "Run controller unavailable"}, status=503)
@@ -274,6 +432,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             status = payload.get("status", "")
             store = DashboardUserStateStore(self.user_state_path)
             record = store.set_status(job, status)
+            self._sync_operational_store(store=store)
             self._send_json(
                 {
                     "ok": True,
@@ -319,10 +478,12 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         payload.setdefault("filter_options", {})
         return payload
 
-    def _read_json_body(self) -> dict[str, Any]:
+    def _read_json_body(self, *, max_bytes: int = 1024 * 1024) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or 0)
         if length <= 0:
             raise ValueError("JSON body is required")
+        if length > max_bytes:
+            raise ValueError("Request body is too large")
         raw = self.rfile.read(length)
         try:
             payload = json.loads(raw.decode("utf-8"))
@@ -341,8 +502,75 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_binary(
+        self,
+        body: bytes,
+        *,
+        content_type: str,
+        filename: str = "",
+    ) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{Path(filename).name}"')
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _profile_service(self) -> ProfileService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return ProfileService(self.user_workspace)
+
+    def _strategy_service(self) -> StrategyService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return StrategyService(self.user_workspace)
+
+    def _ai_settings_service(self) -> AISettingsService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return AISettingsService(self.user_workspace)
+
+    def _board_settings_service(self) -> BoardSettingsService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return BoardSettingsService(self.user_workspace)
+
+    def _application_assistant_service(self) -> ApplicationAssistantService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return ApplicationAssistantService(self.user_workspace)
+
+    def _maintenance_service(self) -> MaintenanceService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return MaintenanceService(self.user_workspace)
+
+    def _sync_operational_store(
+        self,
+        *,
+        store: DashboardUserStateStore | None = None,
+    ) -> None:
+        if not self.operational_store:
+            return
+        state_store = store or DashboardUserStateStore(self.user_state_path)
+        self.operational_store.sync(self._read_dashboard_data(), state_store.data)
+
+    def _local_origin_allowed(self) -> bool:
+        origin = str(self.headers.get("Origin") or "").strip()
+        if not origin:
+            return True
+        host = str(self.headers.get("Host") or "").strip()
+        return origin in {f"http://{host}", f"https://{host}"}
+
     def _path_without_query(self) -> str:
         return self.path.split("?", 1)[0]
+
+    def _query_value(self, name: str) -> str:
+        values = parse_qs(urlsplit(self.path).query).get(name, [])
+        return str(values[0] if values else "")
 
 
 def make_handler(
@@ -351,6 +579,8 @@ def make_handler(
     dashboard_data_path: Path,
     user_state_path: Path,
     run_controller: DashboardRunController | None = None,
+    user_workspace: UserWorkspace | None = None,
+    operational_store: OperationalStore | None = None,
 ):
     class ConfiguredDashboardRequestHandler(DashboardRequestHandler):
         pass
@@ -358,6 +588,8 @@ def make_handler(
     ConfiguredDashboardRequestHandler.dashboard_data_path = dashboard_data_path
     ConfiguredDashboardRequestHandler.user_state_path = user_state_path
     ConfiguredDashboardRequestHandler.run_controller = run_controller
+    ConfiguredDashboardRequestHandler.user_workspace = user_workspace
+    ConfiguredDashboardRequestHandler.operational_store = operational_store
     return partial(ConfiguredDashboardRequestHandler, directory=str(directory))
 
 
@@ -378,12 +610,24 @@ def serve(
         state_path = root / state_path
 
     DashboardUserStateStore(state_path).write()
+    user_workspace = UserWorkspace(root).ensure_initialized()
+    operational_store = OperationalStore(user_workspace.path / "job_scout.db")
+    try:
+        initial_dashboard_data = json.loads(data_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        initial_dashboard_data = {}
+    operational_store.sync(
+        initial_dashboard_data,
+        DashboardUserStateStore(state_path).data,
+    )
     run_controller = DashboardRunController(root)
     handler = make_handler(
         directory=root,
         dashboard_data_path=data_path,
         user_state_path=state_path,
         run_controller=run_controller,
+        user_workspace=user_workspace,
+        operational_store=operational_store,
     )
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}/recommended_jobs_dashboard.html"

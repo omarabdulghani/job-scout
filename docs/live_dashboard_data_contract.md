@@ -47,7 +47,6 @@ The existing final outputs should remain separate:
 
 - `high_success_probability_jobs.json`
 - `high_success_probability_jobs_multi.json`
-- `recommended_jobs.html`
 - debug/rejected/cache files
 
 ## Top-Level JSON Shape

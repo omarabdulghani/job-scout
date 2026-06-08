@@ -1,9 +1,11 @@
 import argparse
 import contextlib
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 import urllib.parse
 
@@ -114,13 +116,17 @@ class IndeedUrlTests(unittest.TestCase):
 
 class FreshCliFlagTests(unittest.TestCase):
     def _help_output(self, script_name: str) -> str:
-        completed = subprocess.run(
-            [sys.executable, str(ROOT / script_name), "--help"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        with tempfile.TemporaryDirectory() as temporary:
+            env = dict(os.environ)
+            env["JOB_SCOUT_LOG_DIR"] = str(Path(temporary) / "logs")
+            completed = subprocess.run(
+                [sys.executable, str(ROOT / script_name), "--help"],
+                cwd=temporary,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=env,
+            )
         return completed.stdout
 
     def test_single_query_cli_exposes_fresh_flag(self):
@@ -131,6 +137,16 @@ class FreshCliFlagTests(unittest.TestCase):
 
     def test_multi_query_cli_exposes_query_learning_opt_out(self):
         self.assertIn("--no-query-learning", self._help_output("scout_jobs_multi.py"))
+
+    def test_help_commands_do_not_create_real_workspace_logs(self):
+        logs_dir = ROOT / "logs"
+        before = {path.name for path in logs_dir.glob("*") if path.is_file()}
+
+        self._help_output("scout_jobs.py")
+        self._help_output("scout_jobs_multi.py")
+
+        after = {path.name for path in logs_dir.glob("*") if path.is_file()}
+        self.assertEqual(after, before)
 
 
 class BrowserControllerConfigTests(unittest.TestCase):

@@ -6,6 +6,7 @@ __pycache__/
 
 data/*
 !data/portfolio_site_notes.txt
+data/user_workspace/
 cv/*.pdf
 config/profile.local.json
 
@@ -13,6 +14,7 @@ config/profile.local.json
 .pytest_cache/
 artifacts/
 logs/
+backups/
 *.log
 
 # Runtime output and local scouting state

@@ -185,6 +185,81 @@ class FreshScoutGlobalStopTests(unittest.TestCase):
         self.assertIn("AI budget guard", reason)
         self.assertEqual(counts["ai_calls"], 44)
 
+    def test_deep_ai_budget_mode_skips_early_low_yield_guard(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "target_apply_first_jobs": 8,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                    "ai_calls_quality_check": 40,
+                    "min_apply_first_after_ai_quality_check": 2,
+                    "min_good_or_better_after_ai_quality_check": 5,
+                }
+            },
+            enabled=True,
+            ai_budget_mode="deep",
+        )
+
+        reason, counts = _fresh_global_stop_reason(
+            [_report([_job(1, 55, "possible_match")], collected=44, ai_calls=44)],
+            _ScoutThresholds(),
+            policy,
+        )
+
+        self.assertEqual(reason, "")
+        self.assertEqual(counts["ai_calls"], 44)
+
+    def test_deep_ai_budget_mode_keeps_later_strict_guard(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "target_apply_first_jobs": 8,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                    "ai_calls_strict_check": 80,
+                    "min_apply_first_after_ai_strict_check": 4,
+                    "min_good_or_better_after_ai_strict_check": 10,
+                }
+            },
+            enabled=True,
+            ai_budget_mode="deep",
+        )
+
+        reason, counts = _fresh_global_stop_reason(
+            [_report([_job(1, 55, "possible_match")], collected=84, ai_calls=84)],
+            _ScoutThresholds(),
+            policy,
+        )
+
+        self.assertIn("AI budget guard", reason)
+        self.assertEqual(counts["ai_calls"], 84)
+
+    def test_off_ai_budget_mode_disables_budget_guard_stops(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "target_apply_first_jobs": 8,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                    "ai_calls_quality_check": 40,
+                    "ai_calls_strict_check": 80,
+                    "ai_calls_soft_cap": 120,
+                }
+            },
+            enabled=True,
+            ai_budget_mode="off",
+        )
+
+        reason, counts = _fresh_global_stop_reason(
+            [_report([_job(1, 55, "possible_match")], collected=119, ai_calls=140)],
+            _ScoutThresholds(),
+            policy,
+        )
+
+        self.assertEqual(reason, "")
+        self.assertEqual(counts["ai_calls"], 140)
+
     def test_ai_budget_guard_allows_productive_fresh_runs_like_observed_test_log(self):
         policy = FreshScoutPolicy.from_preferences(
             {

@@ -22,12 +22,11 @@ import sys
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
+from agent.user_workspace import load_user_config
 
 load_dotenv()
 console = Console()
 
-PROFILE_PATH = Path("config/profile.json")
-PREFERENCES_PATH = Path("config/preferences.json")
 DEFAULT_CV_PATH = Path("cv/Omar Abdulghani - CV Resume (English).pdf")
 REQUIRED_PROFILE_FIELDS = [
     "personal.first_name",
@@ -49,16 +48,6 @@ REQUIRED_PREFERENCE_FIELDS = [
 def _exit_with_error(message: str):
     console.print(f"[red]Error:[/red] {message}")
     raise SystemExit(1)
-
-
-def _load_json_file(path: Path, label: str) -> dict:
-    if not path.exists():
-        _exit_with_error(f"{label} not found at {path}.")
-
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        _exit_with_error(f"{label} contains invalid JSON: {exc}")
 
 
 def _has_required_value(data: dict, dotted_path: str) -> bool:
@@ -99,8 +88,10 @@ def _validate_config(profile: dict, preferences: dict):
 
 
 def load_config():
-    profile = _load_json_file(PROFILE_PATH, "Profile config")
-    preferences = _load_json_file(PREFERENCES_PATH, "Preferences config")
+    try:
+        profile, preferences = load_user_config()
+    except (FileNotFoundError, ValueError) as exc:
+        _exit_with_error(str(exc))
     _validate_config(profile, preferences)
     Path("data").mkdir(parents=True, exist_ok=True)
 

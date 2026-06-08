@@ -1,7 +1,7 @@
 """Live JSON writer for the recommended jobs dashboard.
 
 This module owns only the live dashboard data file. It does not touch the
-existing final scout outputs or the older recommended_jobs.html updater.
+existing final scout outputs.
 """
 
 from __future__ import annotations
@@ -200,6 +200,21 @@ class LiveRecommendedJobsDashboard:
         run["completed_at"] = completed_at or self._now_iso()
         if self.data.get("active_run_id") == resolved_run_id:
             self.data["active_run_id"] = ""
+        self._refresh_metadata()
+        self.write()
+        return dict(run)
+
+    def resume_run(self, run_id: str) -> dict[str, Any]:
+        """Reopen a saved failed/stopped run without creating a duplicate run."""
+        resolved_run_id = _clean_text(run_id)
+        run = self._find_run(resolved_run_id)
+        if not run:
+            raise ValueError(f"Unknown live dashboard run_id: {resolved_run_id}")
+        if run.get("status") == "completed":
+            raise ValueError(f"Completed live dashboard run cannot be resumed: {resolved_run_id}")
+        run["status"] = "running"
+        run["completed_at"] = ""
+        self.data["active_run_id"] = resolved_run_id
         self._refresh_metadata()
         self.write()
         return dict(run)

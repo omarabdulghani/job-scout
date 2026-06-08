@@ -63,6 +63,38 @@ class DashboardUserStateTests(unittest.TestCase):
 
             self.assertEqual(store.data["jobs"], {})
 
+    def test_application_stage_persists_and_enriches_live_job(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "recommended_jobs_dashboard_user_state.json"
+            store = DashboardUserStateStore(state_path)
+            job = {
+                "board": "linkedin",
+                "job_id": "321",
+                "title": "Product Coordinator",
+                "company": "Example",
+                "url": "https://www.linkedin.com/jobs/view/321/",
+            }
+
+            store.update_application(
+                job,
+                stage="interview",
+                notes="First interview scheduled",
+                follow_up_at="2026-06-10",
+            )
+            merged = store.apply_to_dashboard_data(
+                {
+                    "schema_version": "live_dashboard.v1",
+                    "jobs": [job],
+                    "summary": {},
+                    "filter_options": {},
+                }
+            )
+
+            self.assertEqual(merged["jobs"][0]["manual_status"], "applied")
+            self.assertEqual(merged["jobs"][0]["application_stage"], "interview")
+            self.assertEqual(merged["jobs"][0]["application_notes"], "First interview scheduled")
+            self.assertEqual(store.application_records()[0]["application_stage"], "interview")
+
     def test_api_saves_status_and_returns_merged_dashboard_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
