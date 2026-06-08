@@ -35,10 +35,16 @@ class MaintenanceService:
     def payload(self) -> dict[str, Any]:
         logs = self.log_records()
         runs = self.run_history()
+        lifecycle_runs = self.dashboard_run_history()
         return {
             "logs": logs,
             "runs": runs,
-            "diagnostics": self.diagnostics(logs=logs, runs=runs),
+            "lifecycle_runs": lifecycle_runs,
+            "diagnostics": self.diagnostics(
+                logs=logs,
+                runs=runs,
+                lifecycle_runs=lifecycle_runs,
+            ),
             "backups": self.backup_records(),
         }
 
@@ -94,16 +100,30 @@ class MaintenanceService:
             reverse=True,
         )[:200]
 
+    def dashboard_run_history(self) -> list[dict[str, Any]]:
+        payload = self._read_json(self.root / "recommended_jobs_dashboard_data.json")
+        runs = payload.get("runs", []) if isinstance(payload, dict) else []
+        output = [dict(item) for item in runs if isinstance(item, dict)]
+        return sorted(
+            output,
+            key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
+            reverse=True,
+        )[:200]
+
     def diagnostics(
         self,
         *,
         logs: list[dict[str, Any]] | None = None,
         runs: list[dict[str, Any]] | None = None,
+        lifecycle_runs: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         logs = logs if logs is not None else self.log_records()
         runs = runs if runs is not None else self.run_history()
+        lifecycle_runs = (
+            lifecycle_runs if lifecycle_runs is not None else self.dashboard_run_history()
+        )
         progress = self._read_json(self.root / "scout_progress.json")
-        latest_error = self._latest_error(logs)
+        latest_error = self._latest_error(logs, lifecycle_runs=lifecycle_runs)
         important_paths = {
             "profile": self.workspace.profile_path,
             "preferences": self.workspace.preferences_path,
@@ -133,6 +153,7 @@ class MaintenanceService:
             "log_count": len(logs),
             "log_size_bytes": sum(int(item.get("size_bytes") or 0) for item in logs),
             "run_history_count": len(runs),
+            "lifecycle_run_count": len(lifecycle_runs),
             "latest_error": latest_error,
             "files": files,
         }
@@ -207,8 +228,13 @@ class MaintenanceService:
             "kept_latest": keep_latest,
         }
 
-    def _latest_error(self, logs: list[dict[str, Any]]) -> dict[str, str]:
-        markers = ("fatal error", "traceback", "resource_exhausted", "timeout")
+    def _latest_error(
+        self,
+        logs: list[dict[str, Any]],
+        *,
+        lifecycle_runs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        markers = ("fatal error", "traceback", "resource_exhausted", "unhandled exception")
         for record in logs[:20]:
             try:
                 payload = self.read_log(record["name"], max_chars=40_000)
@@ -218,8 +244,41 @@ class MaintenanceService:
             for line in reversed(lines):
                 lowered = line.lower()
                 if any(marker in lowered for marker in markers):
-                    return {"log": record["name"], "message": line.strip()[:500]}
+                    error_at = str(record.get("modified_at") or "")
+                    related_run = self._related_run(error_at, lifecycle_runs)
+                    latest_success = max(
+                        (
+                            str(run.get("completed_at") or "")
+                            for run in lifecycle_runs
+                            if run.get("status") == "completed"
+                        ),
+                        default="",
+                    )
+                    resolved = bool(latest_success and latest_success > error_at)
+                    return {
+                        "log": record["name"],
+                        "message": line.strip()[:500],
+                        "timestamp": error_at,
+                        "status": "resolved" if resolved else "active",
+                        "resolved": resolved,
+                        "run_id": str(related_run.get("run_id") or ""),
+                        "run_label": str(related_run.get("run_label") or ""),
+                    }
         return {}
+
+    def _related_run(
+        self,
+        timestamp: str,
+        lifecycle_runs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        candidates = [
+            run
+            for run in lifecycle_runs
+            if str(run.get("started_at") or "") <= timestamp
+        ]
+        if not candidates:
+            return {}
+        return max(candidates, key=lambda run: str(run.get("started_at") or ""))
 
     def _log_kind(self, name: str) -> str:
         lowered = name.lower()

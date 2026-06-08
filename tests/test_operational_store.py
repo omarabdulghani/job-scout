@@ -1,3 +1,4 @@
+import json
 import tempfile
 from pathlib import Path
 import unittest
@@ -44,6 +45,115 @@ class OperationalStoreTests(unittest.TestCase):
 
             store.sync(dashboard, {"jobs": {}})
             self.assertEqual(store.counts()["applications"], 0)
+
+    def test_job_records_support_server_filters_sorting_and_pagination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = OperationalStore(Path(temporary) / "job_scout.db")
+            dashboard = {
+                "jobs": [
+                    {
+                        "board": "linkedin",
+                        "job_id": str(index),
+                        "title": f"Role {index}",
+                        "company": "Alpha" if index % 2 else "Beta",
+                        "location": "Amsterdam (Hybrid)" if index < 3 else "Utrecht",
+                        "decision_category": "APPLY_FIRST" if index < 2 else "GOOD_OPTIONS",
+                        "score": 90 - index,
+                        "run_id": "run_1" if index < 3 else "run_2",
+                        "processed_at": f"2026-06-0{index + 1}T12:00:00+02:00",
+                        "domain_category": "UX_UI_PRODUCT_DESIGN",
+                        "flags": ["easy_apply", "dutch_risk"] if index == 0 else [],
+                        "apply_method": "easy_apply" if index == 0 else "external_apply",
+                    }
+                    for index in range(5)
+                ],
+                "runs": [],
+            }
+            state = {
+                "jobs": {
+                    "linkedin:job_id:1": {"status": "applied"},
+                }
+            }
+
+            store.sync(dashboard, state)
+            first_page = store.job_records(
+                decision="APPLY_FIRST,GOOD_OPTIONS",
+                status="unreviewed",
+                sort="score",
+                limit=2,
+            )
+            second_page = store.job_records(
+                decision="APPLY_FIRST,GOOD_OPTIONS",
+                status="unreviewed",
+                sort="score",
+                limit=2,
+                offset=2,
+            )
+            easy_apply = store.job_records(
+                apply_method="easy_apply",
+                preset="dutch_risk",
+            )
+            hybrid = store.job_records(preset="remote_hybrid")
+
+            self.assertEqual(first_page["total"], 4)
+            self.assertEqual(len(first_page["jobs"]), 2)
+            self.assertTrue(first_page["has_more"])
+            self.assertEqual(len(second_page["jobs"]), 2)
+            self.assertFalse(second_page["has_more"])
+            keys = {
+                job["job_key"]
+                for job in [*first_page["jobs"], *second_page["jobs"]]
+            }
+            self.assertEqual(len(keys), 4)
+            self.assertEqual(easy_apply["total"], 1)
+            self.assertEqual(hybrid["total"], 3)
+            self.assertEqual(first_page["by_decision"], {
+                "APPLY_FIRST": 1,
+                "GOOD_OPTIONS": 3,
+            })
+
+    def test_sync_if_changed_only_rebuilds_after_source_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dashboard_path = root / "dashboard.json"
+            state_path = root / "state.json"
+            store = OperationalStore(root / "job_scout.db")
+            dashboard_path.write_text(
+                json.dumps({
+                    "jobs": [{
+                        "board": "linkedin",
+                        "job_id": "1",
+                        "title": "Designer",
+                    }],
+                    "runs": [],
+                }),
+                encoding="utf-8",
+            )
+            state_path.write_text(json.dumps({"jobs": {}}), encoding="utf-8")
+
+            first = store.sync_if_changed(dashboard_path, state_path)
+            unchanged = store.sync_if_changed(dashboard_path, state_path)
+            state_path.write_text(
+                json.dumps({
+                    "jobs": {
+                        "linkedin:job_id:1": {
+                            "status": "applied",
+                            "application_stage": "interview",
+                        }
+                    }
+                }),
+                encoding="utf-8",
+            )
+            changed = store.sync_if_changed(dashboard_path, state_path)
+
+            self.assertTrue(first["synced"])
+            self.assertFalse(unchanged["synced"])
+            self.assertTrue(changed["synced"])
+            self.assertEqual(
+                store.job_records(status="applied")["total"],
+                1,
+            )
+            self.assertEqual(store.application_count(stage="interview"), 1)
 
 
 if __name__ == "__main__":

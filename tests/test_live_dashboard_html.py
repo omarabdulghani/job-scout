@@ -9,18 +9,27 @@ class LiveDashboardHtmlTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html_path = ROOT / "recommended_jobs_dashboard.html"
-        cls.html = cls.html_path.read_text(encoding="utf-8")
+        cls.document = cls.html_path.read_text(encoding="utf-8")
+        cls.frontend_files = [
+            ROOT / "dashboard" / "styles.css",
+            ROOT / "dashboard" / "app.js",
+            *sorted((ROOT / "dashboard" / "modules").glob("*.js")),
+        ]
+        cls.html = cls.document + "\n" + "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in cls.frontend_files
+        )
 
     def test_dashboard_file_exists(self):
         self.assertTrue(self.html_path.exists())
 
     def test_dashboard_polls_stable_json_file(self):
-        self.assertIn('const DATA_URL = "recommended_jobs_dashboard_data.json"', self.html)
-        self.assertIn('const API_DATA_URL = "/api/dashboard-data"', self.html)
-        self.assertIn('const API_STATUS_URL = "/api/job-status"', self.html)
+        self.assertIn('dataFile: "recommended_jobs_dashboard_data.json"', self.html)
+        self.assertIn('dashboardData: "/api/dashboard-data"', self.html)
+        self.assertIn('jobStatus: "/api/job-status"', self.html)
         self.assertIn("window.setInterval(loadData, POLL_MS)", self.html)
         self.assertIn("fetch(DATA_URL", self.html)
-        self.assertIn("fetch(API_DATA_URL", self.html)
+        self.assertIn('API_DATA_URL + "?include_jobs=false', self.html)
 
     def test_dashboard_has_required_filters(self):
         for element_id in [
@@ -77,7 +86,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "profileWorkAuthorization",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
-        self.assertIn('const API_PROFILE_URL = "/api/profile"', self.html)
+        self.assertIn('profile: "/api/profile"', self.html)
         self.assertIn("loadProfileData", self.html)
         self.assertIn("saveProfile", self.html)
         self.assertIn("uploadCv", self.html)
@@ -98,7 +107,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "strategyPortfolioNotes",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
-        self.assertIn('const API_STRATEGY_URL = "/api/strategy"', self.html)
+        self.assertIn('strategy: "/api/strategy"', self.html)
         self.assertIn("loadStrategyData", self.html)
         self.assertIn("saveStrategy", self.html)
 
@@ -206,14 +215,46 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "runLogTail",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
-        self.assertIn('const API_RUN_CONTROL_URL = "/api/run-control"', self.html)
+        self.assertIn('runControl: "/api/run-control"', self.html)
         self.assertIn("startDashboardRun", self.html)
         self.assertIn("stopDashboardRun", self.html)
         self.assertIn("Smart Guard", self.html)
         self.assertIn("Deep Search", self.html)
         self.assertIn("ai_budget_mode", self.html)
         self.assertIn("trapRunScoutFocus", self.html)
+        self.assertIn("modal.scrollTop = 0", self.html)
         self.assertIn('aria-label="Close run scout dialog"', self.html)
+
+    def test_dashboard_has_safe_legacy_tools(self):
+        for element_id in [
+            "advancedToolsTitle",
+            "legacyApplicationCount",
+            "legacyTodayCount",
+            "legacyReviewCount",
+            "legacySeenCount",
+            "validateBoardsButton",
+            "refreshLegacyStatsButton",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('legacyTools: "/api/legacy-tools"', self.html)
+        self.assertIn('value="validate_boards"', self.html)
+        self.assertIn("It cannot apply to jobs or submit an application.", self.html)
+        self.assertIn("openValidationWorkflow", self.html)
+
+    def test_dashboard_has_accessible_mobile_navigation_sheet(self):
+        for element_id in [
+            "appSidebar",
+            "mobileNavBackdrop",
+            "mobileNavToggle",
+            "mobileWorkspaceTitle",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('aria-controls="appSidebar"', self.html)
+        self.assertIn("openMobileNavigation", self.html)
+        self.assertIn("closeMobileNavigation", self.html)
+        self.assertIn("trapMobileNavigationFocus", self.html)
+        self.assertIn('event.key === "Escape"', self.html)
+        self.assertIn('currentHeading.setAttribute("tabindex", "-1")', self.html)
 
     def test_applications_render_in_scalable_batches(self):
         for element_id in [
@@ -222,9 +263,23 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "applicationsTableFooter",
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
-        self.assertIn("applicationVisibleLimit: 50", self.html)
-        self.assertIn("filtered.slice(0, state.applicationVisibleLimit)", self.html)
-        self.assertIn("state.applicationVisibleLimit += 50", self.html)
+        self.assertIn("loadApplications({ append: true })", self.html)
+        self.assertIn('limit: "50"', self.html)
+        self.assertIn("payload.has_more", self.html)
+
+    def test_jobs_load_from_paginated_api(self):
+        for element_id in [
+            "jobsVisibleCount",
+            "loadMoreJobsButton",
+            "jobsTableFooter",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('jobs: "/api/jobs"', self.html)
+        self.assertIn('limit: "100"', self.html)
+        self.assertIn("loadJobs({ append: true })", self.html)
+        self.assertIn("include_jobs=false", self.html)
+        self.assertIn("compact: true", self.html)
+        self.assertIn("if (!data.summary.by_manual_status || jobs.length)", self.html)
 
     def test_hidden_workspaces_load_on_demand(self):
         startup = self.html.split("bindControls();", 1)[1]
@@ -241,6 +296,21 @@ class LiveDashboardHtmlTests(unittest.TestCase):
 
     def test_dashboard_uses_one_stable_file_name(self):
         self.assertNotIn("recommended_jobs_dashboard_2026", self.html)
+
+    def test_dashboard_uses_external_feature_modules(self):
+        self.assertIn('href="dashboard/styles.css"', self.document)
+        self.assertIn('type="module" src="dashboard/app.js"', self.document)
+        for module_name in [
+            "navigation.js",
+            "jobs.js",
+            "scout.js",
+            "profile.js",
+            "applications.js",
+            "settings.js",
+            "maintenance.js",
+        ]:
+            self.assertTrue((ROOT / "dashboard" / "modules" / module_name).exists())
+        self.assertNotIn("<style>", self.document)
 
 
 if __name__ == "__main__":

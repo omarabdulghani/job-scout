@@ -24,6 +24,7 @@ from agent.dashboard_user_state import (
 )
 from agent.profile_service import ProfileService
 from agent.maintenance_service import MaintenanceService
+from agent.legacy_tools_service import LegacyToolsService
 from agent.operational_store import OperationalStore
 from agent.scout_stop import clear_stop_request, request_stop
 from agent.strategy_service import StrategyService
@@ -35,6 +36,7 @@ DEFAULT_PORT = 8000
 DEFAULT_DASHBOARD_DATA_PATH = Path("recommended_jobs_dashboard_data.json")
 DEFAULT_USER_STATE_PATH = Path("recommended_jobs_dashboard_user_state.json")
 DEFAULT_PROGRESS_PATH = Path("scout_progress.json")
+DEFAULT_RUN_STATE_PATH = Path("data/user_workspace/dashboard_run_state.json")
 
 
 class DashboardRunController:
@@ -45,18 +47,32 @@ class DashboardRunController:
         "linkedin_single": "LinkedIn single query",
         "linkedin_process_only": "LinkedIn process-only",
         "indeed_description": "Indeed description extraction",
+        "validate_boards": "Validate job boards (no applications)",
     }
     MAX_PAGE_CHOICES = {"1", "2", "3", "4", "all"}
     BROWSER_CHOICES = {"chromium", "firefox"}
     AI_BUDGET_MODE_CHOICES = {"smart", "deep", "off"}
 
-    def __init__(self, root: Path, *, progress_path: Path = DEFAULT_PROGRESS_PATH) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        progress_path: Path = DEFAULT_PROGRESS_PATH,
+        dashboard_data_path: Path = DEFAULT_DASHBOARD_DATA_PATH,
+        state_path: Path = DEFAULT_RUN_STATE_PATH,
+    ) -> None:
         self.root = Path(root).resolve()
         self.progress_path = progress_path if progress_path.is_absolute() else self.root / progress_path
+        self.dashboard_data_path = (
+            dashboard_data_path
+            if dashboard_data_path.is_absolute()
+            else self.root / dashboard_data_path
+        )
+        self.state_path = state_path if state_path.is_absolute() else self.root / state_path
         self.lock = threading.RLock()
         self.process: subprocess.Popen | None = None
         self.log_handle = None
-        self.state: dict[str, Any] = {
+        self.state: dict[str, Any] = self._load_state() or {
             "status": "idle",
             "active": False,
             "workflow": "",
@@ -67,13 +83,22 @@ class DashboardRunController:
             "log_path": "",
             "log_tail": "",
             "command": [],
+            "run_id": "",
+            "failure_reason": "",
         }
+        self._reconstruct_state()
 
     def status(self) -> dict[str, Any]:
         with self.lock:
             self._refresh_process_locked()
             payload = dict(self.state)
             payload["resume_available"] = self._resume_available()
+            payload["resumable"] = payload["resume_available"] and payload.get("status") in {
+                "failed",
+                "stopped",
+                "idle",
+            }
+            payload["resolved_failure"] = self._failure_is_resolved()
             payload["workflows"] = [
                 {"value": key, "label": label}
                 for key, label in self.WORKFLOW_LABELS.items()
@@ -117,7 +142,10 @@ class DashboardRunController:
                 "log_path": str(log_path),
                 "log_tail": "",
                 "command": self._display_command(command),
+                "run_id": "",
+                "failure_reason": "",
             }
+            self._save_state_locked()
             return self.status()
 
     def stop(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -137,6 +165,7 @@ class DashboardRunController:
                 self.state["status"] = "stopping"
             else:
                 self.state["status"] = "stopping_after_job" if mode == "after_current_job" else "stopping_after_page"
+            self._save_state_locked()
             return self.status()
 
     def build_command(self, payload: dict[str, Any]) -> tuple[list[str], str, str]:
@@ -167,6 +196,12 @@ class DashboardRunController:
             if not query:
                 raise ValueError("A query is required for Indeed description extraction")
             command += ["scout_jobs.py", "--indeed", query, "--location", location, "--max-pages", max_pages, "--description-only"]
+        elif workflow == "validate_boards":
+            return (
+                [sys.executable, "main.py", "--validate-boards"],
+                workflow,
+                self.WORKFLOW_LABELS[workflow],
+            )
         else:
             raise ValueError("Unsupported workflow")
 
@@ -180,11 +215,13 @@ class DashboardRunController:
         return command, workflow, self.WORKFLOW_LABELS[workflow]
 
     def _refresh_process_locked(self) -> None:
+        self._resolve_run_id_locked()
         if not self.process:
             return
         return_code = self.process.poll()
         if return_code is None:
             self.state["active"] = True
+            self._save_state_locked()
             return
         if self.log_handle:
             self.log_handle.close()
@@ -192,18 +229,114 @@ class DashboardRunController:
         self.state["active"] = False
         self.state["return_code"] = return_code
         self.state["completed_at"] = self.state.get("completed_at") or datetime.now().astimezone().isoformat()
-        if self.state.get("status") in {"stopping", "stopping_after_job", "stopping_after_page"}:
+        run_status = self._associated_run_status()
+        progress_status = str(self._read_progress().get("status") or "")
+        if run_status in {"completed", "stopped", "failed"}:
+            self.state["status"] = run_status
+        elif self.state.get("status") in {"stopping", "stopping_after_job", "stopping_after_page"}:
+            self.state["status"] = "stopped"
+        elif progress_status == "stopped":
             self.state["status"] = "stopped"
         else:
             self.state["status"] = "completed" if return_code == 0 else "failed"
+        if self.state["status"] == "failed" and not self.state.get("failure_reason"):
+            self.state["failure_reason"] = (
+                f"Scout process exited with code {return_code}."
+                if return_code is not None
+                else "Scout process ended unexpectedly."
+            )
         self.process = None
+        self._save_state_locked()
 
     def _resume_available(self) -> bool:
+        payload = self._read_progress()
+        return isinstance(payload, dict) and payload.get("status") != "completed"
+
+    def _read_progress(self) -> dict[str, Any]:
         try:
             payload = json.loads(self.progress_path.read_text(encoding="utf-8-sig"))
         except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _load_state(self) -> dict[str, Any]:
+        try:
+            payload = json.loads(self.state_path.read_text(encoding="utf-8-sig"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _save_state_locked(self) -> None:
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
+        temporary.write_text(
+            json.dumps(self.state, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, self.state_path)
+
+    def _dashboard_runs(self) -> list[dict[str, Any]]:
+        try:
+            payload = json.loads(self.dashboard_data_path.read_text(encoding="utf-8-sig"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return []
+        runs = payload.get("runs", []) if isinstance(payload, dict) else []
+        return [dict(run) for run in runs if isinstance(run, dict)]
+
+    def _resolve_run_id_locked(self) -> None:
+        if self.state.get("run_id") or not self.state.get("started_at"):
+            return
+        started_at = str(self.state.get("started_at") or "")
+        candidates = [
+            run
+            for run in self._dashboard_runs()
+            if str(run.get("started_at") or "") >= started_at
+        ]
+        if not candidates:
+            return
+        run = min(candidates, key=lambda item: str(item.get("started_at") or ""))
+        self.state["run_id"] = str(run.get("run_id") or "")
+
+    def _associated_run_status(self) -> str:
+        run_id = str(self.state.get("run_id") or "")
+        if not run_id:
+            return ""
+        for run in self._dashboard_runs():
+            if str(run.get("run_id") or "") == run_id:
+                return str(run.get("status") or "")
+        return ""
+
+    def _failure_is_resolved(self) -> bool:
+        if self.state.get("status") != "failed":
             return False
-        return isinstance(payload, dict) and payload.get("status") != "completed"
+        failed_at = str(self.state.get("completed_at") or self.state.get("started_at") or "")
+        return any(
+            run.get("status") == "completed"
+            and str(run.get("completed_at") or "") > failed_at
+            for run in self._dashboard_runs()
+        )
+
+    def _reconstruct_state(self) -> None:
+        with self.lock:
+            self._resolve_run_id_locked()
+            if not self.state.get("active"):
+                return
+            run_status = self._associated_run_status()
+            progress_status = str(self._read_progress().get("status") or "")
+            self.state["active"] = False
+            self.state["completed_at"] = (
+                self.state.get("completed_at") or datetime.now().astimezone().isoformat()
+            )
+            if run_status in {"completed", "stopped", "failed"}:
+                self.state["status"] = run_status
+            elif progress_status == "completed":
+                self.state["status"] = "completed"
+            else:
+                self.state["status"] = "failed"
+                self.state["failure_reason"] = (
+                    "Dashboard server restarted while the scout process was active."
+                )
+            self._save_state_locked()
 
     def _read_log_tail(self, path: str, *, max_chars: int = 5000) -> str:
         if not path:
@@ -248,7 +381,31 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
         if self._path_without_query() == "/api/dashboard-data":
-            self._send_json(self._load_dashboard_with_user_state())
+            if self._query_value("include_jobs").lower() in {"0", "false", "no"}:
+                self._send_json(self._load_dashboard_metadata())
+            else:
+                self._send_json(self._load_dashboard_with_user_state())
+            return
+        if self._path_without_query() == "/api/jobs":
+            if not self.operational_store:
+                self._send_json({"jobs": [], "total": 0, "error": "Operational store unavailable"}, status=503)
+                return
+            self._sync_operational_store_if_changed()
+            self._send_json(
+                self.operational_store.job_records(
+                    search=self._query_value("search"),
+                    decision=self._query_value("decision"),
+                    run=self._query_value("run"),
+                    domain=self._query_value("domain"),
+                    flag=self._query_value("flag"),
+                    apply_method=self._query_value("apply_method"),
+                    status=self._query_value("status"),
+                    preset=self._query_value("preset"),
+                    sort=self._query_value("sort") or "newest",
+                    limit=self._query_int("limit", 100),
+                    offset=self._query_int("offset", 0),
+                )
+            )
             return
         if self._path_without_query() == "/api/user-state":
             self._send_json(DashboardUserStateStore(self.user_state_path).data)
@@ -275,16 +432,39 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             store = DashboardUserStateStore(self.user_state_path)
             dashboard = self._read_dashboard_data()
             if self.operational_store:
-                self.operational_store.sync(dashboard, store.data)
-                records = self.operational_store.application_records()
+                self._sync_operational_store_if_changed()
+                stage = self._query_value("stage")
+                search = self._query_value("search")
+                limit = self._query_int("limit", 50)
+                offset = self._query_int("offset", 0)
+                records = self.operational_store.application_records(
+                    stage=stage,
+                    search=search,
+                    limit=limit,
+                    offset=offset,
+                )
+                total = self.operational_store.application_count(
+                    stage=stage,
+                    search=search,
+                )
                 counts = self.operational_store.stage_counts()
             else:
                 records = store.application_records(dashboard)
+                total = len(records)
                 counts: dict[str, int] = {}
                 for record in records:
                     stage = str(record.get("application_stage") or "applied")
                     counts[stage] = counts.get(stage, 0) + 1
-            self._send_json({"applications": records, "by_stage": counts})
+            self._send_json(
+                {
+                    "applications": records,
+                    "by_stage": counts,
+                    "total": total,
+                    "limit": self._query_int("limit", 50),
+                    "offset": self._query_int("offset", 0),
+                    "has_more": self._query_int("offset", 0) + len(records) < total,
+                }
+            )
             return
         if self._path_without_query() == "/api/application-assistant":
             dashboard = self._load_dashboard_with_user_state()
@@ -294,6 +474,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
         if self._path_without_query() == "/api/maintenance":
             self._send_json(self._maintenance_service().payload())
+            return
+        if self._path_without_query() == "/api/legacy-tools":
+            self._send_json(self._legacy_tools_service().payload())
             return
         if self._path_without_query() == "/api/log-file":
             name = self._query_value("name")
@@ -433,14 +616,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             store = DashboardUserStateStore(self.user_state_path)
             record = store.set_status(job, status)
             self._sync_operational_store(store=store)
-            self._send_json(
-                {
-                    "ok": True,
-                    "record": record,
-                    "job_key": record.get("job_key") or build_job_key(job),
-                    "data": self._load_dashboard_with_user_state(store=store),
-                }
-            )
+            response = {
+                "ok": True,
+                "record": record,
+                "job_key": record.get("job_key") or build_job_key(job),
+            }
+            if not bool(payload.get("compact")):
+                response["data"] = self._load_dashboard_with_user_state(store=store)
+            self._send_json(response)
         except ValueError as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=400)
         except Exception as exc:
@@ -461,6 +644,51 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         dashboard_data = self._read_dashboard_data()
         state_store = store or DashboardUserStateStore(self.user_state_path)
         return state_store.apply_to_dashboard_data(dashboard_data)
+
+    def _load_dashboard_metadata(self) -> dict[str, Any]:
+        dashboard_data = self._read_dashboard_data()
+        dashboard_data["jobs"] = []
+        state = DashboardUserStateStore(self.user_state_path).data
+        manual_counts = {"unreviewed": 0, "applied": 0, "irrelevant": 0}
+        total_jobs = int((dashboard_data.get("summary") or {}).get("total_jobs") or 0)
+        saved_jobs = state.get("jobs", {}) if isinstance(state, dict) else {}
+        for record in saved_jobs.values() if isinstance(saved_jobs, dict) else []:
+            if not isinstance(record, dict):
+                continue
+            status = str(record.get("status") or "unreviewed")
+            if status in manual_counts:
+                manual_counts[status] += 1
+        manual_counts["unreviewed"] = max(
+            0,
+            total_jobs - manual_counts["applied"] - manual_counts["irrelevant"],
+        )
+        dashboard_data.setdefault("summary", {})["by_manual_status"] = manual_counts
+        dashboard_data.setdefault("filter_options", {})["manual_statuses"] = [
+            {"value": "unreviewed", "label": "Unreviewed"},
+            {"value": "applied", "label": "Applied"},
+            {"value": "irrelevant", "label": "Irrelevant"},
+        ]
+        if self.operational_store:
+            self._sync_operational_store_if_changed()
+            actionable = self.operational_store.job_records(
+                decision="APPLY_FIRST,GOOD_OPTIONS",
+                status="unreviewed",
+                limit=1,
+            )
+            actionable_apply = self.operational_store.job_records(
+                decision="APPLY_FIRST",
+                status="unreviewed",
+                limit=1,
+            )
+            actionable_good = self.operational_store.job_records(
+                decision="GOOD_OPTIONS",
+                status="unreviewed",
+                limit=1,
+            )
+            dashboard_data["summary"]["actionable_jobs"] = actionable["total"]
+            dashboard_data["summary"]["actionable_apply_first"] = actionable_apply["total"]
+            dashboard_data["summary"]["actionable_good_options"] = actionable_good["total"]
+        return dashboard_data
 
     def _read_dashboard_data(self) -> dict[str, Any]:
         try:
@@ -548,6 +776,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             raise RuntimeError("User workspace is unavailable")
         return MaintenanceService(self.user_workspace)
 
+    def _legacy_tools_service(self) -> LegacyToolsService:
+        if not self.user_workspace:
+            raise RuntimeError("User workspace is unavailable")
+        return LegacyToolsService(self.user_workspace.root)
+
     def _sync_operational_store(
         self,
         *,
@@ -557,6 +790,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
         state_store = store or DashboardUserStateStore(self.user_state_path)
         self.operational_store.sync(self._read_dashboard_data(), state_store.data)
+
+    def _sync_operational_store_if_changed(self) -> None:
+        if not self.operational_store:
+            return
+        self.operational_store.sync_if_changed(
+            self.dashboard_data_path,
+            self.user_state_path,
+        )
 
     def _local_origin_allowed(self) -> bool:
         origin = str(self.headers.get("Origin") or "").strip()
@@ -571,6 +812,12 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     def _query_value(self, name: str) -> str:
         values = parse_qs(urlsplit(self.path).query).get(name, [])
         return str(values[0] if values else "")
+
+    def _query_int(self, name: str, default: int) -> int:
+        try:
+            return int(self._query_value(name) or default)
+        except ValueError:
+            return default
 
 
 def make_handler(
@@ -612,15 +859,8 @@ def serve(
     DashboardUserStateStore(state_path).write()
     user_workspace = UserWorkspace(root).ensure_initialized()
     operational_store = OperationalStore(user_workspace.path / "job_scout.db")
-    try:
-        initial_dashboard_data = json.loads(data_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
-        initial_dashboard_data = {}
-    operational_store.sync(
-        initial_dashboard_data,
-        DashboardUserStateStore(state_path).data,
-    )
-    run_controller = DashboardRunController(root)
+    operational_store.sync_if_changed(data_path, state_path)
+    run_controller = DashboardRunController(root, dashboard_data_path=data_path)
     handler = make_handler(
         directory=root,
         dashboard_data_path=data_path,

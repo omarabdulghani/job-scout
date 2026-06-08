@@ -61,6 +61,52 @@ class MaintenanceServiceTests(unittest.TestCase):
             self.assertEqual(result["deleted_count"], 2)
             self.assertEqual(len(list(service.logs_dir.glob("*.txt"))), 5)
 
+    def test_diagnostic_error_is_tied_to_run_and_marked_resolved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            log_path = service.logs_dir / "dashboard_run_2026-06-08_10-00-00.txt"
+            log_path.write_text("Fatal error: example failure\n", encoding="utf-8")
+            error_time = datetime.now().astimezone() - timedelta(minutes=10)
+            os.utime(log_path, (error_time.timestamp(), error_time.timestamp()))
+            dashboard = {
+                "runs": [
+                    {
+                        "run_id": "run_1",
+                        "run_label": "Run 1",
+                        "status": "completed",
+                        "started_at": (error_time - timedelta(minutes=20)).isoformat(),
+                        "completed_at": (error_time + timedelta(minutes=5)).isoformat(),
+                    }
+                ]
+            }
+            (root / "recommended_jobs_dashboard_data.json").write_text(
+                json.dumps(dashboard),
+                encoding="utf-8",
+            )
+
+            diagnostics = service.payload()["diagnostics"]
+            latest_error = diagnostics["latest_error"]
+
+            self.assertEqual(latest_error["run_id"], "run_1")
+            self.assertEqual(latest_error["status"], "resolved")
+            self.assertTrue(latest_error["resolved"])
+            self.assertEqual(latest_error["log"], log_path.name)
+
+    def test_unresolved_diagnostic_error_remains_active(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            log_path = service.logs_dir / "dashboard_run_failed.txt"
+            log_path.write_text("Traceback: example failure\n", encoding="utf-8")
+
+            latest_error = service.payload()["diagnostics"]["latest_error"]
+
+            self.assertEqual(latest_error["status"], "active")
+            self.assertFalse(latest_error["resolved"])
+
 
 if __name__ == "__main__":
     unittest.main()

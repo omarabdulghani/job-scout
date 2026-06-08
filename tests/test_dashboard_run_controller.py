@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -78,6 +79,101 @@ class DashboardRunControllerTests(unittest.TestCase):
             )
 
         self.assertNotIn("--ai-budget-mode", command)
+
+    def test_validation_workflow_uses_exact_non_applying_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            command, workflow, label = controller.build_command(
+                {
+                    "workflow": "validate_boards",
+                    "query": "ignored",
+                    "location": "ignored",
+                    "max_pages": "all",
+                    "browser": "firefox",
+                    "human_mode": True,
+                    "fresh": True,
+                    "resume": True,
+                    "ai_budget_mode": "off",
+                }
+            )
+
+        self.assertEqual(command, [sys.executable, "main.py", "--validate-boards"])
+        self.assertEqual(workflow, "validate_boards")
+        self.assertEqual(label, "Validate job boards (no applications)")
+        self.assertNotIn("--dry-run", command)
+        self.assertNotIn("--browser", command)
+        self.assertNotIn("--resume", command)
+
+    def test_restart_reconstructs_interrupted_active_run_as_failed_and_resumable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "run_state.json"
+            progress_path = root / "progress.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "running",
+                        "active": True,
+                        "workflow": "linkedin_multi_fresh",
+                        "started_at": "2026-06-08T10:00:00+02:00",
+                        "completed_at": "",
+                        "return_code": None,
+                        "log_path": "",
+                        "command": [],
+                        "run_id": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            progress_path.write_text(
+                '{"status":"in_progress","current_query_index":12}',
+                encoding="utf-8",
+            )
+
+            controller = DashboardRunController(
+                root,
+                progress_path=progress_path,
+                state_path=state_path,
+            )
+            status = controller.status()
+
+            self.assertEqual(status["status"], "failed")
+            self.assertFalse(status["active"])
+            self.assertTrue(status["resume_available"])
+            self.assertTrue(status["resumable"])
+            self.assertIn("restarted", status["failure_reason"])
+
+    def test_restart_reconstructs_completed_progress_as_completed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "run_state.json"
+            progress_path = root / "progress.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "running",
+                        "active": True,
+                        "workflow": "linkedin_multi_fresh",
+                        "started_at": "2026-06-08T10:00:00+02:00",
+                        "completed_at": "",
+                        "return_code": None,
+                        "log_path": "",
+                        "command": [],
+                        "run_id": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            progress_path.write_text('{"status":"completed"}', encoding="utf-8")
+
+            controller = DashboardRunController(
+                root,
+                progress_path=progress_path,
+                state_path=state_path,
+            )
+
+            self.assertEqual(controller.status()["status"], "completed")
+            self.assertFalse(controller.status()["resume_available"])
 
 
 if __name__ == "__main__":
