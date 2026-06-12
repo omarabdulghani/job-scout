@@ -1,7 +1,8 @@
-import json
 import re
 from datetime import datetime
 from pathlib import Path
+
+from agent.safe_file_io import atomic_write_json, load_json_with_recovery
 
 
 class ScoutCollectedJobsStore:
@@ -147,13 +148,7 @@ class ScoutCollectedJobsStore:
         return index
 
     def _load(self) -> list[dict]:
-        if not self.path.exists():
-            return []
-
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8-sig"))
-        except (OSError, json.JSONDecodeError):
-            return []
+        raw = load_json_with_recovery(self.path)
 
         jobs = raw.get("jobs", []) if isinstance(raw, dict) else []
         if not isinstance(jobs, list):
@@ -173,12 +168,7 @@ class ScoutCollectedJobsStore:
                 ),
             ),
         }
-        temp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        temp_path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        temp_path.replace(self.path)
+        atomic_write_json(self.path, payload, trailing_newline=False)
 
     def _normalize_record(self, record: dict) -> dict:
         now = datetime.now().astimezone().isoformat()

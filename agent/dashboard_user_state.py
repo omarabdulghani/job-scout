@@ -5,11 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime
 import json
-import os
 from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+
+from agent.safe_file_io import atomic_write_json, load_json_with_recovery
 
 
 SCHEMA_VERSION = "dashboard_user_state.v1"
@@ -257,26 +258,16 @@ class DashboardUserStateStore:
         return merged
 
     def write(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.path.with_name(f".{self.path.name}.tmp")
-        temporary_path.write_text(
-            json.dumps(self.data, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary_path, self.path)
+        atomic_write_json(self.path, self.data)
 
     def _load_or_create(self) -> dict[str, Any]:
-        if self.path.exists():
-            try:
-                payload = json.loads(self.path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                payload = {}
-            if isinstance(payload, dict) and payload.get("schema_version") == SCHEMA_VERSION:
-                payload.setdefault("updated_at", "")
-                payload.setdefault("jobs", {})
-                if not isinstance(payload["jobs"], dict):
-                    payload["jobs"] = {}
-                return payload
+        payload = load_json_with_recovery(self.path)
+        if payload.get("schema_version") == SCHEMA_VERSION:
+            payload.setdefault("updated_at", "")
+            payload.setdefault("jobs", {})
+            if not isinstance(payload["jobs"], dict):
+                payload["jobs"] = {}
+            return payload
         return {
             "schema_version": SCHEMA_VERSION,
             "updated_at": "",

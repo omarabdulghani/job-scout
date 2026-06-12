@@ -29,3 +29,18 @@ scout_ai_debug.json
 scout_collected_jobs.json
 scout_progress.json
 scout_run_history.json
+
+# Recognized interrupted atomic-write candidates
+scout_progress.json.tmp
+scout_progress.json.*.tmp
+.scout_progress.json.tmp
+.scout_progress.json.*.tmp
+scout_collected_jobs.json.tmp
+scout_collected_jobs.json.*.tmp
+.scout_collected_jobs.json.tmp
+.scout_collected_jobs.json.*.tmp
+.recommended_jobs_dashboard_data.json.tmp
+.recommended_jobs_dashboard_data.json.*.tmp
+.recommended_jobs_dashboard_user_state.json.tmp
+.recommended_jobs_dashboard_user_state.json.*.tmp
+..env.*.tmp

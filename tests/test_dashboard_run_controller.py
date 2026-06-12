@@ -175,6 +175,84 @@ class DashboardRunControllerTests(unittest.TestCase):
             self.assertEqual(controller.status()["status"], "completed")
             self.assertFalse(controller.status()["resume_available"])
 
+    def test_completed_controller_state_overrides_stale_in_progress_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "run_state.json"
+            progress_path = root / "progress.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "active": False,
+                        "workflow": "linkedin_multi_fresh",
+                        "started_at": "2026-06-08T10:00:00+02:00",
+                        "completed_at": "2026-06-08T11:00:00+02:00",
+                        "return_code": 0,
+                        "log_path": "",
+                        "command": [],
+                        "run_id": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            progress_path.write_text(
+                '{"status":"in_progress","current_query_index":46}',
+                encoding="utf-8",
+            )
+
+            controller = DashboardRunController(
+                root,
+                progress_path=progress_path,
+                state_path=state_path,
+            )
+
+            self.assertEqual(controller.status()["status"], "completed")
+            self.assertFalse(controller.status()["resume_available"])
+
+    def test_restart_promotes_completed_progress_candidate_before_reconstruction(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "run_state.json"
+            progress_path = root / "progress.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "status": "running",
+                        "active": True,
+                        "workflow": "linkedin_multi_fresh",
+                        "started_at": "2026-06-08T10:00:00+02:00",
+                        "completed_at": "",
+                        "return_code": None,
+                        "log_path": "",
+                        "command": [],
+                        "run_id": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            progress_path.write_text(
+                '{"updated_at":"2026-06-08T10:30:00+02:00","status":"in_progress"}',
+                encoding="utf-8",
+            )
+            progress_path.with_suffix(".json.tmp").write_text(
+                '{"updated_at":"2026-06-08T11:00:00+02:00","status":"completed"}',
+                encoding="utf-8",
+            )
+
+            controller = DashboardRunController(
+                root,
+                progress_path=progress_path,
+                state_path=state_path,
+            )
+
+            self.assertEqual(controller.status()["status"], "completed")
+            self.assertFalse(controller.status()["resume_available"])
+            self.assertEqual(
+                json.loads(progress_path.read_text(encoding="utf-8"))["status"],
+                "completed",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

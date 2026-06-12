@@ -26,6 +26,7 @@ from agent.profile_service import ProfileService
 from agent.maintenance_service import MaintenanceService
 from agent.legacy_tools_service import LegacyToolsService
 from agent.operational_store import OperationalStore
+from agent.safe_file_io import atomic_write_json, load_json_with_recovery
 from agent.scout_stop import clear_stop_request, request_stop
 from agent.strategy_service import StrategyService
 from agent.user_workspace import UserWorkspace
@@ -229,8 +230,10 @@ class DashboardRunController:
         self.state["active"] = False
         self.state["return_code"] = return_code
         self.state["completed_at"] = self.state.get("completed_at") or datetime.now().astimezone().isoformat()
-        run_status = self._associated_run_status()
-        progress_status = str(self._read_progress().get("status") or "")
+        run_status = self._associated_run_status(candidate_min_age_seconds=0)
+        progress_status = str(
+            self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+        )
         if run_status in {"completed", "stopped", "failed"}:
             self.state["status"] = run_status
         elif self.state.get("status") in {"stopping", "stopping_after_job", "stopping_after_page"}:
@@ -249,37 +252,38 @@ class DashboardRunController:
         self._save_state_locked()
 
     def _resume_available(self) -> bool:
+        if self.state.get("status") == "completed":
+            return False
+        if self._associated_run_status() == "completed":
+            return False
         payload = self._read_progress()
         return isinstance(payload, dict) and payload.get("status") != "completed"
 
-    def _read_progress(self) -> dict[str, Any]:
-        try:
-            payload = json.loads(self.progress_path.read_text(encoding="utf-8-sig"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
-            return {}
-        return payload if isinstance(payload, dict) else {}
+    def _read_progress(
+        self,
+        *,
+        candidate_min_age_seconds: float = 2.0,
+    ) -> dict[str, Any]:
+        return load_json_with_recovery(
+            self.progress_path,
+            candidate_min_age_seconds=candidate_min_age_seconds,
+        )
 
     def _load_state(self) -> dict[str, Any]:
-        try:
-            payload = json.loads(self.state_path.read_text(encoding="utf-8-sig"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
-            return {}
-        return payload if isinstance(payload, dict) else {}
+        return load_json_with_recovery(self.state_path)
 
     def _save_state_locked(self) -> None:
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
-        temporary.write_text(
-            json.dumps(self.state, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, self.state_path)
+        atomic_write_json(self.state_path, self.state)
 
-    def _dashboard_runs(self) -> list[dict[str, Any]]:
-        try:
-            payload = json.loads(self.dashboard_data_path.read_text(encoding="utf-8-sig"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
-            return []
+    def _dashboard_runs(
+        self,
+        *,
+        candidate_min_age_seconds: float = 2.0,
+    ) -> list[dict[str, Any]]:
+        payload = load_json_with_recovery(
+            self.dashboard_data_path,
+            candidate_min_age_seconds=candidate_min_age_seconds,
+        )
         runs = payload.get("runs", []) if isinstance(payload, dict) else []
         return [dict(run) for run in runs if isinstance(run, dict)]
 
@@ -297,11 +301,17 @@ class DashboardRunController:
         run = min(candidates, key=lambda item: str(item.get("started_at") or ""))
         self.state["run_id"] = str(run.get("run_id") or "")
 
-    def _associated_run_status(self) -> str:
+    def _associated_run_status(
+        self,
+        *,
+        candidate_min_age_seconds: float = 2.0,
+    ) -> str:
         run_id = str(self.state.get("run_id") or "")
         if not run_id:
             return ""
-        for run in self._dashboard_runs():
+        for run in self._dashboard_runs(
+            candidate_min_age_seconds=candidate_min_age_seconds
+        ):
             if str(run.get("run_id") or "") == run_id:
                 return str(run.get("status") or "")
         return ""
@@ -321,8 +331,10 @@ class DashboardRunController:
             self._resolve_run_id_locked()
             if not self.state.get("active"):
                 return
-            run_status = self._associated_run_status()
-            progress_status = str(self._read_progress().get("status") or "")
+            run_status = self._associated_run_status(candidate_min_age_seconds=0)
+            progress_status = str(
+                self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+            )
             self.state["active"] = False
             self.state["completed_at"] = (
                 self.state.get("completed_at") or datetime.now().astimezone().isoformat()

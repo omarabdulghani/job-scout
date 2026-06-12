@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
-import json
-import os
 from pathlib import Path
 import shutil
 from typing import Any
+
+from agent.safe_file_io import atomic_write_json, atomic_write_text, load_json_with_recovery
 
 
 SCHEMA_VERSION = "job_agent_workspace.v1"
@@ -178,34 +178,22 @@ class UserWorkspace:
         self._atomic_json_write(self.manifest_path, manifest)
 
     def _required_json(self, path: Path, label: str) -> dict[str, Any]:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(f"{label} not found at {path}") from exc
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{label} contains invalid JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise ValueError(f"{label} must contain a JSON object")
+        missing_marker = {"__job_scout_required_json_missing__": True}
+        payload = load_json_with_recovery(path, default=missing_marker)
+        if payload == missing_marker:
+            if not path.exists():
+                raise FileNotFoundError(f"{label} not found at {path}")
+            raise ValueError(f"{label} contains invalid JSON")
         return payload
 
     def _load_json_if_valid(self, path: Path) -> dict[str, Any]:
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
-            return {}
-        return payload if isinstance(payload, dict) else {}
+        return load_json_with_recovery(path)
 
     def _atomic_json_write(self, path: Path, payload: dict[str, Any]) -> None:
-        self._atomic_text_write(
-            path,
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-        )
+        atomic_write_json(path, payload)
 
     def _atomic_text_write(self, path: Path, text: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_text(text, encoding="utf-8")
-        os.replace(temporary, path)
+        atomic_write_text(path, text)
 
 
 def load_user_config(root: Path | str = ".") -> tuple[dict[str, Any], dict[str, Any]]:

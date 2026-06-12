@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import time
 import unittest
 
 from agent.user_workspace import SCHEMA_VERSION, UserWorkspace
@@ -73,6 +75,32 @@ class UserWorkspaceTests(unittest.TestCase):
             reloaded = UserWorkspace(root).load_preferences()
 
             self.assertEqual(reloaded["job_titles"], ["Product Designer"])
+
+    def test_required_profile_load_uses_valid_recovery_candidate(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._seed_project(root)
+            workspace = UserWorkspace(root).ensure_initialized()
+            workspace.profile_path.write_text("{invalid", encoding="utf-8")
+            candidate = workspace.profile_path.with_name(
+                f".{workspace.profile_path.name}.recovery.tmp"
+            )
+            candidate.write_text(
+                json.dumps({"personal": {"first_name": "Recovered"}}),
+                encoding="utf-8",
+            )
+            old_time = time.time() - 30
+            os.utime(candidate, (old_time, old_time))
+
+            profile = workspace.load_profile()
+
+            self.assertEqual(profile["personal"]["first_name"], "Recovered")
+            self.assertEqual(
+                json.loads(workspace.profile_path.read_text(encoding="utf-8"))[
+                    "personal"
+                ]["first_name"],
+                "Recovered",
+            )
 
 
 if __name__ == "__main__":

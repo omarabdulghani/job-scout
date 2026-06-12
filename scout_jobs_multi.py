@@ -27,6 +27,7 @@ from agent.scout_console_reporter import ScoutConsoleReporter
 from agent.scout_progress import ScoutProgressStore
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.query_learning import order_queries_with_learning
+from agent.safe_file_io import DEFAULT_RETRY_DELAYS, PersistenceError
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.job_tracking import JobTrackingStore
 from agent.scout_run_logger import ScoutRunLogger
@@ -41,6 +42,7 @@ DEFAULT_QUERY_FILE = Path("search_queries.txt")
 OUTPUT_PATH = Path("high_success_probability_jobs_multi.json")
 PROGRESS_MODE = "multi_query_scout"
 FRESH_COUNT_KEYS = ("apply_first", "good_or_better", "new_jobs_seen", "ai_calls")
+FINAL_PERSISTENCE_RETRY_DELAYS = (0.1, 0.2, 0.4, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0)
 
 
 def load_config() -> tuple[dict, dict]:
@@ -948,8 +950,20 @@ async def main():
     live_run = None
     live_run_completed = False
     live_completion_status = "failed"
+    persistence_warning_count = int(progress.get("persistence_warning_count", 0) or 0)
+    latest_persistence_warning = str(progress.get("latest_persistence_warning") or "")
     recovered_reports: list[dict] = []
     recovered_live_run: dict = {}
+
+    def record_persistence_warning(component: str, exc: BaseException) -> None:
+        nonlocal persistence_warning_count, latest_persistence_warning
+        persistence_warning_count += 1
+        source = exc.original_error if isinstance(exc, PersistenceError) else exc
+        latest_persistence_warning = f"{component}: {source}"
+        console.print(
+            "[yellow][PERSISTENCE WARNING][/yellow] "
+            f"{latest_persistence_warning}"
+        )
     if resume_finalization_only and not args.description_only:
         recovered_reports, recovered_live_run = _recover_reports_from_live_dashboard(progress)
         if not recovered_reports:
@@ -978,22 +992,51 @@ async def main():
                 "recommended_jobs_dashboard.html"
             )
         except Exception as exc:
-            live_dashboard = None
-            live_run = None
-            console.print(f"[yellow]Live dashboard disabled:[/yellow] {exc}")
+            if isinstance(exc, PersistenceError):
+                record_persistence_warning("Live dashboard startup", exc)
+                active_run_id = str(
+                    (live_dashboard.data if live_dashboard else {}).get("active_run_id") or ""
+                )
+                live_run = next(
+                    (
+                        dict(run)
+                        for run in (live_dashboard.data.get("runs", []) if live_dashboard else [])
+                        if str(run.get("run_id") or "") == active_run_id
+                    ),
+                    None,
+                )
+                if live_run:
+                    console.print(
+                        "[yellow]Live dashboard will continue from its recoverable "
+                        "temporary state.[/yellow]"
+                    )
+                else:
+                    live_dashboard = None
+            else:
+                live_dashboard = None
+                live_run = None
+            if not live_dashboard or not live_run:
+                console.print(f"[yellow]Live dashboard disabled:[/yellow] {exc}")
 
     def on_live_result(event: dict):
         if not live_dashboard or not live_run:
             return
         event = dict(event)
         event["run_id"] = live_run["run_id"]
-        live_dashboard.record_job(event)
+        try:
+            live_dashboard.record_job(event)
+        except PersistenceError as exc:
+            record_persistence_warning("Live dashboard job update", exc)
 
     def update_live_progress(**updates):
         if not live_dashboard or not live_run or not fresh_policy.enabled:
             return
+        updates.setdefault("persistence_warning_count", persistence_warning_count)
+        updates.setdefault("latest_persistence_warning", latest_persistence_warning)
         try:
             live_dashboard.update_run_progress(live_run["run_id"], **updates)
+        except PersistenceError as exc:
+            record_persistence_warning("Live dashboard progress update", exc)
         except Exception as exc:
             console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
 
@@ -1078,13 +1121,27 @@ async def main():
         "fresh_policy": fresh_policy.as_dict() if fresh_policy.enabled else {},
         "fresh_progress_counts": base_fresh_counts if fresh_policy.enabled else {},
         "query_learning": query_learning,
+        "persistence_warning_count": persistence_warning_count,
+        "latest_persistence_warning": latest_persistence_warning,
     }
 
-    def save_progress(**updates):
+    def save_progress(*, final: bool = False, **updates):
         if args.process_only:
             return
         progress_state.update(updates)
-        progress_store.save(progress_state)
+        progress_state["persistence_warning_count"] = persistence_warning_count
+        progress_state["latest_persistence_warning"] = latest_persistence_warning
+        try:
+            progress_store.save(
+                progress_state,
+                retry_delays=(
+                    FINAL_PERSISTENCE_RETRY_DELAYS
+                    if final
+                    else DEFAULT_RETRY_DELAYS
+                ),
+            )
+        except PersistenceError as exc:
+            record_persistence_warning("Scout progress checkpoint", exc)
 
     def fresh_counts_so_far(extra_new_jobs_seen: int = 0) -> dict[str, int]:
         if resume_finalization_only:
@@ -1367,6 +1424,7 @@ async def main():
             completed_at=merged_output.get("completed_at", merged_output.get("generated_at", "")),
         )
         save_progress(
+            final=True,
             status="completed",
             phase="completed",
             current_query_index=len(queries) if not fresh_stop_reason else min(len(queries), index + 1),
@@ -1397,24 +1455,45 @@ async def main():
                 stopped_early=bool(fresh_stop_reason),
                 stop_reason=fresh_stop_reason,
             )
-            live_dashboard.complete_run(
-                live_run["run_id"],
-                status=live_completion_status if live_completion_status == "stopped" else "completed",
-            )
+            try:
+                live_dashboard.complete_run(
+                    live_run["run_id"],
+                    status=live_completion_status if live_completion_status == "stopped" else "completed",
+                    retry_delays=FINAL_PERSISTENCE_RETRY_DELAYS,
+                )
+            except PersistenceError as exc:
+                record_persistence_warning("Live dashboard completion", exc)
             live_run_completed = True
     except KeyboardInterrupt:
         live_completion_status = "stopped"
-        save_progress(status="stopped", phase="stopped")
+        save_progress(final=True, status="stopped", phase="stopped")
         console.print("\n[yellow]Multi-scout stopped by user.[/yellow]")
     except Exception as exc:
         live_completion_status = "failed"
-        save_progress(status="failed", phase="failed", last_error=str(exc))
-        update_live_progress(phase="failed", stop_reason=str(exc))
+        try:
+            save_progress(
+                final=True,
+                status="failed",
+                phase="failed",
+                last_error=str(exc),
+            )
+        except Exception as persistence_exc:
+            record_persistence_warning("Failed-run progress update", persistence_exc)
+        try:
+            update_live_progress(phase="failed", stop_reason=str(exc))
+        except Exception as persistence_exc:
+            record_persistence_warning("Failed-run dashboard update", persistence_exc)
         raise
     finally:
         if live_dashboard and live_run and not live_run_completed:
             try:
-                live_dashboard.complete_run(live_run["run_id"], status=live_completion_status)
+                live_dashboard.complete_run(
+                    live_run["run_id"],
+                    status=live_completion_status,
+                    retry_delays=FINAL_PERSISTENCE_RETRY_DELAYS,
+                )
+            except PersistenceError as exc:
+                record_persistence_warning("Live dashboard finalization", exc)
             except Exception as exc:
                 console.print(f"[yellow]Could not complete live dashboard run:[/yellow] {exc}")
         if browser:

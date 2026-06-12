@@ -15,9 +15,11 @@ from agent.dashboard_user_state import (
     normalize_application_stage,
     normalize_status,
 )
+from agent.job_metadata import normalize_apply_method_fields
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+SYNC_VERSION = 2
 
 
 class OperationalStore:
@@ -51,7 +53,7 @@ class OperationalStore:
                 active_job_keys.append(job_key)
                 saved = saved_jobs.get(job_key, {})
                 saved = saved if isinstance(saved, dict) else {}
-                merged_job = dict(job)
+                merged_job = normalize_apply_method_fields(job)
                 merged_job["job_key"] = job_key
                 merged_job["manual_status"] = normalize_status(saved.get("status"))
                 merged_job["manual_status_label"] = str(saved.get("status_label") or "")
@@ -109,7 +111,7 @@ class OperationalStore:
                         str(merged_job.get("processed_at") or ""),
                         str(merged_job.get("domain_category") or ""),
                         "\n".join(flags),
-                        str(merged_job.get("apply_method") or "unknown"),
+                        str(merged_job["apply_method"]),
                         str(merged_job.get("manual_status") or "unreviewed"),
                         json.dumps(merged_job, ensure_ascii=False),
                     ),
@@ -554,7 +556,7 @@ class OperationalStore:
         return (" WHERE " + " AND ".join(clauses) if clauses else ""), parameters
 
     def _source_signature(self, *paths: Path) -> str:
-        parts = []
+        parts = [f"sync_version:{SYNC_VERSION}"]
         for path in paths:
             try:
                 stat = path.stat()

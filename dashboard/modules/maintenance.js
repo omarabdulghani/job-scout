@@ -8,5 +8,9 @@ export function diagnosticOverview(diagnostics = {}) {
     logSize: Number(diagnostics.log_size_bytes || 0),
     runCount: Number(diagnostics.run_history_count || 0),
     latestError: diagnostics.latest_error || {},
+    persistenceHealth: diagnostics.persistence_health || "healthy",
+    persistenceWarningCount: Number(diagnostics.persistence_warning_count || 0),
+    recoveredTemporaryFiles: Number(diagnostics.recovered_temporary_files || 0),
+    latestPersistenceWarning: diagnostics.latest_persistence_warning || {},
   };
 }

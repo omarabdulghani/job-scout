@@ -30,6 +30,7 @@ class MaintenanceService:
         self.root = workspace.root
         self.logs_dir = self.root / "logs"
         self.backups_dir = self.root / "backups"
+        self.recovery_dir = self.backups_dir / "runtime-recovery"
         self.backups_dir.mkdir(parents=True, exist_ok=True)
 
     def payload(self) -> dict[str, Any]:
@@ -124,6 +125,10 @@ class MaintenanceService:
         )
         progress = self._read_json(self.root / "scout_progress.json")
         latest_error = self._latest_error(logs, lifecycle_runs=lifecycle_runs)
+        persistence = self._persistence_diagnostics(
+            logs,
+            lifecycle_runs=lifecycle_runs,
+        )
         important_paths = {
             "profile": self.workspace.profile_path,
             "preferences": self.workspace.preferences_path,
@@ -155,6 +160,11 @@ class MaintenanceService:
             "run_history_count": len(runs),
             "lifecycle_run_count": len(lifecycle_runs),
             "latest_error": latest_error,
+            "persistence_health": persistence["health"],
+            "persistence_warning_count": persistence["warning_count"],
+            "latest_persistence_warning": persistence["latest_warning"],
+            "recovered_temporary_files": persistence["recovered_temporary_files"],
+            "recovery_records": persistence["recovery_records"],
             "files": files,
         }
 
@@ -236,6 +246,8 @@ class MaintenanceService:
     ) -> dict[str, Any]:
         markers = ("fatal error", "traceback", "resource_exhausted", "unhandled exception")
         for record in logs[:20]:
+            if record.get("kind") not in {"dashboard_run", "scout"}:
+                continue
             try:
                 payload = self.read_log(record["name"], max_chars=40_000)
             except OSError:
@@ -265,6 +277,89 @@ class MaintenanceService:
                         "run_label": str(related_run.get("run_label") or ""),
                     }
         return {}
+
+    def _persistence_diagnostics(
+        self,
+        logs: list[dict[str, Any]],
+        *,
+        lifecycle_runs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        warnings: list[dict[str, Any]] = []
+        latest_success = max(
+            (
+                str(run.get("completed_at") or "")
+                for run in lifecycle_runs
+                if run.get("status") == "completed"
+            ),
+            default="",
+        )
+        for record in logs[:50]:
+            try:
+                payload = self.read_log(record["name"], max_chars=200_000)
+            except OSError:
+                continue
+            for line in reversed(payload["text"].splitlines()):
+                lowered = line.lower()
+                is_warning = "[persistence warning]" in lowered
+                is_legacy_lock = (
+                    "live dashboard progress update skipped" in lowered
+                    and ("access is denied" in lowered or "winerror 5" in lowered)
+                )
+                if not is_warning and not is_legacy_lock:
+                    continue
+                warning_at = str(record.get("modified_at") or "")
+                related_run = self._related_run(warning_at, lifecycle_runs)
+                resolved = (
+                    related_run.get("status") == "completed"
+                    or bool(latest_success and latest_success > warning_at)
+                )
+                warnings.append(
+                    {
+                        "log": record["name"],
+                        "message": line.strip()[:500],
+                        "timestamp": warning_at,
+                        "status": "recovered" if resolved else "active",
+                        "resolved": resolved,
+                        "run_id": str(related_run.get("run_id") or ""),
+                        "run_label": str(related_run.get("run_label") or ""),
+                    }
+                )
+
+        recovery_records = self._recovery_records()
+        promoted_count = sum(
+            1 for record in recovery_records if record.get("action") == "promoted"
+        )
+        active_warnings = [warning for warning in warnings if not warning["resolved"]]
+        health = "degraded" if active_warnings else ("recovered" if warnings else "healthy")
+        return {
+            "health": health,
+            "warning_count": len(warnings),
+            "latest_warning": warnings[0] if warnings else {},
+            "recovered_temporary_files": promoted_count,
+            "recovery_records": recovery_records[:20],
+        }
+
+    def _recovery_records(self) -> list[dict[str, Any]]:
+        if not self.recovery_dir.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for path in self.recovery_dir.glob("recovery_*.json"):
+            payload = self._read_json(path)
+            if not payload:
+                continue
+            records.append(
+                {
+                    "recorded_at": str(payload.get("recorded_at") or ""),
+                    "target": str(payload.get("target") or ""),
+                    "candidate": str(payload.get("candidate") or ""),
+                    "action": str(payload.get("action") or ""),
+                }
+            )
+        return sorted(
+            records,
+            key=lambda record: record["recorded_at"],
+            reverse=True,
+        )[:200]
 
     def _related_run(
         self,

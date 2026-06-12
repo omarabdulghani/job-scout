@@ -6,15 +6,21 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 import sqlite3
-from typing import Any
+from typing import Any, Callable
 
 
 class LegacyToolsService:
     """Expose tracker statistics without creating or mutating tracker data."""
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(
+        self,
+        root: Path | str,
+        *,
+        now_provider: Callable[[], datetime] | None = None,
+    ) -> None:
         self.root = Path(root).resolve()
         self.database_path = self.root / "data" / "applications.db"
+        self.now_provider = now_provider or (lambda: datetime.now().astimezone())
 
     def payload(self) -> dict[str, Any]:
         applications = {"total": 0, "today": 0, "by_status": {}, "recent": []}
@@ -28,7 +34,7 @@ class LegacyToolsService:
                         applications["today"] = int(
                             connection.execute(
                                 "SELECT COUNT(*) FROM applications WHERE applied_at LIKE ?",
-                                (f"{datetime.now().date().isoformat()}%",),
+                                (f"{self.now_provider().date().isoformat()}%",),
                             ).fetchone()[0]
                         )
                         applications["by_status"] = {

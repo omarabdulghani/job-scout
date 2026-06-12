@@ -38,7 +38,7 @@ import {
   applicationStageSummary,
 } from "./modules/applications.js";
 import { boardDefaults, providerStatus } from "./modules/settings.js";
-import { diagnosticOverview } from "./modules/maintenance.js";
+import { diagnosticOverview } from "./modules/maintenance.js?v=20260612-windows-reliability";
 import {
   listEditorText,
   splitListEditor,
@@ -255,9 +255,11 @@ const DEFAULT_THEME = initialTheme();
       diagnosticWorkspace: document.getElementById("diagnosticWorkspace"),
       diagnosticDatabase: document.getElementById("diagnosticDatabase"),
       diagnosticResume: document.getElementById("diagnosticResume"),
+      diagnosticPersistence: document.getElementById("diagnosticPersistence"),
       diagnosticLogs: document.getElementById("diagnosticLogs"),
       diagnosticRuns: document.getElementById("diagnosticRuns"),
       latestDiagnosticError: document.getElementById("latestDiagnosticError"),
+      latestPersistenceWarning: document.getElementById("latestPersistenceWarning"),
       maintenanceLogList: document.getElementById("maintenanceLogList"),
       createBackupButton: document.getElementById("createBackupButton"),
       pruneLogsButton: document.getElementById("pruneLogsButton"),
@@ -1740,6 +1742,13 @@ const DEFAULT_THEME = initialTheme();
         ? `SQLite ready (${formatFileSize(database.size_bytes) || "empty"})`
         : "Not initialized";
       els.diagnosticResume.textContent = overview.resume;
+      const persistenceLabels = {
+        healthy: "Healthy",
+        recovered: `Recovered (${overview.persistenceWarningCount} warning${overview.persistenceWarningCount === 1 ? "" : "s"})`,
+        degraded: `Needs attention (${overview.persistenceWarningCount})`
+      };
+      els.diagnosticPersistence.textContent =
+        persistenceLabels[overview.persistenceHealth] || labelize(overview.persistenceHealth);
       els.diagnosticLogs.textContent = `${overview.logCount} (${formatFileSize(overview.logSize) || "0 bytes"})`;
       els.diagnosticRuns.textContent = String(overview.runCount);
       const latestError = overview.latestError;
@@ -1762,6 +1771,32 @@ const DEFAULT_THEME = initialTheme();
         setIconText(openButton, "file", "Open saved log");
         openButton.addEventListener("click", () => openMaintenanceLogByName(latestError.log));
         els.latestDiagnosticError.append(title, copy, openButton);
+      }
+      const latestPersistenceWarning = overview.latestPersistenceWarning || {};
+      els.latestPersistenceWarning.classList.toggle("hidden", !latestPersistenceWarning.message);
+      if (latestPersistenceWarning.message) {
+        els.latestPersistenceWarning.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = latestPersistenceWarning.resolved
+          ? "Recovered persistence warning"
+          : "Persistence needs attention";
+        const copy = document.createElement("span");
+        copy.textContent = [
+          safe(latestPersistenceWarning.run_label),
+          formatDateTime(latestPersistenceWarning.timestamp),
+          safe(latestPersistenceWarning.message),
+          overview.recoveredTemporaryFiles
+            ? `${overview.recoveredTemporaryFiles} temporary file${overview.recoveredTemporaryFiles === 1 ? "" : "s"} recovered`
+            : ""
+        ].filter(Boolean).join(" - ");
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "button secondary";
+        setIconText(openButton, "file", "Open saved log");
+        openButton.addEventListener("click", () =>
+          openMaintenanceLogByName(latestPersistenceWarning.log)
+        );
+        els.latestPersistenceWarning.append(title, copy, openButton);
       }
       renderMaintenanceLogs(payload.logs || []);
       renderMaintenanceRuns(payload.lifecycle_runs || payload.runs || []);

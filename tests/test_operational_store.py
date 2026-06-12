@@ -155,6 +155,70 @@ class OperationalStoreTests(unittest.TestCase):
             )
             self.assertEqual(store.application_count(stage="interview"), 1)
 
+    def test_sync_normalizes_legacy_easy_apply_flag_without_explicit_method(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = OperationalStore(Path(temporary) / "job_scout.db")
+            store.sync(
+                {
+                    "jobs": [
+                        {
+                            "board": "linkedin",
+                            "job_id": "legacy-1",
+                            "title": "Legacy Easy Apply Role",
+                            "flags": ["creative_fit", "easy_apply"],
+                        }
+                    ],
+                    "runs": [],
+                },
+                {"jobs": {}},
+            )
+
+            result = store.job_records(apply_method="easy_apply")
+
+            self.assertEqual(result["total"], 1)
+            self.assertEqual(result["jobs"][0]["apply_method"], "easy_apply")
+            self.assertTrue(result["jobs"][0]["easy_apply"])
+
+    def test_sync_version_forces_one_reindex_for_unchanged_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dashboard_path = root / "dashboard.json"
+            state_path = root / "state.json"
+            store = OperationalStore(root / "job_scout.db")
+            dashboard_path.write_text(
+                json.dumps(
+                    {
+                        "jobs": [
+                            {
+                                "board": "linkedin",
+                                "job_id": "legacy-2",
+                                "flags": ["easy_apply"],
+                            }
+                        ],
+                        "runs": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state_path.write_text('{"jobs":{}}', encoding="utf-8")
+            old_signature = "|".join(
+                f"{path.resolve()}:{path.stat().st_mtime_ns}:{path.stat().st_size}"
+                for path in (dashboard_path, state_path)
+            )
+            with store._connect() as connection:
+                connection.execute(
+                    "INSERT OR REPLACE INTO metadata (key, value) VALUES ('source_signature', ?)",
+                    (old_signature,),
+                )
+                connection.commit()
+
+            migrated = store.sync_if_changed(dashboard_path, state_path)
+            unchanged = store.sync_if_changed(dashboard_path, state_path)
+
+            self.assertTrue(migrated["synced"])
+            self.assertFalse(unchanged["synced"])
+            self.assertEqual(store.job_records(apply_method="easy_apply")["total"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

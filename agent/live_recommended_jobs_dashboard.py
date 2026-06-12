@@ -8,10 +8,16 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-import os
 from pathlib import Path
 import re
 from typing import Any, Callable
+
+from agent.job_metadata import APPLY_METHOD_LABELS, normalize_apply_method
+from agent.safe_file_io import (
+    DEFAULT_RETRY_DELAYS,
+    atomic_write_json,
+    load_json_with_recovery,
+)
 
 
 SCHEMA_VERSION = "live_dashboard.v1"
@@ -38,13 +44,6 @@ DOMAIN_LABELS = {
     "FALLBACK_INCOME": "Fallback/Income",
     "OTHER": "Other",
 }
-
-APPLY_METHOD_LABELS = {
-    "easy_apply": "Easy Apply",
-    "external_apply": "External Apply",
-    "unknown": "Unknown",
-}
-
 
 class LiveRecommendedJobsDashboard:
     """Maintain the live dashboard JSON state with atomic writes."""
@@ -131,7 +130,12 @@ class LiveRecommendedJobsDashboard:
             self._upsert_fresh_page(fresh, page_quality)
 
         target = fresh.setdefault("progress", self._empty_fresh_progress())
-        allowed_text = {"phase", "current_query", "stop_reason"}
+        allowed_text = {
+            "phase",
+            "current_query",
+            "stop_reason",
+            "latest_persistence_warning",
+        }
         allowed_int = {
             "current_query_index",
             "total_queries",
@@ -144,6 +148,7 @@ class LiveRecommendedJobsDashboard:
             "ai_scored",
             "apply_first",
             "good_or_better",
+            "persistence_warning_count",
         }
         for key in allowed_text:
             if key in progress:
@@ -187,6 +192,7 @@ class LiveRecommendedJobsDashboard:
         *,
         status: str = "completed",
         completed_at: str | None = None,
+        retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
     ) -> dict[str, Any]:
         resolved_run_id = _clean_text(run_id or self.data.get("active_run_id"))
         if not resolved_run_id:
@@ -201,7 +207,7 @@ class LiveRecommendedJobsDashboard:
         if self.data.get("active_run_id") == resolved_run_id:
             self.data["active_run_id"] = ""
         self._refresh_metadata()
-        self.write()
+        self.write(retry_delays=retry_delays)
         return dict(run)
 
     def resume_run(self, run_id: str) -> dict[str, Any]:
@@ -219,27 +225,21 @@ class LiveRecommendedJobsDashboard:
         self.write()
         return dict(run)
 
-    def write(self) -> None:
-        self.data_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.data_path.with_name(f".{self.data_path.name}.tmp")
-        temporary_path.write_text(
-            json.dumps(self.data, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary_path, self.data_path)
+    def write(
+        self,
+        *,
+        retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
+    ) -> None:
+        atomic_write_json(self.data_path, self.data, retry_delays=retry_delays)
 
     def _load_or_create(self) -> dict[str, Any]:
-        if self.data_path.exists():
-            try:
-                payload = json.loads(self.data_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                payload = {}
-            if isinstance(payload, dict) and payload.get("schema_version") == SCHEMA_VERSION:
-                payload.setdefault("runs", [])
-                payload.setdefault("jobs", [])
-                payload.setdefault("summary", {})
-                payload.setdefault("filter_options", {})
-                return payload
+        payload = load_json_with_recovery(self.data_path)
+        if payload.get("schema_version") == SCHEMA_VERSION:
+            payload.setdefault("runs", [])
+            payload.setdefault("jobs", [])
+            payload.setdefault("summary", {})
+            payload.setdefault("filter_options", {})
+            return payload
         return {
             "schema_version": SCHEMA_VERSION,
             "dashboard_generated_at": self._now_iso(),
@@ -581,6 +581,8 @@ class LiveRecommendedJobsDashboard:
             "good_or_better": 0,
             "stopped_early": False,
             "stop_reason": "",
+            "persistence_warning_count": 0,
+            "latest_persistence_warning": "",
             "updated_at": "",
         }
 
@@ -728,22 +730,6 @@ def infer_flags(event: dict[str, Any], *, score: int, decision_category: str) ->
     if score and score < 50:
         flags.append("manual_review_needed")
     return flags
-
-
-def normalize_apply_method(event: dict[str, Any] | str | None) -> str:
-    if isinstance(event, dict):
-        raw = _clean_text(event.get("apply_method")).lower().replace("-", "_").replace(" ", "_")
-        flags = {str(flag).strip().lower() for flag in event.get("flags", []) if str(flag).strip()}
-        if raw in APPLY_METHOD_LABELS:
-            return raw
-        if bool(event.get("easy_apply")) or "easy_apply" in flags:
-            return "easy_apply"
-        if "external_apply" in flags:
-            return "external_apply"
-        return "unknown"
-
-    raw = _clean_text(event).lower().replace("-", "_").replace(" ", "_")
-    return raw if raw in APPLY_METHOD_LABELS else "unknown"
 
 
 def _canonical_job_url(value: Any) -> str:

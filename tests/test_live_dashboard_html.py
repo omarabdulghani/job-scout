@@ -299,9 +299,17 @@ class LiveDashboardHtmlTests(unittest.TestCase):
     def test_dashboard_uses_one_stable_file_name(self):
         self.assertNotIn("recommended_jobs_dashboard_2026", self.html)
 
+    def test_runs_page_reports_persistence_health_separately(self):
+        self.assertIn('id="diagnosticPersistence"', self.html)
+        self.assertIn('id="latestPersistenceWarning"', self.html)
+        self.assertIn("Recovered persistence warning", self.html)
+
     def test_dashboard_uses_external_feature_modules(self):
         self.assertIn('href="dashboard/styles.css"', self.document)
-        self.assertIn('type="module" src="dashboard/app.js"', self.document)
+        self.assertIn(
+            'type="module" src="dashboard/app.js?v=20260612-windows-reliability-2"',
+            self.document,
+        )
         for module_name in [
             "navigation.js",
             "jobs.js",

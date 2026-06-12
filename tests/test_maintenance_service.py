@@ -107,6 +107,104 @@ class MaintenanceServiceTests(unittest.TestCase):
             self.assertEqual(latest_error["status"], "active")
             self.assertFalse(latest_error["resolved"])
 
+    def test_server_disconnect_traceback_is_not_reported_as_scout_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            (service.logs_dir / "dashboard_server_stderr.log").write_text(
+                "Traceback (most recent call last):\n"
+                "ConnectionAbortedError: [WinError 10053] connection aborted\n",
+                encoding="utf-8",
+            )
+
+            latest_error = service.payload()["diagnostics"]["latest_error"]
+
+            self.assertEqual(latest_error, {})
+
+    def test_completed_run_marks_persistence_warning_recovered(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            log_path = service.logs_dir / "dashboard_run_persistence.txt"
+            log_path.write_text(
+                "[PERSISTENCE WARNING] Live dashboard job update: Access is denied\n",
+                encoding="utf-8",
+            )
+            warning_time = datetime.now().astimezone() - timedelta(minutes=5)
+            os.utime(log_path, (warning_time.timestamp(), warning_time.timestamp()))
+            (root / "recommended_jobs_dashboard_data.json").write_text(
+                json.dumps(
+                    {
+                        "runs": [
+                            {
+                                "run_id": "run_2",
+                                "run_label": "Run 2",
+                                "status": "completed",
+                                "started_at": (
+                                    warning_time - timedelta(minutes=30)
+                                ).isoformat(),
+                                "completed_at": (
+                                    warning_time + timedelta(minutes=1)
+                                ).isoformat(),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            diagnostics = service.payload()["diagnostics"]
+
+            self.assertEqual(diagnostics["persistence_health"], "recovered")
+            self.assertEqual(diagnostics["persistence_warning_count"], 1)
+            self.assertTrue(diagnostics["latest_persistence_warning"]["resolved"])
+            self.assertEqual(
+                diagnostics["latest_persistence_warning"]["run_id"],
+                "run_2",
+            )
+
+    def test_unresolved_persistence_warning_is_degraded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            (service.logs_dir / "dashboard_run_persistence.txt").write_text(
+                "[PERSISTENCE WARNING] Scout progress checkpoint: Access is denied\n",
+                encoding="utf-8",
+            )
+
+            diagnostics = service.payload()["diagnostics"]
+
+            self.assertEqual(diagnostics["persistence_health"], "degraded")
+            self.assertFalse(diagnostics["latest_persistence_warning"]["resolved"])
+
+    def test_recovery_events_are_counted_without_exposing_payloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.recovery_dir.mkdir(parents=True)
+            (service.recovery_dir / "recovery_example.json").write_text(
+                json.dumps(
+                    {
+                        "recorded_at": "2026-06-12T10:00:00+02:00",
+                        "target": "scout_progress.json",
+                        "candidate": ".scout_progress.json.example.tmp",
+                        "action": "promoted",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            diagnostics = service.payload()["diagnostics"]
+
+            self.assertEqual(diagnostics["recovered_temporary_files"], 1)
+            self.assertEqual(
+                diagnostics["recovery_records"][0]["target"],
+                "scout_progress.json",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

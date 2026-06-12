@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-import os
 from pathlib import Path
 import re
 from typing import Any
@@ -12,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
 
+from agent.safe_file_io import atomic_write_json, atomic_write_text, load_json_with_recovery
 from agent.user_workspace import UserWorkspace, now_iso
 
 
@@ -362,24 +362,13 @@ class AISettingsService:
             for key, value in pending.items():
                 output.append(f"{key}={self._env_value(value)}")
         text = "\n".join(output).rstrip() + "\n"
-        temporary = self.env_path.with_name(".env.dashboard.tmp")
-        temporary.write_text(text, encoding="utf-8")
-        os.replace(temporary, self.env_path)
+        atomic_write_text(self.env_path, text)
 
     def _read_statuses(self) -> dict[str, Any]:
-        try:
-            payload = json.loads(self.status_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, OSError, json.JSONDecodeError):
-            return {}
-        return payload if isinstance(payload, dict) else {}
+        return load_json_with_recovery(self.status_path)
 
     def _write_statuses(self, payload: dict[str, Any]) -> None:
-        temporary = self.status_path.with_name(".ai_provider_status.tmp")
-        temporary.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, self.status_path)
+        atomic_write_json(self.status_path, payload)
 
     def _normalize_backend(self, value: Any, *, allow_auto: bool) -> str:
         normalized = str(value or "").strip().lower().replace("-", "_")
