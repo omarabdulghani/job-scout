@@ -110,6 +110,8 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn('strategy: "/api/strategy"', self.html)
         self.assertIn("loadStrategyData", self.html)
         self.assertIn("saveStrategy", self.html)
+        self.assertIn("One item per line. Commas and semicolons are preserved.", self.html)
+        self.assertIn('from "./modules/list-editor.js"', self.html)
 
     def test_dashboard_has_persistent_light_dark_theme_toggle(self):
         self.assertIn('localStorage.getItem("jobDashboardTheme")', self.html)
@@ -308,6 +310,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "applications.js",
             "settings.js",
             "maintenance.js",
+            "list-editor.js",
         ]:
             self.assertTrue((ROOT / "dashboard" / "modules" / module_name).exists())
         self.assertNotIn("<style>", self.document)

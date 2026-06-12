@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from typing import Any
 
 from agent.query_learning import order_queries_with_learning
 from agent.user_workspace import UserWorkspace
+
+
+LIST_BULLET_PREFIX = re.compile(r"^(?:[-*\u2022]\s+|\d+[.)]\s+)")
 
 
 class StrategyService:
@@ -156,11 +160,12 @@ class StrategyService:
 
     def _string_list(self, values) -> list[str]:
         if isinstance(values, str):
-            values = values.replace(",", "\n").splitlines()
+            values = values.splitlines()
         output: list[str] = []
         seen: set[str] = set()
         for value in values or []:
             cleaned = " ".join(str(value or "").split())
+            cleaned = LIST_BULLET_PREFIX.sub("", cleaned).strip()
             key = cleaned.lower()
             if cleaned and key not in seen:
                 seen.add(key)

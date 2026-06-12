@@ -39,6 +39,10 @@ import {
 } from "./modules/applications.js";
 import { boardDefaults, providerStatus } from "./modules/settings.js";
 import { diagnosticOverview } from "./modules/maintenance.js";
+import {
+  listEditorText,
+  splitListEditor,
+} from "./modules/list-editor.js";
 
 const DATA_URL = URLS.dataFile;
 const API_DATA_URL = URLS.dashboardData;
@@ -761,24 +765,6 @@ const DEFAULT_THEME = initialTheme();
     function fieldValue(id) {
       const field = document.getElementById(id);
       return field ? String(field.value || "").trim() : "";
-    }
-
-    function listEditorText(values) {
-      return Array.isArray(values) ? values.join("\n") : "";
-    }
-
-    function splitListEditor(value) {
-      const output = [];
-      const seen = new Set();
-      for (const item of String(value || "").split(/[\n,;]+/)) {
-        const cleaned = safe(item);
-        const key = cleaned.toLowerCase();
-        if (cleaned && !seen.has(key)) {
-          seen.add(key);
-          output.push(cleaned);
-        }
-      }
-      return output;
     }
 
     function formatFileSize(bytes) {

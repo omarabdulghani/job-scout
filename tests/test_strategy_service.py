@@ -79,6 +79,71 @@ class StrategyServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "At least one"):
                 service.save(payload)
 
+    def test_string_lists_preserve_internal_punctuation(self):
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+
+            values = service._string_list(
+                "Product/web operations involving CMS, e-commerce, QA\n"
+                "UX/UI; AI-assisted prototyping\n"
+                "The Hague, Netherlands\n"
+            )
+
+            self.assertEqual(
+                values,
+                [
+                    "Product/web operations involving CMS, e-commerce, QA",
+                    "UX/UI; AI-assisted prototyping",
+                    "The Hague, Netherlands",
+                ],
+            )
+
+    def test_string_lists_normalize_bullets_blanks_and_duplicates(self):
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+
+            values = service._string_list(
+                "- Junior UX/UI Designer\r\n"
+                "\r\n"
+                "* Product Designer\r\n"
+                "\u2022 Digital Designer\r\n"
+                "1. Creative Technologist\r\n"
+                "junior ux/ui designer\r\n"
+            )
+
+            self.assertEqual(
+                values,
+                [
+                    "Junior UX/UI Designer",
+                    "Product Designer",
+                    "Digital Designer",
+                    "Creative Technologist",
+                ],
+            )
+
+    def test_save_round_trip_preserves_comma_rich_entries(self):
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+            payload = service.payload()
+            payload["career_strategy"]["primary_paths"] = [
+                "Product/web operations involving CMS, e-commerce, QA",
+                "Marketing communications roles when content, brand, web, or event focused",
+            ]
+            payload["preferences"]["locations"] = ["The Hague, Netherlands"]
+            payload["preferences"]["companies_whitelist"] = ["Example Company, B.V."]
+
+            saved = service.save(payload)
+
+            self.assertEqual(
+                saved["career_strategy"]["primary_paths"],
+                payload["career_strategy"]["primary_paths"],
+            )
+            self.assertEqual(saved["preferences"]["locations"], ["The Hague, Netherlands"])
+            self.assertEqual(
+                saved["preferences"]["companies_whitelist"],
+                ["Example Company, B.V."],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
