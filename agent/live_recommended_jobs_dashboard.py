@@ -192,8 +192,27 @@ class LiveRecommendedJobsDashboard:
         *,
         status: str = "completed",
         completed_at: str | None = None,
+        reason: str = "",
         retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
     ) -> dict[str, Any]:
+        return self.transition_run(
+            run_id,
+            status=status,
+            transitioned_at=completed_at,
+            reason=reason,
+            retry_delays=retry_delays,
+        )
+
+    def transition_run(
+        self,
+        run_id: str | None = None,
+        *,
+        status: str,
+        transitioned_at: str | None = None,
+        reason: str = "",
+        retry_delays: tuple[float, ...] = DEFAULT_RETRY_DELAYS,
+    ) -> dict[str, Any]:
+        """Apply one terminal lifecycle state and clear stale active-run metadata."""
         resolved_run_id = _clean_text(run_id or self.data.get("active_run_id"))
         if not resolved_run_id:
             raise ValueError("run_id is required to complete a live dashboard run")
@@ -202,8 +221,23 @@ class LiveRecommendedJobsDashboard:
         if not run:
             raise ValueError(f"Unknown live dashboard run_id: {resolved_run_id}")
 
-        run["status"] = status if status in {"completed", "stopped", "failed"} else "completed"
-        run["completed_at"] = completed_at or self._now_iso()
+        allowed_statuses = {"completed", "stopped", "interrupted", "failed"}
+        resolved_status = status if status in allowed_statuses else "completed"
+        event_at = transitioned_at or self._now_iso()
+        run["status"] = resolved_status
+        run["completed_at"] = event_at
+        if resolved_status == "interrupted":
+            run["interrupted_at"] = event_at
+            run["interruption_reason"] = _clean_text(reason)
+        elif resolved_status == "failed":
+            run["failure_reason"] = _clean_text(reason)
+        fresh = run.get("fresh_scout")
+        if isinstance(fresh, dict):
+            progress = fresh.setdefault("progress", self._empty_fresh_progress())
+            progress["phase"] = resolved_status
+            if reason:
+                progress["stop_reason"] = _clean_text(reason)
+            progress["updated_at"] = event_at
         if self.data.get("active_run_id") == resolved_run_id:
             self.data["active_run_id"] = ""
         self._refresh_metadata()
@@ -211,7 +245,7 @@ class LiveRecommendedJobsDashboard:
         return dict(run)
 
     def resume_run(self, run_id: str) -> dict[str, Any]:
-        """Reopen a saved failed/stopped run without creating a duplicate run."""
+        """Reopen a saved interrupted/failed/stopped run without duplicating it."""
         resolved_run_id = _clean_text(run_id)
         run = self._find_run(resolved_run_id)
         if not run:
@@ -220,6 +254,15 @@ class LiveRecommendedJobsDashboard:
             raise ValueError(f"Completed live dashboard run cannot be resumed: {resolved_run_id}")
         run["status"] = "running"
         run["completed_at"] = ""
+        run["interrupted_at"] = ""
+        run["interruption_reason"] = ""
+        run["failure_reason"] = ""
+        fresh = run.get("fresh_scout")
+        if isinstance(fresh, dict):
+            progress = fresh.setdefault("progress", self._empty_fresh_progress())
+            progress["phase"] = "resumed"
+            progress["stop_reason"] = ""
+            progress["updated_at"] = self._now_iso()
         self.data["active_run_id"] = resolved_run_id
         self._refresh_metadata()
         self.write()

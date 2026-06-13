@@ -506,6 +506,12 @@
       font-weight: 800;
     }
 
+    .home-card-status.INTERRUPTED {
+      color: var(--amber);
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
+    }
+
     .scout-status-hero {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1301,6 +1307,10 @@
       background: var(--red);
     }
 
+    .status-dot.interrupted {
+      background: var(--amber);
+    }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(9, minmax(120px, 1fr));
@@ -1417,6 +1427,11 @@
       border-radius: 8px;
       background: var(--surface);
       box-shadow: var(--shadow);
+    }
+
+    .fresh-panel.interrupted {
+      border-color: var(--amber-border);
+      box-shadow: inset 4px 0 0 var(--amber), var(--shadow);
     }
 
     .panel {
@@ -1541,6 +1556,11 @@
       background: var(--green-soft);
     }
 
+    .run-history-item.interrupted {
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
+    }
+
     .run-history-title {
       display: flex;
       justify-content: space-between;
@@ -1649,6 +1669,12 @@
 
     .fresh-action:hover {
       background: var(--blue-wash-strong);
+    }
+
+    .fresh-action.interrupted {
+      color: var(--amber);
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
     }
 
     .fresh-metrics {
@@ -2235,6 +2261,12 @@
       background: var(--red-wash);
     }
 
+    .decision-chip.INTERRUPTED {
+      color: var(--amber);
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
+    }
+
     .subline {
       color: var(--muted);
       font-size: 0.86rem;
@@ -2464,6 +2496,15 @@
 
     .workflow-hint strong {
       color: var(--blue);
+    }
+
+    .workflow-hint.interrupted {
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
+    }
+
+    .workflow-hint.interrupted strong {
+      color: var(--amber);
     }
 
     .modal-grid {

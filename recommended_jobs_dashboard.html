@@ -23,6 +23,7 @@
   <svg class="icon-sprite" aria-hidden="true" focusable="false">
     <symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 7h18"/><path d="M5 7l1 13h12l1-13"/><path d="M8 7V4h8v3"/><path d="M10 12h4"/></symbol>
     <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="icon-alert-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 17h.01"/></symbol>
     <symbol id="icon-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6.6 6.6l10.8 10.8"/></symbol>
     <symbol id="icon-bar-chart" viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
     <symbol id="icon-briefcase" viewBox="0 0 24 24"><path d="M10 6V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1"/><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 12h18"/><path d="M10 12v1h4v-1"/></symbol>
@@ -631,6 +632,7 @@
       <article class="diagnostic-card"><span>Logs</span><strong id="diagnosticLogs">0</strong></article>
       <article class="diagnostic-card"><span>Run history</span><strong id="diagnosticRuns">0</strong></article>
     </section>
+    <section id="latestRunIncident" class="workflow-hint hidden" style="margin-top:14px;"></section>
     <section id="latestDiagnosticError" class="workflow-hint hidden" style="margin-top:14px;"></section>
     <section id="latestPersistenceWarning" class="workflow-hint hidden" style="margin-top:14px;"></section>
     <div class="operations-layout">
@@ -855,6 +857,6 @@
     </section>
   </div>
 
-  <script type="module" src="dashboard/app.js?v=20260612-windows-reliability-2"></script>
+  <script type="module" src="dashboard/app.js?v=20260613-interrupted-lifecycle"></script>
 </body>
 </html>

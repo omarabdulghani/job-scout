@@ -269,6 +269,36 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(writer.data["active_run_id"], "")
             self.assertEqual(writer.data["runs"][0]["stats"]["apply_first"], 1)
 
+    def test_interrupted_run_clears_active_id_and_preserves_resume_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = LiveRecommendedJobsDashboard(
+                Path(tmp) / "recommended_jobs_dashboard_data.json"
+            )
+            run = writer.start_run(
+                mode="linkedin_multi_query_scout",
+                board="linkedin",
+                location="Amstelveen",
+                max_pages="4",
+                queries=["ux designer"],
+            )
+
+            interrupted = writer.transition_run(
+                run["run_id"],
+                status="interrupted",
+                reason="Process disappeared.",
+            )
+
+            self.assertEqual(interrupted["status"], "interrupted")
+            self.assertEqual(
+                interrupted["interruption_reason"],
+                "Process disappeared.",
+            )
+            self.assertEqual(writer.data["active_run_id"], "")
+            resumed = writer.resume_run(run["run_id"])
+            self.assertEqual(resumed["run_id"], run["run_id"])
+            self.assertEqual(resumed["status"], "running")
+            self.assertEqual(resumed["interruption_reason"], "")
+
 
 class LiveDashboardClassifierTests(unittest.TestCase):
     def test_domain_classifier_uses_other_for_unknown_jobs(self):

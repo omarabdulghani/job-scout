@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 from functools import partial
+import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -25,8 +27,10 @@ from agent.dashboard_user_state import (
 from agent.profile_service import ProfileService
 from agent.maintenance_service import MaintenanceService
 from agent.legacy_tools_service import LegacyToolsService
+from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.operational_store import OperationalStore
-from agent.safe_file_io import atomic_write_json, load_json_with_recovery
+from agent.process_identity import inspect_process, terminate_process
+from agent.safe_file_io import PersistenceError, atomic_write_json, load_json_with_recovery
 from agent.scout_stop import clear_stop_request, request_stop
 from agent.strategy_service import StrategyService
 from agent.user_workspace import UserWorkspace
@@ -61,6 +65,8 @@ class DashboardRunController:
         progress_path: Path = DEFAULT_PROGRESS_PATH,
         dashboard_data_path: Path = DEFAULT_DASHBOARD_DATA_PATH,
         state_path: Path = DEFAULT_RUN_STATE_PATH,
+        process_inspector=inspect_process,
+        process_terminator=terminate_process,
     ) -> None:
         self.root = Path(root).resolve()
         self.progress_path = progress_path if progress_path.is_absolute() else self.root / progress_path
@@ -71,6 +77,8 @@ class DashboardRunController:
         )
         self.state_path = state_path if state_path.is_absolute() else self.root / state_path
         self.lock = threading.RLock()
+        self.process_inspector = process_inspector
+        self.process_terminator = process_terminator
         self.process: subprocess.Popen | None = None
         self.log_handle = None
         self.state: dict[str, Any] = self._load_state() or {
@@ -86,15 +94,32 @@ class DashboardRunController:
             "command": [],
             "run_id": "",
             "failure_reason": "",
+            "interrupted_at": "",
+            "interruption_reason": "",
+            "detached": False,
+            "process_id": 0,
+            "process_creation_token": "",
+            "process_executable": "",
+            "command_fingerprint": "",
+            "lifecycle_reconciliation_warning": "",
         }
+        migrated_legacy_state = self._migrate_legacy_interruption()
         self._reconstruct_state()
+        if migrated_legacy_state:
+            self._save_state_locked()
 
     def status(self) -> dict[str, Any]:
         with self.lock:
             self._refresh_process_locked()
             payload = dict(self.state)
+            payload.setdefault("interrupted_at", "")
+            payload.setdefault("interruption_reason", "")
+            payload.setdefault("detached", False)
+            payload.setdefault("process_id", 0)
+            payload.setdefault("lifecycle_reconciliation_warning", "")
             payload["resume_available"] = self._resume_available()
             payload["resumable"] = payload["resume_available"] and payload.get("status") in {
+                "interrupted",
                 "failed",
                 "stopped",
                 "idle",
@@ -105,12 +130,13 @@ class DashboardRunController:
                 for key, label in self.WORKFLOW_LABELS.items()
             ]
             payload["log_tail"] = self._read_log_tail(payload.get("log_path", ""))
+            payload["resume_context"] = self._resume_context()
             return payload
 
     def start(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             self._refresh_process_locked()
-            if self.process and self.process.poll() is None:
+            if (self.process and self.process.poll() is None) or self.state.get("active"):
                 raise ValueError("A scout run is already active")
 
             command, workflow, workflow_label = self.build_command(payload)
@@ -132,6 +158,8 @@ class DashboardRunController:
                 text=True,
                 env=env,
             )
+            identity = self._capture_process_identity(self.process.pid)
+            display_command = self._display_command(command)
             self.state = {
                 "status": "running",
                 "active": True,
@@ -142,9 +170,16 @@ class DashboardRunController:
                 "return_code": None,
                 "log_path": str(log_path),
                 "log_tail": "",
-                "command": self._display_command(command),
+                "command": display_command,
                 "run_id": "",
                 "failure_reason": "",
+                "interrupted_at": "",
+                "interruption_reason": "",
+                "detached": False,
+                "process_id": self.process.pid,
+                "process_creation_token": str(identity.get("creation_token") or ""),
+                "process_executable": str(identity.get("executable") or ""),
+                "command_fingerprint": self._command_fingerprint(display_command),
             }
             self._save_state_locked()
             return self.status()
@@ -155,14 +190,17 @@ class DashboardRunController:
             raise ValueError("Unsupported stop mode")
         with self.lock:
             self._refresh_process_locked()
-            if not self.process or self.process.poll() is not None:
+            if not self.state.get("active"):
                 raise ValueError("No scout run is active")
             request_stop(
                 mode,
                 path=self.root / "data" / "scout_stop_request.json",
             )
             if mode == "now":
-                self.process.terminate()
+                if self.process and self.process.poll() is None:
+                    self.process.terminate()
+                elif not self.process_terminator(int(self.state.get("process_id") or 0)):
+                    raise ValueError("The detached scout process could not be stopped")
                 self.state["status"] = "stopping"
             else:
                 self.state["status"] = "stopping_after_job" if mode == "after_current_job" else "stopping_after_page"
@@ -218,6 +256,30 @@ class DashboardRunController:
     def _refresh_process_locked(self) -> None:
         self._resolve_run_id_locked()
         if not self.process:
+            if self.state.get("active") and self.state.get("detached"):
+                if self._stored_process_is_alive():
+                    return
+                run_status = self._associated_run_status(candidate_min_age_seconds=0)
+                progress_status = str(
+                    self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+                )
+                if run_status in {"completed", "stopped", "interrupted", "failed"}:
+                    self._transition_lifecycle_locked(run_status)
+                elif self.state.get("status") in {
+                    "stopping",
+                    "stopping_after_job",
+                    "stopping_after_page",
+                } or progress_status == "stopped":
+                    self._transition_lifecycle_locked("stopped")
+                elif progress_status == "completed":
+                    self._transition_lifecycle_locked("completed")
+                else:
+                    self._transition_lifecycle_locked(
+                        "interrupted",
+                        reason="The scout process ended without reporting a final result.",
+                    )
+            else:
+                self._reconcile_terminal_state_locked()
             return
         return_code = self.process.poll()
         if return_code is None:
@@ -234,22 +296,27 @@ class DashboardRunController:
         progress_status = str(
             self._read_progress(candidate_min_age_seconds=0).get("status") or ""
         )
-        if run_status in {"completed", "stopped", "failed"}:
-            self.state["status"] = run_status
+        if run_status in {"completed", "stopped", "interrupted", "failed"}:
+            resolved_status = run_status
         elif self.state.get("status") in {"stopping", "stopping_after_job", "stopping_after_page"}:
-            self.state["status"] = "stopped"
+            resolved_status = "stopped"
         elif progress_status == "stopped":
-            self.state["status"] = "stopped"
+            resolved_status = "stopped"
         else:
-            self.state["status"] = "completed" if return_code == 0 else "failed"
-        if self.state["status"] == "failed" and not self.state.get("failure_reason"):
-            self.state["failure_reason"] = (
+            resolved_status = "completed" if return_code == 0 else "failed"
+        reason = ""
+        if resolved_status == "failed":
+            reason = self.state.get("failure_reason") or (
                 f"Scout process exited with code {return_code}."
                 if return_code is not None
                 else "Scout process ended unexpectedly."
             )
         self.process = None
-        self._save_state_locked()
+        self._transition_lifecycle_locked(
+            resolved_status,
+            reason=reason,
+            return_code=return_code,
+        )
 
     def _resume_available(self) -> bool:
         if self.state.get("status") == "completed":
@@ -258,6 +325,26 @@ class DashboardRunController:
             return False
         payload = self._read_progress()
         return isinstance(payload, dict) and payload.get("status") != "completed"
+
+    def _resume_context(self) -> dict[str, Any]:
+        progress = self._read_progress()
+        queries = progress.get("queries", []) if isinstance(progress, dict) else []
+        total_queries = len(queries) if isinstance(queries, list) else 0
+        current_index = int(progress.get("current_query_index", 0) or 0)
+        return {
+            "current_query": str(progress.get("current_query") or ""),
+            "current_query_index": current_index + 1 if total_queries else 0,
+            "total_queries": total_queries,
+            "current_page_number": int(progress.get("current_page_number", 0) or 0),
+            "processed_jobs": int(progress.get("total_jobs_processed", 0) or 0),
+            "last_completed_query": str(progress.get("last_completed_query") or ""),
+            "log_path": str(self.state.get("log_path") or ""),
+            "restart_note": (
+                "The unfinished query may restart from its beginning; completed queries are preserved."
+                if self._resume_available()
+                else ""
+            ),
+        }
 
     def _read_progress(
         self,
@@ -330,25 +417,166 @@ class DashboardRunController:
         with self.lock:
             self._resolve_run_id_locked()
             if not self.state.get("active"):
+                self._reconcile_terminal_state_locked()
+                return
+            if self._stored_process_is_alive():
+                self.state["status"] = "running"
+                self.state["active"] = True
+                self.state["detached"] = True
+                self._save_state_locked()
                 return
             run_status = self._associated_run_status(candidate_min_age_seconds=0)
             progress_status = str(
                 self._read_progress(candidate_min_age_seconds=0).get("status") or ""
             )
-            self.state["active"] = False
-            self.state["completed_at"] = (
-                self.state.get("completed_at") or datetime.now().astimezone().isoformat()
-            )
-            if run_status in {"completed", "stopped", "failed"}:
-                self.state["status"] = run_status
+            if run_status in {"completed", "stopped", "interrupted", "failed"}:
+                self._transition_lifecycle_locked(run_status)
             elif progress_status == "completed":
-                self.state["status"] = "completed"
+                self._transition_lifecycle_locked("completed")
             else:
-                self.state["status"] = "failed"
-                self.state["failure_reason"] = (
-                    "Dashboard server restarted while the scout process was active."
+                self._transition_lifecycle_locked(
+                    "interrupted",
+                    reason=(
+                        "The dashboard restarted after the scout process ended without "
+                        "reporting a final result."
+                    ),
                 )
-            self._save_state_locked()
+
+    def _migrate_legacy_interruption(self) -> bool:
+        reason = str(self.state.get("failure_reason") or "")
+        if (
+            self.state.get("status") == "failed"
+            and self.state.get("return_code") is None
+            and "dashboard server restarted while the scout process was active" in reason.lower()
+        ):
+            self.state["status"] = "interrupted"
+            self.state["interrupted_at"] = str(self.state.get("completed_at") or "")
+            self.state["interruption_reason"] = (
+                "The scout process ended without reporting a final result; "
+                "saved progress is available."
+            )
+            self.state["failure_reason"] = ""
+            return True
+        return False
+
+    def _stored_process_is_alive(self) -> bool:
+        process_id = int(self.state.get("process_id") or 0)
+        expected_token = str(self.state.get("process_creation_token") or "")
+        expected_fingerprint = str(self.state.get("command_fingerprint") or "")
+        command = self.state.get("command", [])
+        if (
+            process_id <= 0
+            or not expected_token
+            or not expected_fingerprint
+            or expected_fingerprint != self._command_fingerprint(command)
+        ):
+            return False
+        current = self.process_inspector(process_id)
+        if not current.get("alive"):
+            return False
+        if str(current.get("creation_token") or "") != expected_token:
+            return False
+        expected_executable = str(self.state.get("process_executable") or "").lower()
+        current_executable = str(current.get("executable") or "").lower()
+        return not expected_executable or not current_executable or expected_executable == current_executable
+
+    def _capture_process_identity(self, process_id: int) -> dict[str, Any]:
+        identity: dict[str, Any] = {}
+        for delay in (0.0, 0.02, 0.05, 0.1):
+            if delay:
+                time.sleep(delay)
+            identity = self.process_inspector(process_id)
+            if identity.get("alive") and identity.get("creation_token"):
+                return identity
+        return identity
+
+    def _transition_lifecycle_locked(
+        self,
+        status: str,
+        *,
+        reason: str = "",
+        return_code: int | None = None,
+    ) -> None:
+        allowed = {"completed", "stopped", "interrupted", "failed"}
+        if status not in allowed:
+            raise ValueError(f"Unsupported run lifecycle status: {status}")
+        event_at = datetime.now().astimezone().isoformat()
+        self.state["status"] = status
+        self.state["active"] = False
+        self.state["detached"] = False
+        self.state["completed_at"] = self.state.get("completed_at") or event_at
+        if return_code is not None:
+            self.state["return_code"] = return_code
+        if status == "interrupted":
+            self.state["interrupted_at"] = self.state.get("interrupted_at") or event_at
+            self.state["interruption_reason"] = reason or self.state.get("interruption_reason") or (
+                "The scout process ended without reporting a final result."
+            )
+            self.state["failure_reason"] = ""
+        elif status == "failed":
+            self.state["failure_reason"] = reason or self.state.get("failure_reason") or "Scout run failed."
+        self._sync_live_run_lifecycle_locked(status, reason=reason, event_at=event_at)
+        self._save_state_locked()
+
+    def _sync_live_run_lifecycle_locked(
+        self,
+        status: str,
+        *,
+        reason: str,
+        event_at: str,
+    ) -> None:
+        self._resolve_run_id_locked()
+        run_id = str(self.state.get("run_id") or "")
+        if not run_id:
+            return
+        try:
+            writer = LiveRecommendedJobsDashboard(self.dashboard_data_path)
+            run = next(
+                (
+                    item
+                    for item in writer.data.get("runs", [])
+                    if str(item.get("run_id") or "") == run_id
+                ),
+                None,
+            )
+            if not run:
+                return
+            if run.get("status") == status and writer.data.get("active_run_id") != run_id:
+                self.state["lifecycle_reconciliation_warning"] = ""
+                return
+            writer.transition_run(
+                run_id,
+                status=status,
+                transitioned_at=event_at,
+                reason=reason,
+            )
+            self.state["lifecycle_reconciliation_warning"] = ""
+        except (PersistenceError, OSError) as exc:
+            self.state["lifecycle_reconciliation_warning"] = str(exc)
+
+    def _reconcile_terminal_state_locked(self) -> None:
+        status = str(self.state.get("status") or "")
+        if status not in {"completed", "stopped", "interrupted", "failed"}:
+            return
+        run_status = self._associated_run_status(candidate_min_age_seconds=0)
+        if run_status != status:
+            reason = str(
+                self.state.get("interruption_reason")
+                if status == "interrupted"
+                else self.state.get("failure_reason")
+                if status == "failed"
+                else ""
+            )
+            self._sync_live_run_lifecycle_locked(
+                status,
+                reason=reason,
+                event_at=str(self.state.get("completed_at") or datetime.now().astimezone().isoformat()),
+            )
+
+    def _command_fingerprint(self, command: Any) -> str:
+        normalized = [str(part) for part in command] if isinstance(command, list) else []
+        encoded = json.dumps(normalized, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def _read_log_tail(self, path: str, *, max_chars: int = 5000) -> str:
         if not path:

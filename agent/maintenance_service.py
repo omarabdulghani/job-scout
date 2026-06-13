@@ -124,7 +124,14 @@ class MaintenanceService:
             lifecycle_runs if lifecycle_runs is not None else self.dashboard_run_history()
         )
         progress = self._read_json(self.root / "scout_progress.json")
+        controller_state = self._read_json(
+            self.root / "data" / "user_workspace" / "dashboard_run_state.json"
+        )
         latest_error = self._latest_error(logs, lifecycle_runs=lifecycle_runs)
+        latest_run_incident = self._latest_run_incident(
+            controller_state,
+            lifecycle_runs=lifecycle_runs,
+        )
         persistence = self._persistence_diagnostics(
             logs,
             lifecycle_runs=lifecycle_runs,
@@ -160,12 +167,63 @@ class MaintenanceService:
             "run_history_count": len(runs),
             "lifecycle_run_count": len(lifecycle_runs),
             "latest_error": latest_error,
+            "latest_run_incident": latest_run_incident,
             "persistence_health": persistence["health"],
             "persistence_warning_count": persistence["warning_count"],
             "latest_persistence_warning": persistence["latest_warning"],
             "recovered_temporary_files": persistence["recovered_temporary_files"],
             "recovery_records": persistence["recovery_records"],
             "files": files,
+        }
+
+    def _latest_run_incident(
+        self,
+        controller_state: dict[str, Any],
+        *,
+        lifecycle_runs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        status = str(controller_state.get("status") or "")
+        if status not in {"interrupted", "failed"}:
+            return {}
+        run_id = str(controller_state.get("run_id") or "")
+        related = next(
+            (
+                run
+                for run in lifecycle_runs
+                if str(run.get("run_id") or "") == run_id
+            ),
+            {},
+        )
+        if status == "interrupted":
+            message = str(
+                controller_state.get("interruption_reason")
+                or "The scout process ended before reporting a final result."
+            )
+            timestamp = str(
+                controller_state.get("interrupted_at")
+                or controller_state.get("completed_at")
+                or controller_state.get("started_at")
+                or ""
+            )
+        else:
+            message = str(controller_state.get("failure_reason") or "Scout run failed.")
+            timestamp = str(
+                controller_state.get("completed_at")
+                or controller_state.get("started_at")
+                or ""
+            )
+        log_path = Path(str(controller_state.get("log_path") or ""))
+        return {
+            "status": status,
+            "message": message,
+            "timestamp": timestamp,
+            "run_id": run_id,
+            "run_label": str(related.get("run_label") or ""),
+            "log": log_path.name if log_path.name else "",
+            "resume_available": bool(
+                self._read_json(self.root / "scout_progress.json").get("status")
+                not in {"", "completed"}
+            ),
         }
 
     def create_backup(self) -> dict[str, Any]:

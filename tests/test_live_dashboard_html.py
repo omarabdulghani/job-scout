@@ -304,10 +304,18 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn('id="latestPersistenceWarning"', self.html)
         self.assertIn("Recovered persistence warning", self.html)
 
+    def test_dashboard_has_interrupted_run_lifecycle_ui(self):
+        self.assertIn('id="latestRunIncident"', self.html)
+        self.assertIn("A previous run was interrupted and can be resumed", self.html)
+        self.assertIn("Interrupted Fresh Scout Run", self.html)
+        self.assertIn("Resume last run", self.html)
+        self.assertIn("effectiveActiveRunId", self.html)
+        self.assertIn(".decision-chip.INTERRUPTED", self.html)
+
     def test_dashboard_uses_external_feature_modules(self):
         self.assertIn('href="dashboard/styles.css"', self.document)
         self.assertIn(
-            'type="module" src="dashboard/app.js?v=20260612-windows-reliability-2"',
+            'type="module" src="dashboard/app.js?v=20260613-interrupted-lifecycle"',
             self.document,
         )
         for module_name in [

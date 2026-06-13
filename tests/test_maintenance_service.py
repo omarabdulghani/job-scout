@@ -205,6 +205,56 @@ class MaintenanceServiceTests(unittest.TestCase):
                 "scout_progress.json",
             )
 
+    def test_interrupted_controller_is_exposed_as_latest_run_incident(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            service.logs_dir.mkdir()
+            log_path = service.logs_dir / "dashboard_run_interrupted.txt"
+            log_path.write_text("last useful line\n", encoding="utf-8")
+            controller_path = root / "data" / "user_workspace" / "dashboard_run_state.json"
+            controller_path.parent.mkdir(parents=True, exist_ok=True)
+            controller_path.write_text(
+                json.dumps(
+                    {
+                        "status": "interrupted",
+                        "run_id": "run_36",
+                        "interrupted_at": "2026-06-13T01:46:00+02:00",
+                        "interruption_reason": "The process disappeared.",
+                        "log_path": str(log_path),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "scout_progress.json").write_text(
+                '{"status":"in_progress"}',
+                encoding="utf-8",
+            )
+            (root / "recommended_jobs_dashboard_data.json").write_text(
+                json.dumps(
+                    {
+                        "runs": [
+                            {
+                                "run_id": "run_36",
+                                "run_label": "Run 36",
+                                "status": "interrupted",
+                                "started_at": "2026-06-13T00:10:00+02:00",
+                                "completed_at": "2026-06-13T01:46:00+02:00",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            incident = service.payload()["diagnostics"]["latest_run_incident"]
+
+            self.assertEqual(incident["status"], "interrupted")
+            self.assertEqual(incident["run_id"], "run_36")
+            self.assertEqual(incident["run_label"], "Run 36")
+            self.assertEqual(incident["log"], log_path.name)
+            self.assertTrue(incident["resume_available"])
+
 
 if __name__ == "__main__":
     unittest.main()

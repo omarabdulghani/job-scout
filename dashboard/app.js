@@ -38,7 +38,7 @@ import {
   applicationStageSummary,
 } from "./modules/applications.js";
 import { boardDefaults, providerStatus } from "./modules/settings.js";
-import { diagnosticOverview } from "./modules/maintenance.js?v=20260612-windows-reliability";
+import { diagnosticOverview } from "./modules/maintenance.js?v=20260613-interrupted-lifecycle";
 import {
   listEditorText,
   splitListEditor,
@@ -258,6 +258,7 @@ const DEFAULT_THEME = initialTheme();
       diagnosticPersistence: document.getElementById("diagnosticPersistence"),
       diagnosticLogs: document.getElementById("diagnosticLogs"),
       diagnosticRuns: document.getElementById("diagnosticRuns"),
+      latestRunIncident: document.getElementById("latestRunIncident"),
       latestDiagnosticError: document.getElementById("latestDiagnosticError"),
       latestPersistenceWarning: document.getElementById("latestPersistenceWarning"),
       maintenanceLogList: document.getElementById("maintenanceLogList"),
@@ -1751,6 +1752,37 @@ const DEFAULT_THEME = initialTheme();
         persistenceLabels[overview.persistenceHealth] || labelize(overview.persistenceHealth);
       els.diagnosticLogs.textContent = `${overview.logCount} (${formatFileSize(overview.logSize) || "0 bytes"})`;
       els.diagnosticRuns.textContent = String(overview.runCount);
+      const latestRunIncident = overview.latestRunIncident || {};
+      els.latestRunIncident.classList.toggle("hidden", !latestRunIncident.message);
+      if (latestRunIncident.message) {
+        els.latestRunIncident.replaceChildren();
+        els.latestRunIncident.classList.toggle(
+          "interrupted",
+          latestRunIncident.status === "interrupted"
+        );
+        const title = document.createElement("strong");
+        title.textContent = latestRunIncident.status === "interrupted"
+          ? "Latest run was interrupted"
+          : "Latest run failed";
+        const copy = document.createElement("span");
+        copy.textContent = [
+          safe(latestRunIncident.run_label),
+          formatDateTime(latestRunIncident.timestamp),
+          safe(latestRunIncident.message),
+          latestRunIncident.resume_available ? "Saved progress can be resumed." : ""
+        ].filter(Boolean).join(" - ");
+        els.latestRunIncident.append(title, copy);
+        if (latestRunIncident.log) {
+          const openButton = document.createElement("button");
+          openButton.type = "button";
+          openButton.className = "button secondary";
+          setIconText(openButton, "file", "Open saved log");
+          openButton.addEventListener("click", () =>
+            openMaintenanceLogByName(latestRunIncident.log)
+          );
+          els.latestRunIncident.append(openButton);
+        }
+      }
       const latestError = overview.latestError;
       els.latestDiagnosticError.classList.toggle("hidden", !latestError.message);
       if (latestError.message) {
@@ -1956,17 +1988,22 @@ const DEFAULT_THEME = initialTheme();
     function renderScoutWorkspace() {
       const control = state.runControl || {};
       const available = state.runControlAvailable;
-      const active = Boolean(control.active);
+      const active = isRunActive();
+      const interrupted = control.status === "interrupted";
       if (els.scoutWorkspaceEyebrow) {
         els.scoutWorkspaceEyebrow.textContent = available ? "Local controller connected" : "Local controller unavailable";
         els.scoutWorkspaceStatus.textContent = active
           ? "A scout run is active"
-          : (control.status === "failed" ? "The last run needs attention" : "Ready for the next scout run");
+          : (interrupted
+            ? "The last run was interrupted"
+            : (control.status === "failed" ? "The last run needs attention" : "Ready for the next scout run"));
         els.scoutWorkspaceDetail.textContent = available
           ? runControlStatusText(control)
           : "Start the dashboard with start_dashboard.ps1 to enable run controls.";
         els.scoutWorkspaceBadge.textContent = active ? "Running" : labelize(control.status || "Idle");
-        els.scoutWorkspaceBadge.className = "decision-chip " + (active ? "APPLY_FIRST" : "");
+        els.scoutWorkspaceBadge.className = "decision-chip " + (
+          active ? "APPLY_FIRST" : interrupted ? "INTERRUPTED" : ""
+        );
       }
       const queries = Array.isArray(state.strategyPayload?.queries) ? state.strategyPayload.queries : [];
       const locations = Array.isArray(state.strategyPayload?.preferences?.locations)
@@ -2077,10 +2114,7 @@ const DEFAULT_THEME = initialTheme();
           state.jobsByDecision = {};
         }
         updateUndoButtonState();
-        setStatus(
-          payload.active_run_id ? "live" : "",
-          payload.active_run_id ? "Run active" : (apiAvailable ? "Ready" : "Read-only")
-        );
+        syncGlobalRunStatus();
         render();
       } catch (error) {
         setStatus("error", "Data unavailable");
@@ -2236,7 +2270,8 @@ const DEFAULT_THEME = initialTheme();
         ? numeric(summary.actionable_good_options)
         : allJobs.filter((job) => needsAction(job) && safe(job.decision_category) === "GOOD_OPTIONS").length;
       const manual = summary.by_manual_status || manualStatusCounts(allJobs);
-      const activeRun = Boolean(state.runControl?.active || state.data.active_run_id);
+      const activeRun = isRunActive();
+      const interrupted = state.runControl?.status === "interrupted";
       const runs = Array.isArray(state.data.runs) ? state.data.runs : [];
       const latestRun = runs.length ? runs[runs.length - 1] : {};
       const latestStats = latestRun.stats || {};
@@ -2254,13 +2289,23 @@ const DEFAULT_THEME = initialTheme();
         els.homeFocusCopy.textContent = "Start a fresh scout run to look for new opportunities, or review your application follow-ups.";
       }
 
-      els.homeRunBadge.textContent = activeRun ? "Scout running" : (state.runControlAvailable ? "Scout ready" : "Controller offline");
-      els.homeRunBadge.className = "home-card-status" + (activeRun ? " APPLY_FIRST" : "");
+      els.homeRunBadge.textContent = activeRun
+        ? "Scout running"
+        : interrupted
+          ? "Scout interrupted"
+          : (state.runControlAvailable ? "Scout ready" : "Controller offline");
+      els.homeRunBadge.className = "home-card-status" + (
+        activeRun ? " APPLY_FIRST" : interrupted ? " INTERRUPTED" : ""
+      );
       els.homeRunTitle.textContent = activeRun
         ? safe(state.runControl?.workflow_label) || "A scout run is active"
-        : (state.runControl?.resume_available ? "A previous run can be resumed" : "Ready for the next scout");
+        : (interrupted
+          ? "A previous run was interrupted and can be resumed"
+          : (state.runControl?.resume_available ? "A previous run can be resumed" : "Ready for the next scout"));
       els.homeRunCopy.textContent = activeRun
         ? runControlStatusText(state.runControl || {})
+        : interrupted
+          ? resumeContextText(state.runControl || {})
         : (state.runControlAvailable
           ? "Run controls are connected. Login and verification remain manual."
           : "Launch the dashboard with its desktop shortcut to enable local run controls.");
@@ -2454,10 +2499,19 @@ const DEFAULT_THEME = initialTheme();
       const expanded = state.expandedFreshRuns.has(runId);
 
       els.freshPanel.classList.remove("hidden");
+      els.freshPanel.classList.toggle("interrupted", run.status === "interrupted");
       els.freshPanel.classList.toggle("completed", !isRunning);
       els.freshPanel.classList.toggle("expanded", isRunning || expanded);
       els.freshCompleteSummary.classList.toggle("hidden", isRunning);
-      setIconText(els.freshTitle, isRunning ? "activity" : "refresh", isRunning ? "Fresh Scout Progress" : "Last Fresh Scout Run");
+      setIconText(
+        els.freshTitle,
+        isRunning ? "activity" : run.status === "interrupted" ? "alert-circle" : "refresh",
+        isRunning
+          ? "Fresh Scout Progress"
+          : run.status === "interrupted"
+            ? "Interrupted Fresh Scout Run"
+            : "Last Fresh Scout Run"
+      );
       els.freshRunLabel.textContent = safe(run.run_label) || "Fresh run";
       els.freshStatus.textContent = freshStatusText(run, progress, stopReason);
       els.freshApply.textContent = metricText(apply, applyTarget);
@@ -2494,13 +2548,14 @@ const DEFAULT_THEME = initialTheme();
       if (selectedRunId) {
         return runs.find((run) => safe(run.run_id) === selectedRunId && run.fresh_scout && run.fresh_scout.enabled);
       }
-      const activeRun = runs.find((run) => safe(run.run_id) === safe(state.data.active_run_id) && run.fresh_scout && run.fresh_scout.enabled);
+      const activeRun = runs.find((run) => safe(run.run_id) === effectiveActiveRunId() && run.fresh_scout && run.fresh_scout.enabled);
       if (activeRun) return activeRun;
       return [...runs].reverse().find((run) => run.fresh_scout && run.fresh_scout.enabled);
     }
 
     function freshStatusText(run, progress, stopReason) {
       const phase = labelize(progress.phase || "");
+      if (run.status === "interrupted") return "Interrupted: progress was saved and can be resumed.";
       if (stopReason && run.status === "completed") return "Completed early: " + conciseStopReason(stopReason);
       if (stopReason) return "Stopped: " + conciseStopReason(stopReason);
       if (run.status === "running") return phase ? ("Running: " + phase) : "Fresh run active.";
@@ -2525,7 +2580,10 @@ const DEFAULT_THEME = initialTheme();
         els.freshCompleteSummary.append(freshSummaryChip(label, value));
       }
       if (values.stopReason) {
-        const chip = freshSummaryChip("Stop", shortStopReason(values.stopReason));
+        const chip = freshSummaryChip(
+          run.status === "interrupted" ? "Reason" : "Stop",
+          shortStopReason(values.stopReason)
+        );
         chip.title = values.stopReason;
         els.freshCompleteSummary.append(chip);
       }
@@ -2557,6 +2615,14 @@ const DEFAULT_THEME = initialTheme();
       });
 
       els.freshCompleteSummary.append(filterButton, detailsButton);
+      if (run.status === "interrupted" && state.runControl?.resume_available) {
+        const resumeButton = document.createElement("button");
+        resumeButton.type = "button";
+        resumeButton.className = "fresh-action interrupted";
+        setIconText(resumeButton, "play", "Resume last run");
+        resumeButton.addEventListener("click", () => openScoutModal({ resume: true }));
+        els.freshCompleteSummary.append(resumeButton);
+      }
     }
 
     function freshSummaryChip(label, value) {
@@ -2677,7 +2743,7 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function bestNextJobs() {
-      const activeRunId = safe(state.data.active_run_id);
+      const activeRunId = effectiveActiveRunId();
       const latestRun = latestRunId();
       return jobs()
         .filter((job) => needsAction(job))
@@ -2788,8 +2854,22 @@ const DEFAULT_THEME = initialTheme();
       const label = document.createElement("span");
       label.textContent = safe(run.run_label) || safe(run.run_id) || "Run";
       const status = document.createElement("span");
-      status.className = "decision-chip";
-      status.append(createIcon(run.status === "completed" ? "check-circle" : run.status === "running" ? "activity" : "clock", "icon icon-sm"), document.createTextNode(labelize(run.status || "unknown")));
+      status.className = "decision-chip " + (
+        run.status === "interrupted" ? "INTERRUPTED" : ""
+      );
+      status.append(
+        createIcon(
+          run.status === "completed"
+            ? "check-circle"
+            : run.status === "running"
+              ? "activity"
+              : run.status === "interrupted"
+                ? "alert-circle"
+                : "clock",
+          "icon icon-sm"
+        ),
+        document.createTextNode(labelize(run.status || "unknown"))
+      );
       title.append(label, status);
 
       const stats = run.stats || {};
@@ -2853,7 +2933,7 @@ const DEFAULT_THEME = initialTheme();
         state.filters.decision = "all";
         state.filters.manualStatus = "all";
       } else if (key === "current_run") {
-        state.filters.run = safe(state.data.active_run_id) || latestRunId() || "all";
+        state.filters.run = effectiveActiveRunId() || latestRunId() || "all";
         state.filters.actionScope = "all";
       } else if (key === "apply_first") {
         state.filters.actionScope = "needs_action";
@@ -3484,7 +3564,8 @@ const DEFAULT_THEME = initialTheme();
 
     function renderRunControl() {
       const control = state.runControl || {};
-      const active = Boolean(control.active);
+      const active = isRunActive();
+      const interrupted = control.status === "interrupted";
       const available = state.runControlAvailable;
       if (els.runControlNotice) {
         els.runControlNotice.textContent = available
@@ -3493,7 +3574,9 @@ const DEFAULT_THEME = initialTheme();
       }
       if (els.runStatusBadge) {
         setIconText(els.runStatusBadge, active ? "activity" : "clock", active ? "Running" : labelize(control.status || "Idle"));
-        els.runStatusBadge.className = "decision-chip " + (active ? "APPLY_FIRST" : "");
+        els.runStatusBadge.className = "decision-chip " + (
+          active ? "APPLY_FIRST" : interrupted ? "INTERRUPTED" : ""
+        );
       }
       if (els.runStatusText) {
         els.runStatusText.textContent = available
@@ -3514,18 +3597,63 @@ const DEFAULT_THEME = initialTheme();
         if (button) button.disabled = !available || !active;
       }
       updateWorkflowFields();
+      syncGlobalRunStatus();
       renderScoutWorkspace();
       renderHome();
     }
 
     function runControlStatusText(control) {
       if (control.active) {
-        return "Running " + (safe(control.workflow_label) || "scout") + " since " + (formatDateTime(control.started_at) || "now") + ".";
+        const detached = control.detached
+          ? " Monitoring continued after the dashboard restarted."
+          : "";
+        return "Running " + (safe(control.workflow_label) || "scout") + " since " + (formatDateTime(control.started_at) || "now") + "." + detached;
       }
+      if (control.status === "interrupted") return "Last run was interrupted. " + resumeContextText(control);
       if (control.status === "failed") return "Last run failed. Review the log tail before resuming.";
       if (control.status === "stopped") return "Last run was stopped. Resume is available when scout progress exists.";
       if (control.status === "completed") return "Last run completed.";
       return "No active scout run.";
+    }
+
+    function isRunActive() {
+      if (state.runControlAvailable) return Boolean(state.runControl?.active);
+      return Boolean(state.data.active_run_id);
+    }
+
+    function effectiveActiveRunId() {
+      if (state.runControlAvailable) {
+        return state.runControl?.active
+          ? safe(state.runControl.run_id || state.data.active_run_id)
+          : "";
+      }
+      return safe(state.data.active_run_id);
+    }
+
+    function resumeContextText(control) {
+      const context = control.resume_context || {};
+      const queryPosition = numeric(context.current_query_index) && numeric(context.total_queries)
+        ? `Query ${numeric(context.current_query_index)} of ${numeric(context.total_queries)}`
+        : "";
+      const query = safe(context.current_query);
+      const page = numeric(context.current_page_number)
+        ? `page ${numeric(context.current_page_number)}`
+        : "";
+      const checkpoint = [queryPosition, query, page].filter(Boolean).join(": ");
+      return [
+        checkpoint ? `Saved at ${checkpoint}.` : "Saved progress is available.",
+        safe(context.restart_note)
+      ].filter(Boolean).join(" ");
+    }
+
+    function syncGlobalRunStatus() {
+      if (isRunActive()) {
+        setStatus("live", state.runControl?.detached ? "Run active (monitored)" : "Run active");
+      } else if (state.runControlAvailable && state.runControl?.status === "interrupted") {
+        setStatus("interrupted", "Run interrupted");
+      } else {
+        setStatus("", state.apiAvailable ? "Ready" : "Read-only");
+      }
     }
 
     function openRunScoutModal() {
