@@ -48,5 +48,4 @@ scout_collected_jobs.json.*.tmp
 # Agent / Scratch files
 scratch/
 description_logs/
-project_state_report.md
 
