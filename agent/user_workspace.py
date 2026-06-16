@@ -27,6 +27,7 @@ class UserWorkspace:
         self.strategy_path = self.path / "job_strategy.txt"
         self.portfolio_notes_path = self.path / "portfolio_notes.txt"
         self.search_queries_path = self.path / "search_queries.txt"
+        self.search_query_groups_path = self.path / "search_query_groups.json"
         self.cv_dir = self.path / "cv"
         self.backup_dir = self.path / "backups"
 
@@ -58,6 +59,7 @@ class UserWorkspace:
             self.search_queries_path,
             self.root / "search_queries.txt",
         )
+        self._ensure_query_groups()
 
         if profile:
             migrated_profile = self._migrate_cv(profile)
@@ -83,6 +85,13 @@ class UserWorkspace:
         self.ensure_initialized()
         return self._required_json(self.preferences_path, "Preferences")
 
+    def load_search_query_groups(self) -> dict[str, Any]:
+        self.ensure_initialized()
+        return self._required_json(
+            self.search_query_groups_path,
+            "Search query groups",
+        )
+
     def load_config(self) -> tuple[dict[str, Any], dict[str, Any]]:
         return self.load_profile(), self.load_preferences()
 
@@ -91,6 +100,9 @@ class UserWorkspace:
 
     def save_preferences(self, preferences: dict[str, Any]) -> None:
         self._save_json(self.preferences_path, preferences)
+
+    def save_json(self, destination: Path, payload: dict[str, Any]) -> None:
+        self._save_json(destination, payload)
 
     def save_text(self, destination: Path, value: str) -> None:
         self.ensure_initialized()
@@ -107,6 +119,7 @@ class UserWorkspace:
             "strategy": str(self.strategy_path),
             "portfolio_notes": str(self.portfolio_notes_path),
             "search_queries": str(self.search_queries_path),
+            "search_query_groups": str(self.search_query_groups_path),
             "cv_dir": str(self.cv_dir),
         }
 
@@ -158,6 +171,40 @@ class UserWorkspace:
         migrated = deepcopy(profile)
         migrated["cv_path"] = relative_path
         return migrated
+
+    def _ensure_query_groups(self) -> None:
+        from agent.search_query_plan import (
+            flatten_query_groups,
+            migrate_flat_queries,
+            normalize_query_groups,
+            query_groups_payload,
+        )
+
+        payload = self._load_json_if_valid(self.search_query_groups_path)
+        if payload.get("schema_version"):
+            groups = normalize_query_groups(payload)
+        else:
+            queries = [
+                line.strip()
+                for line in self.search_queries_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                ).splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            groups = migrate_flat_queries(queries)
+            self._atomic_json_write(
+                self.search_query_groups_path,
+                query_groups_payload(groups),
+            )
+        union = flatten_query_groups(groups)
+        expected = "\n".join(union) + ("\n" if union else "")
+        current = self.search_queries_path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        )
+        if current != expected:
+            self._atomic_text_write(self.search_queries_path, expected)
 
     def _backup(self, source: Path) -> None:
         if not source.exists():

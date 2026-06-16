@@ -185,6 +185,29 @@ class FreshScoutGlobalStopTests(unittest.TestCase):
         self.assertIn("AI budget guard", reason)
         self.assertEqual(counts["ai_calls"], 44)
 
+    def test_adaptive_initial_coverage_can_delay_only_the_ai_budget_guard(self):
+        policy = FreshScoutPolicy.from_preferences(
+            {
+                "fresh_scout": {
+                    "target_apply_first_jobs": 8,
+                    "target_good_or_better_jobs": 20,
+                    "global_new_jobs_soft_cap": 140,
+                    "ai_calls_quality_check": 40,
+                }
+            },
+            enabled=True,
+        )
+
+        reason, counts = _fresh_global_stop_reason(
+            [_report([_job(1, 55, "possible_match")], collected=44, ai_calls=44)],
+            _ScoutThresholds(),
+            policy,
+            allow_ai_budget_guard=False,
+        )
+
+        self.assertEqual(reason, "")
+        self.assertEqual(counts["ai_calls"], 44)
+
     def test_deep_ai_budget_mode_skips_early_low_yield_guard(self):
         policy = FreshScoutPolicy.from_preferences(
             {

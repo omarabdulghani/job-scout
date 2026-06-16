@@ -226,6 +226,43 @@ class MaintenanceService:
             ),
         }
 
+    def archive_historical_data(self) -> dict[str, Any]:
+        """Orchestrate historical data migration to SQLite and trim JSON payloads."""
+        from agent.operational_store import OperationalStore
+        from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
+        from agent.scout_collected_jobs import ScoutCollectedJobsStore
+
+        dashboard_data_path = self.root / "recommended_jobs_dashboard_data.json"
+        user_state_path = self.root / "recommended_jobs_dashboard_user_state.json"
+        db_path = self.workspace.path / "job_scout.db"
+
+        # 1. Initialize DB and sync dashboard/user state
+        store = OperationalStore(db_path)
+        sync_result = store.sync_if_changed(dashboard_data_path, user_state_path)
+
+        # 2. Sync collected jobs
+        collected_jobs_store = ScoutCollectedJobsStore(
+            path=self.root / "scout_collected_jobs.json",
+            operational_store=store,
+        )
+        collected_jobs_synced = store.sync_collected_jobs(collected_jobs_store.jobs)
+
+        # 3. Trim live dashboard payload
+        live_dashboard = LiveRecommendedJobsDashboard(dashboard_data_path)
+        live_dashboard.trim_historical_runs(keep_latest_runs=10)
+
+        # 4. Trim collected jobs payload
+        collected_jobs_store.trim_old_records(keep_days=14)
+
+        return {
+            "dashboard_sync_result": sync_result,
+            "collected_jobs_synced": collected_jobs_synced,
+            "dashboard_runs_kept": len(live_dashboard.data.get("runs", [])),
+            "dashboard_jobs_kept": len(live_dashboard.data.get("jobs", [])),
+            "collected_jobs_kept": len(collected_jobs_store.jobs),
+            "archived_at": now_iso(),
+        }
+
     def create_backup(self) -> dict[str, Any]:
         timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
         destination = self.backups_dir / f"job_scout_backup_{timestamp}.zip"

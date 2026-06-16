@@ -27,14 +27,26 @@ from agent.scout_console_reporter import ScoutConsoleReporter
 from agent.scout_progress import ScoutProgressStore
 from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.query_learning import order_queries_with_learning
+from agent.search_query_plan import (
+    SEARCH_GOAL_LABELS,
+    build_search_query_plan,
+    query_plan_metadata,
+)
+from agent.search_scope import (
+    EMPLOYMENT_PREFERENCES,
+    SEARCH_MARKETS,
+    build_search_scope,
+    normalize_search_scope,
+    search_scope_summary,
+)
 from agent.safe_file_io import DEFAULT_RETRY_DELAYS, PersistenceError
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.job_tracking import JobTrackingStore
 from agent.scout_run_logger import ScoutRunLogger
 from agent.scout_stop import clear_stop_request, stop_reason, stop_requested
-from agent.user_workspace import active_search_queries_path, load_user_config
+from agent.user_workspace import UserWorkspace, active_search_queries_path, load_user_config
 
-load_dotenv()
+load_dotenv(override=True)
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 
@@ -86,6 +98,108 @@ def _load_queries(path: Path) -> list[str]:
         raise SystemExit(f"No usable queries found in {path}")
 
     return queries
+
+
+def _legacy_query_plan(queries: list[str], *, search_goal: str = "legacy") -> dict:
+    return {
+        "schema_version": "legacy_flat_queries.v1",
+        "search_goal": search_goal,
+        "search_goal_label": SEARCH_GOAL_LABELS.get(search_goal, search_goal),
+        "selected_groups": [],
+        "phase_order": [],
+        "initial_coverage_count": 0,
+        "ai_budget_eligible_after_index": -1,
+        "entries": [
+            {
+                "query": query,
+                "search_group": "",
+                "matched_search_groups": [],
+                "phase": "",
+                "initial_coverage": False,
+            }
+            for query in queries
+        ],
+        "queries": list(queries),
+        "query_learning": {},
+    }
+
+
+def _parse_search_groups(value: str | None) -> list[str]:
+    groups: list[str] = []
+    for raw in str(value or "").split(","):
+        group = raw.strip().lower()
+        if not group:
+            continue
+        if group not in {"primary", "bridge", "fallback"}:
+            raise SystemExit("--search-groups may contain only primary, bridge, and fallback.")
+        if group not in groups:
+            groups.append(group)
+    return groups
+
+
+def _expected_query_file(
+    query_source_path: Path,
+    *,
+    progress: dict,
+    resume: bool,
+) -> str:
+    if resume and progress.get("query_file"):
+        return str(progress.get("query_file"))
+    return str(query_source_path.resolve())
+
+
+def _annotate_report_search_metadata(
+    report: dict,
+    metadata: dict,
+    search_goal: str,
+    search_scope: dict | None = None,
+) -> None:
+    report["search_goal"] = search_goal
+    report["search_group"] = metadata.get("search_group", "")
+    report["matched_search_groups"] = list(metadata.get("matched_search_groups", []))
+    report["search_phase"] = metadata.get("phase", "")
+    report["search_scope"] = dict(search_scope or {})
+    for _, job in _iter_report_jobs(report):
+        job["search_goal"] = search_goal
+        job["search_group"] = metadata.get("search_group", "")
+        job["matched_search_groups"] = list(metadata.get("matched_search_groups", []))
+        job["search_scope"] = dict(search_scope or {})
+        job["search_market"] = str((search_scope or {}).get("search_market") or "")
+
+
+def _query_learning_summary(query_learning: dict) -> str:
+    if not query_learning:
+        return "disabled"
+    if "enabled" in query_learning:
+        if query_learning.get("enabled"):
+            label = (
+                "enabled"
+                + (
+                    "; reordered queries"
+                    if query_learning.get("reordered")
+                    else "; kept query-file order"
+                )
+            )
+            top_queries = [
+                item.get("query", "")
+                for item in query_learning.get("top_queries", [])[:3]
+                if item.get("query")
+            ]
+            return label + (f"; top: {', '.join(top_queries)}" if top_queries else "")
+        return str(query_learning.get("reason") or "disabled")
+
+    summaries = []
+    for group in ("primary", "bridge", "fallback"):
+        metadata = query_learning.get(group)
+        if not isinstance(metadata, dict):
+            continue
+        if metadata.get("enabled"):
+            summaries.append(
+                f"{group}: {'reordered' if metadata.get('reordered') else 'learned order'}"
+            )
+        else:
+            summaries.append(f"{group}: {metadata.get('reason') or 'disabled'}")
+    return "; ".join(summaries) or "disabled"
 
 
 def _normalize_query(value: str) -> str:
@@ -215,6 +329,10 @@ def _build_query_hits(occurrences: list[dict], query_order: dict[str, int]) -> l
                 "ai_match_tier": item.get("ai_match_tier", "weak_match"),
                 "output_status": item.get("output_status", ""),
                 "ai_status": item.get("ai_status", item.get("output_status", "")),
+                "search_group": item.get("search_group", ""),
+                "matched_search_groups": list(
+                    item.get("matched_search_groups", [])
+                ),
             }
         )
     return hits
@@ -343,6 +461,8 @@ def _fresh_global_stop_reason(
     scout: LinkedInJobScout,
     policy: FreshScoutPolicy,
     base_counts: dict | None = None,
+    *,
+    allow_ai_budget_guard: bool = True,
 ) -> tuple[str, dict[str, int]]:
     counts = _combine_fresh_counts(base_counts, _fresh_recommendation_counts(reports, scout))
     if counts["apply_first"] >= policy.target_apply_first_jobs:
@@ -357,7 +477,11 @@ def _fresh_global_stop_reason(
             f"(target {policy.target_good_or_better_jobs})",
             counts,
         )
-    budget_reason = _fresh_ai_budget_stop_reason(counts, policy)
+    budget_reason = (
+        _fresh_ai_budget_stop_reason(counts, policy)
+        if allow_ai_budget_guard
+        else ""
+    )
     if budget_reason:
         return budget_reason, counts
     if counts["new_jobs_seen"] >= policy.global_new_jobs_soft_cap:
@@ -387,8 +511,10 @@ def _build_merged_output(
     max_pages_label: str,
     scout: LinkedInJobScout,
     started_at: str = "",
+    query_plan: dict | None = None,
 ) -> dict:
     tracker = JobTrackingStore()
+    query_plan = query_plan or _legacy_query_plan(queries)
     query_order = {query: index for index, query in enumerate(queries)}
     per_query_summary = []
     merged: dict[str, dict] = {}
@@ -400,6 +526,10 @@ def _build_merged_output(
         per_query_summary.append(
             {
                 "query": query,
+                "search_group": report.get("search_group", ""),
+                "matched_search_groups": list(
+                    report.get("matched_search_groups", [])
+                ),
                 "pages_scanned": stats.get("pages_scanned", report.get("pages_scanned", 0)),
                 "total_scanned": stats.get("job_cards_collected", 0),
                 "same_run_cross_query_reused": stats.get("same_run_cross_query_reused", 0),
@@ -439,6 +569,20 @@ def _build_merged_output(
                 "ai_status": job.get("ai_status", job.get("output_status", "")),
                 "tracking_status": job.get("tracking_status", ""),
                 "tracking_updated_at": job.get("tracking_updated_at", ""),
+                "search_goal": job.get(
+                    "search_goal",
+                    query_plan.get("search_goal", "legacy"),
+                ),
+                "search_group": job.get(
+                    "search_group",
+                    report.get("search_group", ""),
+                ),
+                "matched_search_groups": list(
+                    job.get(
+                        "matched_search_groups",
+                        report.get("matched_search_groups", []),
+                    )
+                ),
             }
             entry = merged.setdefault(key, {"occurrences": []})
             entry["occurrences"].append(occurrence)
@@ -462,6 +606,11 @@ def _build_merged_output(
                 seen_queries.add(query)
                 matched_queries.append(query)
         tracking_status, tracking_updated_at = _merge_tracking(occurrences)
+        matched_search_groups = []
+        for item in occurrences:
+            for group in item.get("matched_search_groups", []):
+                if group and group not in matched_search_groups:
+                    matched_search_groups.append(group)
 
         merged_job = {
             "title": best.get("title", ""),
@@ -481,6 +630,9 @@ def _build_merged_output(
             "best_matching_query": best.get("query", ""),
             "query_match_count": len(matched_queries),
             "query_hits": _build_query_hits(occurrences, query_order),
+            "search_goal": query_plan.get("search_goal", "legacy"),
+            "search_group": best.get("search_group", ""),
+            "matched_search_groups": matched_search_groups,
         }
         if tracking_status:
             merged_job["tracking_status"] = tracking_status
@@ -573,6 +725,10 @@ def _build_merged_output(
         "mode": "linkedin_scout_multi",
         "query_file": str(query_file),
         "queries_run": queries,
+        "search_goal": query_plan.get("search_goal", "legacy"),
+        "search_goal_label": query_plan.get("search_goal_label", ""),
+        "selected_search_groups": query_plan.get("selected_groups", []),
+        "query_plan": query_plan,
         "location": location,
         "max_pages": max_pages_label,
         "ai_threshold": scout.AI_THRESHOLD,
@@ -631,7 +787,7 @@ def _recover_reports_from_live_dashboard(
             continue
         if str(run.get("location") or "").strip() != expected_location:
             continue
-        if run.get("status") not in {"running", "failed", "stopped"}:
+        if run.get("status") not in {"running", "failed", "stopped", "interrupted"}:
             continue
         candidates.append(run)
     if not candidates:
@@ -675,6 +831,14 @@ def _recover_reports_from_live_dashboard(
                 "ai_status": "accepted" if accepted else "below_threshold",
                 "tracking_status": event.get("tracking_status", ""),
                 "tracking_updated_at": event.get("tracking_updated_at", ""),
+                "search_goal": event.get(
+                    "search_goal",
+                    progress.get("search_goal", "legacy"),
+                ),
+                "search_group": event.get("search_group", ""),
+                "matched_search_groups": list(
+                    event.get("matched_search_groups", [])
+                ),
             }
         )
 
@@ -690,6 +854,15 @@ def _recover_reports_from_live_dashboard(
         reports.append(
             {
                 "query": query,
+                "search_goal": progress.get("search_goal", "legacy"),
+                "search_group": query_plan_metadata(
+                    progress.get("query_plan", {}),
+                    query,
+                ).get("search_group", ""),
+                "matched_search_groups": query_plan_metadata(
+                    progress.get("query_plan", {}),
+                    query,
+                ).get("matched_search_groups", []),
                 "started_at": run.get("started_at", ""),
                 "generated_at": latest_event_at,
                 "pages_scanned": 0,
@@ -755,13 +928,54 @@ async def main():
     add_board_mode_arguments(parser)
     parser.add_argument(
         "--query-file",
-        default=str(DEFAULT_QUERY_FILE),
+        default=None,
         help="Text file with one curated search query per line. Defaults to search_queries.txt.",
     )
     parser.add_argument(
+        "--search-goal",
+        choices=["career-growth", "career-focus", "broad", "income", "custom"],
+        default=None,
+        help="Use structured Primary, Bridge, and Fallback query groups.",
+    )
+    parser.add_argument(
+        "--search-groups",
+        default="",
+        help="Comma-separated groups for --search-goal custom: primary,bridge,fallback.",
+    )
+    parser.add_argument(
         "--location",
-        default="Amstelveen",
+        default=None,
         help="Search location. Defaults to 'Amstelveen'.",
+    )
+    parser.add_argument(
+        "--search-market",
+        choices=list(SEARCH_MARKETS),
+        default=None,
+        help="Search market. Existing commands default to the Netherlands.",
+    )
+    parser.add_argument(
+        "--radius-km",
+        choices=[0, 8, 16, 40, 80, 160],
+        type=int,
+        default=None,
+        help="LinkedIn-native search radius in kilometres.",
+    )
+    parser.add_argument(
+        "--employment",
+        choices=list(EMPLOYMENT_PREFERENCES),
+        default=None,
+        help="Employment preference for discovery and scoring.",
+    )
+    parser.add_argument(
+        "--sponsorship-policy",
+        choices=["required", "not_required"],
+        default=None,
+        help="Sponsorship policy for the run. Overrides market defaults.",
+    )
+    parser.add_argument(
+        "--experience-levels",
+        default=None,
+        help="Comma-separated list of LinkedIn experience level names to filter.",
     )
     parser.add_argument(
         "--max-pages",
@@ -833,6 +1047,11 @@ async def main():
         action="store_true",
         help="Clear scout_progress.json before continuing.",
     )
+    parser.add_argument(
+        "--test-run",
+        action="store_true",
+        help="Run without saving any collected jobs or progress.",
+    )
     parser.add_argument("--headless", action="store_true", help="Run browser headlessly")
     args = parser.parse_args()
     ACTIVE_RUN_LOGGER = ScoutRunLogger()
@@ -851,15 +1070,16 @@ async def main():
     if executable_warning:
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
-    query_file = (
-        active_search_queries_path()
-        if args.query_file == str(DEFAULT_QUERY_FILE)
-        else Path(args.query_file)
-    )
+    workspace = UserWorkspace().ensure_initialized()
+    explicit_query_file = bool(args.query_file)
+    query_file = Path(args.query_file) if explicit_query_file else active_search_queries_path()
     base_queries = _load_queries(query_file)
-    queries = list(base_queries)
     effective_pages, page_label = _parse_max_pages(args.max_pages)
     profile, preferences = load_config()
+    explicit_scope_requested = any(
+        value is not None
+        for value in (args.search_market, args.radius_km, args.employment)
+    )
     fresh_policy = FreshScoutPolicy.from_preferences(
         preferences,
         enabled=args.fresh,
@@ -875,9 +1095,16 @@ async def main():
         console.print("[yellow]Cleared scout progress.[/yellow]")
 
     progress = progress_store.load() if args.resume else {}
-    expected_query_file = str(query_file.resolve())
+    selected_search_groups = _parse_search_groups(args.search_groups)
+    requested_search_goal = args.search_goal or ("custom" if selected_search_groups else "")
+    structured_search = bool(requested_search_goal) and not explicit_query_file
+    query_source_path = workspace.search_query_groups_path if structured_search else query_file
+    expected_query_file = _expected_query_file(
+        query_source_path,
+        progress=progress,
+        resume=args.resume,
+    )
     progress_mode = PROGRESS_MODE if board_mode == "linkedin" else f"{board_mode}_{PROGRESS_MODE}"
-    base_query_keys = sorted(_normalize_query(query) for query in base_queries)
     progress_queries = [
         query
         for query in progress.get("queries", [])
@@ -887,21 +1114,18 @@ async def main():
         progress
         and progress.get("mode") == progress_mode
         and progress.get("status") != "completed"
-        and progress.get("location", "") == args.location
         and str(progress.get("max_pages", "")) == page_label
         and str(progress.get("query_file", "")) == expected_query_file
-        and sorted(_normalize_query(query) for query in progress_queries) == base_query_keys
     )
-    query_learning = {
-        "enabled": False,
-        "reason": "disabled",
-        "reordered": False,
-        "top_queries": [],
-        "sources_used": [],
-    }
     if resume_active:
         queries = progress_queries
-        query_learning["reason"] = "resume uses saved query order"
+        query_plan = progress.get("query_plan")
+        if not isinstance(query_plan, dict) or not query_plan.get("entries"):
+            query_plan = _legacy_query_plan(
+                queries,
+                search_goal=str(progress.get("search_goal") or "legacy"),
+            )
+        query_learning = query_plan.get("query_learning", {})
     else:
         learning_enabled = (
             board_mode == "linkedin"
@@ -910,11 +1134,72 @@ async def main():
             and not args.process_only
             and not args.no_query_learning
         )
-        queries, query_learning = order_queries_with_learning(
-            base_queries,
-            preferences=preferences,
-            enabled=learning_enabled,
+        if structured_search:
+            query_plan = build_search_query_plan(
+                workspace.load_search_query_groups(),
+                search_goal=requested_search_goal,
+                selected_groups=selected_search_groups,
+                preferences=preferences,
+                learning_enabled=learning_enabled,
+                learning_scope={
+                    "platform": board_mode,
+                    "search_market": args.search_market or "netherlands",
+                    "employment": args.employment or "full-time-preferred",
+                },
+            )
+            queries = list(query_plan["queries"])
+            query_learning = query_plan.get("query_learning", {})
+        else:
+            queries, query_learning = order_queries_with_learning(
+                base_queries,
+                preferences=preferences,
+                enabled=learning_enabled,
+                learning_context=(
+                    {
+                        "platform": board_mode,
+                        "search_market": args.search_market or "netherlands",
+                        "employment": args.employment or "full-time-preferred",
+                    }
+                    if explicit_scope_requested
+                    else None
+                ),
+            )
+            query_plan = _legacy_query_plan(
+                queries,
+                search_goal="custom-file" if explicit_query_file else "legacy",
+            )
+            query_plan["query_learning"] = query_learning
+    if resume_active:
+        search_scope = normalize_search_scope(
+            progress.get("search_scope"),
+            platform=board_mode,
+            location=progress.get("location") or args.location,
+            legacy_distance_miles=int(
+                (preferences.get("linkedin") or {}).get("distance_miles", 25) or 25
+            ),
         )
+    else:
+        # Parse experience levels
+        exp_levels = None
+        if getattr(args, "experience_levels", None):
+            exp_levels = [lvl.strip().lower() for lvl in args.experience_levels.split(",") if lvl.strip()]
+        search_scope = build_search_scope(
+            platform=board_mode,
+            search_market=args.search_market or "netherlands",
+            location=args.location,
+            radius_km=args.radius_km if args.radius_km is not None else 40,
+            employment=args.employment or "full-time-preferred",
+            search_goal=query_plan.get("search_goal", "legacy"),
+            search_groups=query_plan.get("selected_groups", []),
+            legacy_mode=not explicit_scope_requested,
+            legacy_distance_miles=int(
+                (preferences.get("linkedin") or {}).get("distance_miles", 25) or 25
+            ),
+            experience_levels=exp_levels,
+            sponsorship_policy=getattr(args, "sponsorship_policy", None),
+        )
+    args.location = search_scope["location"]
+    preferences["_runtime_search_scope"] = dict(search_scope)
     expected_queries = [_normalize_query(query) for query in queries]
     start_query_index = int(progress.get("current_query_index", 0) or 0) if resume_active else 0
     resume_finalization_only = bool(
@@ -945,7 +1230,7 @@ async def main():
     reporter = ScoutConsoleReporter(console=console)
     review_writer = ScoutReviewLatestWriter()
     scout_cls = IndeedJobScout if board_mode == "indeed" else LinkedInJobScout
-    scout = scout_cls(profile, preferences, browser, reporter=reporter)
+    scout = scout_cls(profile, preferences, browser, reporter=reporter, test_run=args.test_run)
     live_dashboard = None
     live_run = None
     live_run_completed = False
@@ -954,6 +1239,7 @@ async def main():
     latest_persistence_warning = str(progress.get("latest_persistence_warning") or "")
     recovered_reports: list[dict] = []
     recovered_live_run: dict = {}
+    current_query_metadata: dict = {}
 
     def record_persistence_warning(component: str, exc: BaseException) -> None:
         nonlocal persistence_warning_count, latest_persistence_warning
@@ -986,6 +1272,10 @@ async def main():
                     queries=queries,
                     started_at=run_started_at,
                     fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
+                    search_goal=query_plan.get("search_goal", "legacy"),
+                    selected_search_groups=query_plan.get("selected_groups", []),
+                    query_plan=query_plan,
+                    search_scope=search_scope,
                 )
             console.print(
                 "[green]Live dashboard:[/green] "
@@ -1023,6 +1313,14 @@ async def main():
             return
         event = dict(event)
         event["run_id"] = live_run["run_id"]
+        event["search_goal"] = query_plan.get("search_goal", "legacy")
+        event["search_group"] = current_query_metadata.get("search_group", "")
+        event["matched_search_groups"] = current_query_metadata.get(
+            "matched_search_groups",
+            [],
+        )
+        event["search_scope"] = dict(search_scope)
+        event["search_market"] = search_scope.get("search_market", "")
         try:
             live_dashboard.record_job(event)
         except PersistenceError as exc:
@@ -1041,11 +1339,18 @@ async def main():
             console.print(f"[yellow]Live dashboard progress update skipped:[/yellow] {exc}")
 
     if fresh_policy.enabled and any(base_fresh_counts.values()):
+        resumed_metadata = (
+            query_plan_metadata(query_plan, queries[start_query_index])
+            if queries and start_query_index < len(queries)
+            else {}
+        )
         update_live_progress(
             phase="resumed",
             current_query_index=start_query_index + 1,
             total_queries=len(queries),
             current_query=queries[start_query_index] if queries and start_query_index < len(queries) else "",
+            current_search_group=resumed_metadata.get("search_group", ""),
+            current_search_phase=resumed_metadata.get("phase", ""),
             pages_scanned=stable_pages,
             fresh_jobs_seen=base_fresh_counts["new_jobs_seen"],
             ai_scored=base_fresh_counts["ai_calls"],
@@ -1053,21 +1358,7 @@ async def main():
             good_or_better=base_fresh_counts["good_or_better"],
         )
 
-    query_learning_label = "disabled"
-    if query_learning.get("enabled"):
-        query_learning_label = (
-            "enabled"
-            + ("; reordered queries" if query_learning.get("reordered") else "; kept query-file order")
-        )
-        top_queries = [
-            item.get("query", "")
-            for item in query_learning.get("top_queries", [])[:3]
-            if item.get("query")
-        ]
-        if top_queries:
-            query_learning_label += f"; top: {', '.join(top_queries)}"
-    elif query_learning.get("reason"):
-        query_learning_label = str(query_learning.get("reason"))
+    query_learning_label = _query_learning_summary(query_learning)
 
     mode_label = (
         f"Curated {board_name} description extraction only (no AI scoring)"
@@ -1079,8 +1370,10 @@ async def main():
         Panel(
             f"[bold green]{board_name} Multi Scout[/bold green]\n"
             f"Query file: {query_file}\n"
+            f"Search goal: {query_plan.get('search_goal_label', 'Legacy query list')}\n"
+            f"Search groups: {', '.join(query_plan.get('selected_groups', [])) or 'flat query list'}\n"
             f"Queries: {len(queries)}\n"
-            f"Location: {args.location}\n"
+            f"Search scope: {search_scope_summary(search_scope)}\n"
             f"Pages per query: {page_label}\n"
             f"Fresh mode: {fresh_policy.panel_label()}\n"
             f"Query learning: {query_learning_label}\n"
@@ -1097,13 +1390,25 @@ async def main():
     fresh_stop_reason = ""
     fresh_stop_counts: dict[str, int] = {}
     progress_state = {
+        "run_id": str((live_run or {}).get("run_id") or progress.get("run_id") or ""),
+        "started_at": run_started_at,
         "mode": progress_mode,
         "status": "in_progress",
         "phase": "idle",
         "location": args.location,
+        "search_scope": dict(search_scope),
         "max_pages": page_label,
         "query_file": expected_query_file,
         "queries": queries,
+        "query_plan": query_plan,
+        "search_goal": query_plan.get("search_goal", "legacy"),
+        "selected_search_groups": query_plan.get("selected_groups", []),
+        "phase_order": query_plan.get("phase_order", []),
+        "current_search_group": (
+            query_plan_metadata(query_plan, queries[start_query_index]).get("search_group", "")
+            if queries and start_query_index < len(queries)
+            else ""
+        ),
         "current_query_index": start_query_index,
         "current_query": queries[start_query_index] if queries and start_query_index < len(queries) else "",
         "current_page_number": 0,
@@ -1126,6 +1431,8 @@ async def main():
     }
 
     def save_progress(*, final: bool = False, **updates):
+        if args.test_run:
+            return
         if args.process_only:
             return
         progress_state.update(updates)
@@ -1172,6 +1479,13 @@ async def main():
         for index, query in enumerate(queries):
             if index < start_query_index:
                 continue
+            current_query_metadata = query_plan_metadata(query_plan, query)
+            search_group = current_query_metadata.get("search_group", "")
+            if search_group:
+                console.print(
+                    "[cyan][SEARCH PATH][/cyan] "
+                    f"{search_group.replace('_', ' ').title()} phase"
+                )
 
             reporter.start_query(
                 query_index=index + 1,
@@ -1196,6 +1510,7 @@ async def main():
                     phase="collecting_pages",
                     current_query_index=index,
                     current_query=query,
+                    current_search_group=search_group,
                     current_page_number=page_number,
                     last_completed_page_number=page_number,
                     last_page_quality=page_quality or {},
@@ -1209,6 +1524,8 @@ async def main():
                     current_query_index=index + 1,
                     total_queries=len(queries),
                     current_query=query,
+                    current_search_group=search_group,
+                    current_search_phase=current_query_metadata.get("phase", search_group),
                     current_page_number=page_number,
                     pages_scanned=cumulative_pages + pages_scanned,
                     fresh_jobs_seen=live_fresh_counts["new_jobs_seen"],
@@ -1224,6 +1541,7 @@ async def main():
                     phase="processing_jobs",
                     current_query_index=index,
                     current_query=query,
+                    current_search_group=search_group,
                     current_page_number=int(page_number or 0),
                     last_completed_page_number=query_pages_seen["value"],
                     total_pages_processed=cumulative_pages + query_pages_seen["value"],
@@ -1236,6 +1554,8 @@ async def main():
                     current_query_index=index + 1,
                     total_queries=len(queries),
                     current_query=query,
+                    current_search_group=search_group,
+                    current_search_phase=current_query_metadata.get("phase", search_group),
                     current_page_number=int(page_number or 0),
                     pages_scanned=cumulative_pages + query_pages_seen["value"],
                     processed_jobs=cumulative_jobs + int(processed_jobs or 0),
@@ -1262,6 +1582,7 @@ async def main():
                     phase="collecting_pages",
                     current_query_index=index,
                     current_query=query,
+                    current_search_group=search_group,
                     fresh_progress_counts=fresh_counts_so_far(),
                 )
                 report = await scout.run(
@@ -1278,6 +1599,12 @@ async def main():
                     description_only=args.description_only,
                     fresh_policy=fresh_policy,
                 )
+            _annotate_report_search_metadata(
+                report,
+                current_query_metadata,
+                query_plan.get("search_goal", "legacy"),
+                search_scope,
+            )
             reports.append(report)
             reporter.finish_query(report.get("stats", {}))
             cumulative_pages += int(report.get("pages_scanned", 0) or 0)
@@ -1288,6 +1615,11 @@ async def main():
                 phase="query_completed",
                 current_query_index=index + 1,
                 current_query=queries[index + 1] if index + 1 < len(queries) else "",
+                current_search_group=(
+                    query_plan_metadata(query_plan, queries[index + 1]).get("search_group", "")
+                    if index + 1 < len(queries)
+                    else ""
+                ),
                 current_page_number=0,
                 last_completed_query_index=index,
                 last_completed_query=query,
@@ -1303,6 +1635,8 @@ async def main():
                 current_query_index=index + 1,
                 total_queries=len(queries),
                 current_query=query,
+                current_search_group=search_group,
+                current_search_phase=current_query_metadata.get("phase", search_group),
                 current_page_number=0,
                 pages_scanned=cumulative_pages,
                 fresh_jobs_seen=completed_fresh_counts["new_jobs_seen"],
@@ -1316,6 +1650,11 @@ async def main():
                     scout,
                     fresh_policy,
                     base_counts=base_fresh_counts,
+                    allow_ai_budget_guard=(
+                        int(query_plan.get("ai_budget_eligible_after_index", -1) or -1) < 0
+                        or index
+                        >= int(query_plan.get("ai_budget_eligible_after_index", -1) or -1)
+                    ),
                 )
                 if fresh_stop_reason:
                     console.print(
@@ -1390,7 +1729,9 @@ async def main():
             max_pages_label=page_label,
             scout=scout,
             started_at=run_started_at,
+            query_plan=query_plan,
         )
+        merged_output["search_scope"] = dict(search_scope)
         if fresh_policy.enabled:
             fresh_counts = fresh_stop_counts or fresh_counts_so_far()
             merged_output["fresh_scout"] = {

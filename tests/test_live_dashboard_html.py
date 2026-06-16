@@ -100,7 +100,13 @@ class LiveDashboardHtmlTests(unittest.TestCase):
             "strategyBridgeRoles",
             "strategyHardBlockers",
             "strategyLocations",
-            "strategyQueries",
+            "strategyPrimaryQueries",
+            "strategyBridgeQueries",
+            "strategyFallbackQueries",
+            "strategyPrimaryQueryCount",
+            "strategyBridgeQueryCount",
+            "strategyFallbackQueryCount",
+            "strategyQueryDuplicateNotice",
             "strategyQueryLearningEnabled",
             "strategyFreshMaxPages",
             "strategyFullText",
@@ -112,6 +118,22 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("saveStrategy", self.html)
         self.assertIn("One item per line. Commas and semicolons are preserved.", self.html)
         self.assertIn('from "./modules/list-editor.js"', self.html)
+
+    def test_dashboard_has_strategy_based_scout_controls(self):
+        for element_id in [
+            "runSearchGoal",
+            "runCustomSearchGroups",
+            "runSearchPrimary",
+            "runSearchBridge",
+            "runSearchFallback",
+            "runSearchGoalSummary",
+            "searchGroupFilter",
+            "freshSearchPathSummary",
+        ]:
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn("Career + Growth - Recommended", self.html)
+        self.assertIn("Income Priority", self.html)
+        self.assertIn("Search path", self.html)
 
     def test_dashboard_has_persistent_light_dark_theme_toggle(self):
         self.assertIn('localStorage.getItem("jobDashboardTheme")', self.html)
@@ -138,6 +160,20 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("manual-applied", self.html)
         self.assertIn("manual-irrelevant", self.html)
 
+    def test_dashboard_has_reusable_toast_and_mission_icons(self):
+        self.assertIn("function showToast(", self.html)
+        self.assertIn("function hideToast(", self.html)
+        self.assertIn('id="icon-save"', self.html)
+        self.assertIn('id="icon-trash"', self.html)
+        self.assertNotIn("hideUndoToast", self.html)
+
+    def test_run_scout_marks_beta_experimental_and_disabled_markets(self):
+        self.assertIn('id="runExperimentalConfirm"', self.html)
+        self.assertIn("Experimental market", self.html)
+        self.assertNotIn("(Beta)", self.html)
+        self.assertNotIn("(Unavailable)", self.html)
+        self.assertIn("experimental_confirmed", self.html)
+
     def test_dashboard_has_global_manual_status_undo(self):
         self.assertIn('id="undoButton"', self.html)
         self.assertIn("pushManualUndo({ job, previousStatus, newStatus: status })", self.html)
@@ -154,7 +190,8 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("Actionable jobs", self.html)
         self.assertIn("Actionable jobs are unreviewed Apply First and Good Options", self.html)
         self.assertIn('value="needs_action"', self.html)
-        self.assertIn('actionScope: "needs_action"', self.html)
+        self.assertIn('actionScope: "all"', self.html)
+        self.assertIn('state.filters.actionScope = "needs_action"', self.html)
         self.assertIn("needsAction", self.html)
         self.assertIn("Open job", self.html)
         self.assertIn("Copy link", self.html)
@@ -313,10 +350,13 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn(".decision-chip.INTERRUPTED", self.html)
 
     def test_dashboard_uses_external_feature_modules(self):
-        self.assertIn('href="dashboard/styles.css"', self.document)
-        self.assertIn(
-            'type="module" src="dashboard/app.js?v=20260613-interrupted-lifecycle"',
+        self.assertRegex(
             self.document,
+            r'href="dashboard/styles\.css\?v=[^"]+"',
+        )
+        self.assertRegex(
+            self.document,
+            r'type="module" src="dashboard/app\.js\?v=[^"]+"',
         )
         for module_name in [
             "navigation.js",

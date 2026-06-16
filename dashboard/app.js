@@ -36,7 +36,10 @@ import {
 import {
   buildApplicationsQuery,
   applicationStageSummary,
+  initApplications,
+  reloadApplications,
 } from "./modules/applications.js";
+import { initAssistant, loadAssistant } from "./modules/assistant.js";
 import { boardDefaults, providerStatus } from "./modules/settings.js";
 import { diagnosticOverview } from "./modules/maintenance.js?v=20260613-interrupted-lifecycle";
 import {
@@ -82,6 +85,9 @@ const DEFAULT_THEME = initialTheme();
       applicationsLoading: false,
       applicationFilters: { search: "", stage: "all" },
       applicationSearchTimer: null,
+      descriptionFilters: { search: "", source: "all" },
+      descriptionsLimit: 50,
+      descriptionsSearchTimer: null,
       assistantPayload: null,
       assistantLoading: false,
       maintenancePayload: null,
@@ -100,10 +106,17 @@ const DEFAULT_THEME = initialTheme();
       currentPage: localStorage.getItem("jobScoutCurrentPage") || "jobs",
       filters: {
         search: "",
-        actionScope: "needs_action",
+        actionScope: "all",
+        careerLane: "primary",
         run: "all",
         decision: "all",
         domain: "all",
+        searchGroup: "all",
+        searchMarket: "netherlands",
+        employmentType: "all",
+        flexibleHours: "all",
+        sponsorshipStatus: "all",
+        platform: "all",
         flag: "all",
         applyMethod: "all",
         manualStatus: "all",
@@ -163,6 +176,10 @@ const DEFAULT_THEME = initialTheme();
       strategyForm: document.getElementById("strategyForm"),
       strategyStatus: document.getElementById("strategyStatus"),
       strategyQueryCount: document.getElementById("strategyQueryCount"),
+      strategyPrimaryQueryCount: document.getElementById("strategyPrimaryQueryCount"),
+      strategyBridgeQueryCount: document.getElementById("strategyBridgeQueryCount"),
+      strategyFallbackQueryCount: document.getElementById("strategyFallbackQueryCount"),
+      strategyQueryDuplicateNotice: document.getElementById("strategyQueryDuplicateNotice"),
       strategyQueryLearningSummary: document.getElementById("strategyQueryLearningSummary"),
       openScoutWorkspaceRunButton: document.getElementById("openScoutWorkspaceRunButton"),
       startRecommendedScoutButton: document.getElementById("startRecommendedScoutButton"),
@@ -232,6 +249,16 @@ const DEFAULT_THEME = initialTheme();
       applicationsTableFooter: document.getElementById("applicationsTableFooter"),
       applicationsVisibleCount: document.getElementById("applicationsVisibleCount"),
       loadMoreApplicationsButton: document.getElementById("loadMoreApplicationsButton"),
+      refreshDescriptionsButton: document.getElementById("refreshDescriptionsButton"),
+      descriptionsStatus: document.getElementById("descriptionsStatus"),
+      descriptionSearch: document.getElementById("descriptionSearch"),
+      descriptionSourceFilter: document.getElementById("descriptionSourceFilter"),
+      descriptionsTableWrap: document.getElementById("descriptionsTableWrap"),
+      descriptionsTableBody: document.getElementById("descriptionsTableBody"),
+      descriptionsEmpty: document.getElementById("descriptionsEmpty"),
+      descriptionsTableFooter: document.getElementById("descriptionsTableFooter"),
+      descriptionsVisibleCount: document.getElementById("descriptionsVisibleCount"),
+      loadMoreDescriptionsButton: document.getElementById("loadMoreDescriptionsButton"),
       saveAssistantKnowledgeButton: document.getElementById("saveAssistantKnowledgeButton"),
       assistantStatus: document.getElementById("assistantStatus"),
       addApplicationAnswerButton: document.getElementById("addApplicationAnswerButton"),
@@ -274,6 +301,13 @@ const DEFAULT_THEME = initialTheme();
       themeToggleIcon: document.getElementById("themeToggleIcon"),
       themeToggleText: document.getElementById("themeToggleText"),
       runScoutButton: document.getElementById("runScoutButton"),
+      trackManualJobButton: document.getElementById("trackManualJobButton"),
+      closeTrackManualJobButton: document.getElementById("closeTrackManualJobButton"),
+      cancelTrackManualJobButton: document.getElementById("cancelTrackManualJobButton"),
+      trackManualJobOverlay: document.getElementById("trackManualJobOverlay"),
+      trackManualJobForm: document.getElementById("trackManualJobForm"),
+      trackManualJobUrl: document.getElementById("trackManualJobUrl"),
+      trackManualJobStatus: document.getElementById("trackManualJobStatus"),
       statusDot: document.getElementById("statusDot"),
       statusText: document.getElementById("statusText"),
       updatedAt: document.getElementById("updatedAt"),
@@ -288,9 +322,13 @@ const DEFAULT_THEME = initialTheme();
       statIrrelevant: document.getElementById("statIrrelevant"),
       freshPanel: document.getElementById("freshPanel"),
       freshTitle: document.getElementById("freshTitle"),
+      overallProgressContainer: document.getElementById("overallProgressContainer"),
+      overallProgressText: document.getElementById("overallProgressText"),
+      overallProgressFill: document.getElementById("overallProgressFill"),
       freshStatus: document.getElementById("freshStatus"),
       freshRunLabel: document.getElementById("freshRunLabel"),
       freshCompleteSummary: document.getElementById("freshCompleteSummary"),
+      freshSearchPathSummary: document.getElementById("freshSearchPathSummary"),
       freshApply: document.getElementById("freshApply"),
       freshApplyBar: document.getElementById("freshApplyBar"),
       freshGood: document.getElementById("freshGood"),
@@ -311,16 +349,25 @@ const DEFAULT_THEME = initialTheme();
       toggleRunHistoryButton: document.getElementById("toggleRunHistoryButton"),
       runHistoryList: document.getElementById("runHistoryList"),
       quickPresets: document.getElementById("quickPresets"),
+      careerLaneTabs: document.getElementById("careerLaneTabs"),
       filterHint: document.getElementById("filterHint"),
       searchInput: document.getElementById("searchInput"),
       actionFilter: document.getElementById("actionFilter"),
       runFilter: document.getElementById("runFilter"),
       decisionFilter: document.getElementById("decisionFilter"),
       domainFilter: document.getElementById("domainFilter"),
+      searchGroupFilter: document.getElementById("searchGroupFilter"),
+      marketFilter: document.getElementById("marketFilter"),
+      employmentFilter: document.getElementById("employmentFilter"),
+      sponsorshipFilter: document.getElementById("sponsorshipFilter"),
+      platformFilter: document.getElementById("platformFilter"),
+      flexibleHoursFilter: document.getElementById("flexibleHoursFilter"),
       flagFilter: document.getElementById("flagFilter"),
       applyMethodFilter: document.getElementById("applyMethodFilter"),
       manualStatusFilter: document.getElementById("manualStatusFilter"),
       sortFilter: document.getElementById("sortFilter"),
+      advancedFiltersToggle: document.getElementById("advancedFiltersToggle"),
+      advancedFiltersContainer: document.getElementById("advancedFiltersContainer"),
       boardViewButton: document.getElementById("boardViewButton"),
       listViewButton: document.getElementById("listViewButton"),
       undoButton: document.getElementById("undoButton"),
@@ -343,13 +390,29 @@ const DEFAULT_THEME = initialTheme();
       closeRunScoutButton: document.getElementById("closeRunScoutButton"),
       runControlNotice: document.getElementById("runControlNotice"),
       runWorkflowHint: document.getElementById("runWorkflowHint"),
+      runPlatform: document.getElementById("runPlatform"),
       runWorkflow: document.getElementById("runWorkflow"),
+      runSearchMarket: document.getElementById("runSearchMarket"),
+      runRadius: document.getElementById("runRadius"),
+      runEmployment: document.getElementById("runEmployment"),
+      runLocationOptions: document.getElementById("runLocationOptions"),
+      runSearchGoalControl: document.getElementById("runSearchGoalControl"),
+      runSearchGoal: document.getElementById("runSearchGoal"),
+      runCustomSearchGroups: document.getElementById("runCustomSearchGroups"),
+      runSearchPrimary: document.getElementById("runSearchPrimary"),
+      runSearchBridge: document.getElementById("runSearchBridge"),
+      runSearchFallback: document.getElementById("runSearchFallback"),
+      runSearchGoalSummary: document.getElementById("runSearchGoalSummary"),
+      runScopeSummary: document.getElementById("runScopeSummary"),
+      runExperimentalConfirmRow: document.getElementById("runExperimentalConfirmRow"),
+      runExperimentalConfirm: document.getElementById("runExperimentalConfirm"),
       runLocation: document.getElementById("runLocation"),
       runQuery: document.getElementById("runQuery"),
       runMaxPages: document.getElementById("runMaxPages"),
       runBrowser: document.getElementById("runBrowser"),
       runHumanMode: document.getElementById("runHumanMode"),
       runFreshMode: document.getElementById("runFreshMode"),
+      runTestMode: document.getElementById("runTestMode"),
       runAiBudgetMode: document.getElementById("runAiBudgetMode"),
       runResumeMode: document.getElementById("runResumeMode"),
       startRunButton: document.getElementById("startRunButton"),
@@ -359,7 +422,24 @@ const DEFAULT_THEME = initialTheme();
       stopAfterJobButton: document.getElementById("stopAfterJobButton"),
       stopAfterPageButton: document.getElementById("stopAfterPageButton"),
       stopNowButton: document.getElementById("stopNowButton"),
-      runLogTail: document.getElementById("runLogTail")
+      runLogTail: document.getElementById("runLogTail"),
+      manageMarketsButton: document.getElementById("manageMarketsButton"),
+      manageMarketsOverlay: document.getElementById("manageMarketsOverlay"),
+      closeManageMarketsButton: document.getElementById("closeManageMarketsButton"),
+      customMarketsList: document.getElementById("customMarketsList"),
+      addMarketForm: document.getElementById("addMarketForm"),
+      marketIdInput: document.getElementById("marketIdInput"),
+      marketLabelInput: document.getElementById("marketLabelInput"),
+      marketCountryInput: document.getElementById("marketCountryInput"),
+      marketLocationInput: document.getElementById("marketLocationInput"),
+      marketLocationsInput: document.getElementById("marketLocationsInput"),
+      marketAuthInput: document.getElementById("marketAuthInput"),
+      runScopeSponsorshipPolicy: document.getElementById("runScopeSponsorshipPolicy"),
+      runAdvancedOptionsToggle: document.getElementById("runAdvancedOptionsToggle"),
+      runAdvancedOptionsContainer: document.getElementById("runAdvancedOptionsContainer"),
+      dashboardTerminalPanel: document.getElementById("dashboardTerminalPanel"),
+      toggleTerminalButton: document.getElementById("toggleTerminalButton"),
+      terminalContainer: document.getElementById("terminalContainer")
     };
 
     function usesMobileNavigation() {
@@ -479,7 +559,7 @@ const DEFAULT_THEME = initialTheme();
         loadBoardSettings();
       }
       if (resolvedPage === "applications" && !state.applicationsLoading) {
-        loadApplications();
+        reloadApplications();
       }
       if (resolvedPage === "assistant" && !state.assistantPayload && !state.assistantLoading) {
         loadAssistant();
@@ -828,7 +908,10 @@ const DEFAULT_THEME = initialTheme();
       setFieldValue("strategyHourlySalary", preferences.salary_part_time_hourly_minimum);
       setFieldValue("strategyCompanyLimit", preferences.max_active_applications_per_company_14_days);
       setCheckedValue("strategyAvoidUnrelated", preferences.avoid_multiple_unrelated_roles_same_company);
-      setFieldValue("strategyQueries", listEditorText(payload.queries));
+      const queryGroups = payload.query_groups || {};
+      setFieldValue("strategyPrimaryQueries", listEditorText(queryGroups.primary));
+      setFieldValue("strategyBridgeQueries", listEditorText(queryGroups.bridge));
+      setFieldValue("strategyFallbackQueries", listEditorText(queryGroups.fallback));
       setCheckedValue("strategyQueryLearningEnabled", learning.enabled !== false);
       setFieldValue("strategyExplorationInterval", learning.exploration_interval || 5);
       setFieldValue("strategyFreshMaxPages", fresh.max_pages_per_query || 4);
@@ -858,8 +941,39 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function updateStrategyQueryCount() {
-      const queries = splitListEditor(fieldValue("strategyQueries"));
-      els.strategyQueryCount.textContent = `${queries.length} quer${queries.length === 1 ? "y" : "ies"}`;
+      const groups = strategyQueryGroupsFromEditor();
+      const allQueries = [...groups.primary, ...groups.bridge, ...groups.fallback];
+      const uniqueQueries = new Set(allQueries.map((query) => safe(query).toLowerCase()));
+      els.strategyQueryCount.textContent = `${uniqueQueries.size} quer${uniqueQueries.size === 1 ? "y" : "ies"}`;
+      els.strategyPrimaryQueryCount.textContent = groups.primary.length;
+      els.strategyBridgeQueryCount.textContent = groups.bridge.length;
+      els.strategyFallbackQueryCount.textContent = groups.fallback.length;
+
+      const memberships = new Map();
+      for (const [group, queries] of Object.entries(groups)) {
+        for (const query of queries) {
+          const key = safe(query).toLowerCase();
+          if (!memberships.has(key)) memberships.set(key, []);
+          memberships.get(key).push(group);
+        }
+      }
+      const duplicates = Array.from(memberships.entries())
+        .filter(([, groupsForQuery]) => groupsForQuery.length > 1);
+      els.strategyQueryDuplicateNotice.classList.toggle("hidden", !duplicates.length);
+      els.strategyQueryDuplicateNotice.textContent = duplicates.length
+        ? `${duplicates.length} quer${duplicates.length === 1 ? "y appears" : "ies appear"} in multiple groups. The scout will run each once and retain every matching path: `
+          + duplicates.slice(0, 4).map(([query, groupsForQuery]) => `${query} (${groupsForQuery.join(", ")})`).join("; ")
+          + (duplicates.length > 4 ? `; and ${duplicates.length - 4} more.` : ".")
+        : "";
+      renderRunSearchGoalSummary();
+    }
+
+    function strategyQueryGroupsFromEditor() {
+      return {
+        primary: splitListEditor(fieldValue("strategyPrimaryQueries")),
+        bridge: splitListEditor(fieldValue("strategyBridgeQueries")),
+        fallback: splitListEditor(fieldValue("strategyFallbackQueries")),
+      };
     }
 
     async function saveStrategy() {
@@ -896,7 +1010,12 @@ const DEFAULT_THEME = initialTheme();
       payload.preferences.fresh_scout.target_apply_first_jobs = numeric(fieldValue("strategyTargetApply")) || 8;
       payload.preferences.fresh_scout.target_good_or_better_jobs = numeric(fieldValue("strategyTargetGood")) || 20;
       payload.preferences.fresh_scout.global_new_jobs_soft_cap = numeric(fieldValue("strategyFreshCap")) || 140;
-      payload.queries = splitListEditor(fieldValue("strategyQueries"));
+      payload.query_groups = strategyQueryGroupsFromEditor();
+      payload.queries = [
+        ...payload.query_groups.primary,
+        ...payload.query_groups.bridge,
+        ...payload.query_groups.fallback,
+      ];
       payload.strategy_text = document.getElementById("strategyFullText").value;
       payload.portfolio_notes = document.getElementById("strategyPortfolioNotes").value;
 
@@ -1194,11 +1313,30 @@ const DEFAULT_THEME = initialTheme();
       const resultElement = els.aiProviderGrid.querySelector(`[data-ai-test-result="${providerId}"]`);
       resultElement.textContent = "Testing connection...";
       resultElement.className = "provider-test-result";
+
+      // Collect current settings on the screen for this provider
+      const card = els.aiProviderGrid.querySelector(`[data-provider-id="${providerId}"]`);
+      const providerSettings = { extra: {} };
+      if (card) {
+        card.querySelectorAll("[data-ai-provider-field]").forEach((input) => {
+          const name = input.dataset.aiProviderField;
+          const value = input.type === "checkbox" ? input.checked : input.value;
+          if (name.startsWith("extra_")) {
+            providerSettings.extra[name.slice(6)] = value;
+          } else {
+            providerSettings[name] = value;
+          }
+        });
+      }
+
       try {
         const response = await fetch(API_AI_SETTINGS_URL + "/test", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: providerId })
+          body: JSON.stringify({
+            provider: providerId,
+            provider_settings: providerSettings
+          })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.ok === false) throw new Error(payload.error || "Connection test failed");
@@ -1211,6 +1349,7 @@ const DEFAULT_THEME = initialTheme();
         button.disabled = false;
       }
     }
+
 
     function setAiSettingsStatus(message, kind = "") {
       if (!els.aiSettingsStatus) return;
@@ -1278,9 +1417,99 @@ const DEFAULT_THEME = initialTheme();
       if (defaults.browser) els.runBrowser.value = defaults.browser;
       if (defaults.location) els.runLocation.value = defaults.location;
       if (defaults.ai_budget_mode) els.runAiBudgetMode.value = defaults.ai_budget_mode;
+      if (defaults.search_market) els.runSearchMarket.value = defaults.search_market;
+      if (defaults.radius_km !== undefined && defaults.radius_km !== null) {
+          els.runRadius.value = String(defaults.radius_km);
+      }
+      if (defaults.employment) els.runEmployment.value = defaults.employment;
+      if (defaults.search_goal) els.runSearchGoal.value = defaults.search_goal;
       els.runHumanMode.checked = defaults.human_mode !== false;
       els.runFreshMode.checked = defaults.fresh_mode !== false;
+      populateRunMissions();
+      updateRunScopeControls();
       updateWorkflowFields();
+    }
+
+    function runScopeSettings() {
+      const payload = state.boardSettingsPayload || {};
+      return {
+        markets: payload.market_profiles || {},
+        capabilities: payload.platform_capabilities || {},
+        builtInMissions: payload.built_in_missions || {},
+        customMissions: Array.isArray(payload.search_missions) ? payload.search_missions : [],
+      };
+    }
+
+    function allRunMissions() {
+      const settings = runScopeSettings();
+      const builtIn = Object.entries(settings.builtInMissions).map(([id, mission]) => ({
+        ...mission,
+        id,
+        mission_kind: "built_in",
+        option_value: `built_in:${id}`,
+      }));
+      const custom = settings.customMissions.map((mission, index) => ({
+        ...mission,
+        id: safe(mission.id) || `custom-${index + 1}`,
+        mission_kind: "custom",
+        option_value: `custom:${safe(mission.id) || `custom-${index + 1}`}`,
+      }));
+      return [...builtIn, ...custom];
+    }
+
+    function populateRunMissions(selectedValue = els.runMission?.value || "") {
+      if (!els.runMission) return;
+      const options = [
+        ["", "Custom configuration"],
+        ...allRunMissions().map((mission) => [
+          mission.option_value,
+          `${mission.name}${mission.mission_kind === "built_in" ? " - built in" : ""}`,
+        ]),
+      ];
+      els.runMission.replaceChildren(...options.map(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        return option;
+      }));
+      els.runMission.value = options.some(([value]) => value === selectedValue)
+        ? selectedValue
+        : "";
+    }
+
+    function boardSettingsPayloadWithMissions(searchMissions) {
+      const payload = state.boardSettingsPayload || {};
+      return {
+        job_boards: payload.job_boards || {},
+        application_behavior: payload.application_behavior || {},
+        limits: payload.limits || {},
+        dashboard_defaults: payload.dashboard_defaults || {},
+        search_missions: searchMissions,
+      };
+    }
+
+    async function saveRunMissions(searchMissions, selectedValue) {
+      els.saveRunMissionButton.disabled = true;
+      els.deleteRunMissionButton.disabled = true;
+      try {
+        const response = await fetch(API_BOARD_SETTINGS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(boardSettingsPayloadWithMissions(searchMissions)),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || "Mission save failed");
+        }
+        state.boardSettingsPayload = result.data;
+        populateRunMissions(selectedValue);
+        showToast(selectedValue ? "Mission saved." : "Mission deleted.");
+      } catch (error) {
+        showToast(safe(error.message) || "Mission could not be saved.");
+      } finally {
+        els.saveRunMissionButton.disabled = false;
+        els.deleteRunMissionButton.disabled = false;
+      }
     }
 
     async function saveBoardSettings() {
@@ -1307,7 +1536,11 @@ const DEFAULT_THEME = initialTheme();
           location: els.boardDefaultLocation.value,
           ai_budget_mode: els.boardDefaultAiBudget.value,
           human_mode: els.boardDefaultHuman.checked,
-          fresh_mode: els.boardDefaultFresh.checked
+          fresh_mode: els.boardDefaultFresh.checked,
+          search_market: state.boardSettingsPayload?.dashboard_defaults?.search_market || "netherlands",
+          radius_km: state.boardSettingsPayload?.dashboard_defaults?.radius_km ?? 40,
+          employment: state.boardSettingsPayload?.dashboard_defaults?.employment || "full-time-preferred",
+          search_goal: state.boardSettingsPayload?.dashboard_defaults?.search_goal || "career-growth"
         },
         application_behavior: {
           pause_before_final_submit: true,
@@ -1322,7 +1555,8 @@ const DEFAULT_THEME = initialTheme();
           max_applications_per_run: numeric(els.limitApplicationsRun.value),
           max_jobs_to_try_per_run: numeric(els.limitJobsRun.value),
           max_applications_per_day: numeric(els.limitApplicationsDay.value)
-        }
+        },
+        search_missions: runScopeSettings().customMissions
       };
       els.saveBoardSettingsButton.disabled = true;
       setBoardSettingsStatus("Saving job-board settings...");
@@ -1349,373 +1583,8 @@ const DEFAULT_THEME = initialTheme();
       els.boardSettingsStatus.className = "profile-status" + (kind ? " " + kind : "");
     }
 
-    async function loadApplications({ append = false } = {}) {
-      state.applicationsLoading = true;
-      setApplicationsStatus("Loading applications...");
-      try {
-        const existing = append && Array.isArray(state.applicationsPayload?.applications)
-          ? state.applicationsPayload.applications
-          : [];
-        const parameters = buildApplicationsQuery(
-          state.applicationFilters,
-          existing.length
-        );
-        const response = await fetch(API_APPLICATIONS_URL + "?" + parameters, { cache: "no-store" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        const payload = await response.json();
-        state.applicationsPayload = {
-          ...payload,
-          applications: append
-            ? [...existing, ...(payload.applications || [])]
-            : (payload.applications || [])
-        };
-        renderApplications();
-        setApplicationsStatus("Application progress is saved locally and survives future scout runs.");
-      } catch (error) {
-        setApplicationsStatus("Applications could not be loaded: " + (safe(error.message) || "unknown error"), "error");
-      } finally {
-        state.applicationsLoading = false;
-      }
-    }
 
-    function renderApplications() {
-      const payload = state.applicationsPayload || {};
-      const all = Array.isArray(payload.applications) ? payload.applications : [];
-      const counts = payload.by_stage || {};
-      const summary = applicationStageSummary(counts);
-      els.applicationStatTotal.textContent = String(summary.total);
-      els.applicationStatPreparing.textContent = String(summary.preparing);
-      els.applicationStatApplied.textContent = String(summary.applied);
-      els.applicationStatInterview.textContent = String(summary.interview);
-      els.applicationStatOffer.textContent = String(summary.offer);
-      els.applicationsTableBody.replaceChildren();
-      all.forEach((record) => els.applicationsTableBody.append(applicationRow(record)));
-      els.applicationsEmpty.classList.toggle("hidden", all.length > 0);
-      els.applicationsTableBody.parentElement.classList.toggle("hidden", all.length === 0);
-      els.applicationsTableFooter.classList.toggle("hidden", all.length === 0);
-      els.applicationsVisibleCount.textContent = `Showing ${all.length} of ${numeric(payload.total)} matching applications`;
-      els.loadMoreApplicationsButton.classList.toggle("hidden", !payload.has_more);
-      els.loadMoreApplicationsButton.textContent = `Show ${Math.min(50, numeric(payload.total) - all.length)} more`;
-    }
 
-    function applicationRow(record) {
-      const row = document.createElement("tr");
-      const jobCell = document.createElement("td");
-      jobCell.dataset.label = "Job";
-      const title = document.createElement("div");
-      title.className = "application-job-title";
-      const titleLink = document.createElement(record.url ? "a" : "span");
-      titleLink.textContent = safe(record.title) || "Untitled job";
-      if (record.url) {
-        titleLink.href = record.url;
-        titleLink.target = "_blank";
-        titleLink.rel = "noopener";
-      }
-      const meta = document.createElement("span");
-      meta.className = "subline";
-      meta.textContent = [safe(record.company), safe(record.location)].filter(Boolean).join(" - ");
-      title.append(titleLink, meta);
-      jobCell.append(title);
-
-      const stageCell = document.createElement("td");
-      stageCell.dataset.label = "Stage and follow-up";
-      const edit = document.createElement("div");
-      edit.className = "application-edit";
-      const stage = document.createElement("select");
-      stage.setAttribute("aria-label", "Application stage for " + (safe(record.title) || "job"));
-      [
-        ["preparing", "Preparing"],
-        ["applied", "Applied"],
-        ["interview", "Interview"],
-        ["offer", "Offer"],
-        ["rejected", "Rejected"],
-        ["withdrawn", "Withdrawn"]
-      ].forEach(([value, label]) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = label;
-        option.selected = value === record.application_stage;
-        stage.append(option);
-      });
-      const followUp = document.createElement("input");
-      followUp.type = "date";
-      followUp.value = safe(record.follow_up_at).slice(0, 10);
-      followUp.setAttribute("aria-label", "Follow-up date for " + (safe(record.title) || "job"));
-      edit.append(stage, followUp);
-      stageCell.append(edit);
-
-      const notesCell = document.createElement("td");
-      notesCell.dataset.label = "Notes";
-      const notes = document.createElement("textarea");
-      notes.className = "application-row-note";
-      notes.rows = 3;
-      notes.value = record.notes || record.application_notes || "";
-      notes.placeholder = "Interview details, contact, next step...";
-      notes.setAttribute("aria-label", "Application notes for " + (safe(record.title) || "job"));
-      notesCell.append(notes);
-
-      const updatedCell = document.createElement("td");
-      updatedCell.dataset.label = "Updated";
-      updatedCell.textContent = formatDateTime(record.application_updated_at || record.updated_at) || "-";
-
-      const actionCell = document.createElement("td");
-      actionCell.dataset.label = "Action";
-      const saveButton = document.createElement("button");
-      saveButton.type = "button";
-      saveButton.className = "button secondary";
-      saveButton.textContent = "Save";
-      saveButton.setAttribute("aria-label", "Save application changes for " + (safe(record.title) || "job"));
-      saveButton.addEventListener("click", () => saveApplicationRecord(record, {
-        stage: stage.value,
-        follow_up_at: followUp.value,
-        notes: notes.value
-      }, saveButton));
-      actionCell.append(saveButton);
-      row.append(jobCell, stageCell, notesCell, updatedCell, actionCell);
-      return row;
-    }
-
-    async function saveApplicationRecord(record, updates, button) {
-      button.disabled = true;
-      setApplicationsStatus("Saving application...");
-      try {
-        const response = await fetch("/api/application", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ job: record, ...updates })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || result.ok === false) throw new Error(result.error || "Application save failed");
-        await loadApplications();
-        await loadData();
-        setApplicationsStatus("Application updated.", "success");
-      } catch (error) {
-        setApplicationsStatus(safe(error.message) || "Application could not be saved.", "error");
-      } finally {
-        button.disabled = false;
-      }
-    }
-
-    function setApplicationsStatus(message, kind = "") {
-      els.applicationsStatus.textContent = message;
-      els.applicationsStatus.className = "profile-status" + (kind ? " " + kind : "");
-    }
-
-    async function loadAssistant() {
-      state.assistantLoading = true;
-      setAssistantStatus("Loading application knowledge...");
-      try {
-        const response = await fetch(API_ASSISTANT_URL + "?t=" + Date.now(), { cache: "no-store" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        state.assistantPayload = await response.json();
-        renderAssistant();
-        setAssistantStatus("Answers are stored in your private workspace. Final submission remains manual.");
-      } catch (error) {
-        setAssistantStatus("Application assistant could not be loaded: " + (safe(error.message) || "unknown error"), "error");
-      } finally {
-        state.assistantLoading = false;
-      }
-    }
-
-    function renderAssistant() {
-      const payload = state.assistantPayload || {};
-      renderAnswerMapping(els.applicationAnswersEditor, payload.application_answers || {}, "application");
-      renderAnswerMapping(els.learnedAnswersEditor, payload.learned_answers || {}, "learned");
-      els.assistantCoverStyle.value = payload.cover_letter_style || "";
-      els.assistantJobSelect.replaceChildren();
-      const jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
-      if (!jobs.length) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "No dashboard jobs available";
-        els.assistantJobSelect.append(option);
-      } else {
-        jobs.forEach((job, index) => {
-          const option = document.createElement("option");
-          option.value = String(index);
-          option.textContent = `${job.title || "Untitled"} - ${job.company || "Unknown company"} (${numeric(job.score)})`;
-          els.assistantJobSelect.append(option);
-        });
-      }
-      els.createAiDraftButton.disabled = !payload.ai_document_configured || !jobs.length;
-      els.createLocalDraftButton.disabled = !jobs.length;
-      els.assistantAiNote.textContent = payload.ai_document_configured
-        ? "Claude is configured. AI improvement runs only when you click the button."
-        : "Claude is not configured. Free local drafts remain available.";
-    }
-
-    function renderAnswerMapping(container, mapping, kind) {
-      container.replaceChildren();
-      Object.entries(mapping || {}).forEach(([key, value]) => {
-        addAnswerEditorRow(container, key, answerEditorValue(value), kind);
-      });
-      if (!container.children.length) {
-        addAnswerEditorRow(container, "", "", kind);
-      }
-    }
-
-    function addAnswerEditorRow(container, key = "", value = "", kind = "application") {
-      const row = document.createElement("div");
-      row.className = "answer-editor";
-      row.dataset.answerKind = kind;
-      const keyInput = document.createElement("input");
-      keyInput.value = key;
-      keyInput.placeholder = kind === "application" ? "Profile field or question key" : "Normalized question";
-      keyInput.setAttribute("aria-label", kind === "application" ? "Application answer key" : "Learned question");
-      const answer = document.createElement("textarea");
-      answer.value = value;
-      answer.placeholder = "Truthful answer";
-      answer.setAttribute("aria-label", "Saved answer");
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "remove-item-button";
-      remove.textContent = "Remove";
-      remove.addEventListener("click", () => row.remove());
-      row.append(keyInput, answer, remove);
-      container.append(row);
-    }
-
-    function answerEditorValue(value) {
-      if (value && typeof value === "object") {
-        return JSON.stringify(value, null, 2);
-      }
-      return String(value ?? "");
-    }
-
-    function collectAnswerMapping(container, { parseJson = false } = {}) {
-      const output = {};
-      container.querySelectorAll(".answer-editor").forEach((row) => {
-        const key = safe(row.querySelector("input")?.value);
-        const raw = String(row.querySelector("textarea")?.value || "").trim();
-        if (!key || !raw) return;
-        if (parseJson && /^[\\[{]/.test(raw)) {
-          try {
-            output[key] = JSON.parse(raw);
-            return;
-          } catch (_error) {
-            // Keep user-authored text when it is not valid JSON.
-          }
-        }
-        output[key] = raw;
-      });
-      return output;
-    }
-
-    async function saveAssistantKnowledge() {
-      const payload = {
-        application_answers: collectAnswerMapping(els.applicationAnswersEditor, { parseJson: true }),
-        learned_answers: collectAnswerMapping(els.learnedAnswersEditor),
-        cover_letter_style: els.assistantCoverStyle.value
-      };
-      els.saveAssistantKnowledgeButton.disabled = true;
-      setAssistantStatus("Saving answer library...");
-      try {
-        const response = await fetch(API_ASSISTANT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || result.ok === false) throw new Error(result.error || "Answer library save failed");
-        const existingJobs = state.assistantPayload?.jobs || [];
-        state.assistantPayload = { ...result.data, jobs: result.data.jobs?.length ? result.data.jobs : existingJobs };
-        renderAssistant();
-        setAssistantStatus("Answer library saved.", "success");
-      } catch (error) {
-        setAssistantStatus(safe(error.message) || "Answer library could not be saved.", "error");
-      } finally {
-        els.saveAssistantKnowledgeButton.disabled = false;
-      }
-    }
-
-    function selectedAssistantJob() {
-      const jobs = Array.isArray(state.assistantPayload?.jobs) ? state.assistantPayload.jobs : [];
-      return jobs[numeric(els.assistantJobSelect.value)] || null;
-    }
-
-    async function generateAssistantDraft(mode) {
-      const job = selectedAssistantJob();
-      if (!job) {
-        setAssistantStatus("Choose a job before creating a draft.", "error");
-        return;
-      }
-      const button = mode === "ai" ? els.createAiDraftButton : els.createLocalDraftButton;
-      button.disabled = true;
-      setAssistantStatus(mode === "ai" ? "Improving draft with Claude..." : "Creating local draft...");
-      try {
-        const response = await fetch(API_ASSISTANT_URL + "/draft", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ job, mode })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || result.ok === false) throw new Error(result.error || "Draft generation failed");
-        els.assistantDraft.value = result.data?.draft || "";
-        setAssistantStatus(mode === "ai" ? "Claude draft created. Review every claim before using it." : "Free local draft created.", "success");
-      } catch (error) {
-        setAssistantStatus(safe(error.message) || "Draft could not be created.", "error");
-      } finally {
-        button.disabled = mode === "ai" && !state.assistantPayload?.ai_document_configured;
-      }
-    }
-
-    async function findAssistantAnswer() {
-      const question = els.assistantQuestion.value.trim();
-      if (!question) {
-        setAssistantStatus("Enter an application question first.", "error");
-        return;
-      }
-      els.findAssistantAnswerButton.disabled = true;
-      els.assistantAnswerResult.textContent = "Checking saved profile facts...";
-      try {
-        const response = await fetch(API_ASSISTANT_URL + "/answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            context: els.assistantQuestionContext.value
-          })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || result.ok === false) throw new Error(result.error || "Answer lookup failed");
-        const data = result.data || {};
-        els.assistantAnswerResult.textContent = data.answer || data.message || "No saved answer found.";
-        setAssistantStatus(data.needs_ai ? "No deterministic answer found. Human review is required." : "Answer found in saved profile data.", data.needs_ai ? "" : "success");
-      } catch (error) {
-        els.assistantAnswerResult.textContent = safe(error.message) || "Answer lookup failed.";
-        setAssistantStatus("Answer lookup failed.", "error");
-      } finally {
-        els.findAssistantAnswerButton.disabled = false;
-      }
-    }
-
-    async function copyAssistantDraft() {
-      const text = els.assistantDraft.value.trim();
-      if (!text) return;
-      await navigator.clipboard.writeText(text);
-      setAssistantStatus("Draft copied to clipboard.", "success");
-    }
-
-    function downloadAssistantDraft() {
-      const text = els.assistantDraft.value.trim();
-      if (!text) return;
-      const job = selectedAssistantJob() || {};
-      const filename = `${safe(job.company) || "company"}-${safe(job.title) || "cover-letter"}`
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 80) + ".txt";
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(new Blob([text + "\n"], { type: "text/plain;charset=utf-8" }));
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }
-
-    function setAssistantStatus(message, kind = "") {
-      els.assistantStatus.textContent = message;
-      els.assistantStatus.className = "profile-status" + (kind ? " " + kind : "");
-    }
 
     async function loadMaintenance() {
       state.maintenanceLoading = true;
@@ -1896,9 +1765,11 @@ const DEFAULT_THEME = initialTheme();
         const meta = document.createElement("span");
         meta.className = "subline";
         const stats = run.stats || {};
+        const searchGoal = safe(run.search_goal).replace(/-/g, " ");
         meta.textContent = [
           formatDateTime(run.completed_at || run.timestamp || run.started_at),
           labelize(run.status || "completed"),
+          searchGoal ? `Goal: ${labelize(searchGoal)}` : "",
           `${numeric(stats.processed_jobs ?? run.total_scanned)} processed`,
           `${numeric(stats.apply_first ?? run.new_recommendations)} apply first`,
           `${numeric(stats.good_options)} good options`
@@ -2089,7 +1960,20 @@ const DEFAULT_THEME = initialTheme();
         runs: [],
         jobs: [],
         summary: { by_decision: {}, by_domain: {}, by_manual_status: {} },
-        filter_options: { runs: [], decisions: [], domains: [], flags: [], apply_methods: [], manual_statuses: [] }
+        filter_options: {
+          runs: [],
+          decisions: [],
+          domains: [],
+          search_groups: [],
+          career_lanes: [],
+          search_markets: [],
+          employment_types: [],
+          sponsorship_statuses: [],
+          platforms: [],
+          flags: [],
+          apply_methods: [],
+          manual_statuses: []
+        }
       };
     }
 
@@ -2117,7 +2001,12 @@ const DEFAULT_THEME = initialTheme();
         syncGlobalRunStatus();
         render();
       } catch (error) {
-        setStatus("error", "Data unavailable");
+        console.error("LOAD DATA ERROR:", error);
+        if (state.data && state.data.schema_version) {
+          setStatus("interrupted", "Reconnecting...");
+        } else {
+          setStatus("error", "Data unavailable");
+        }
         render();
       }
     }
@@ -2219,6 +2108,7 @@ const DEFAULT_THEME = initialTheme();
       renderQuickPresets();
       renderFilterHint();
       renderJobs();
+      renderDescriptions();
       renderLayoutMode();
       renderRunControl();
       updateUndoButtonState();
@@ -2338,6 +2228,12 @@ const DEFAULT_THEME = initialTheme();
         run: state.filters.run,
         decision: state.filters.decision,
         domain: state.filters.domain,
+        searchGroup: state.filters.searchGroup,
+        searchMarket: state.filters.searchMarket,
+        employmentType: state.filters.employmentType,
+        flexibleHours: state.filters.flexibleHours,
+        sponsorshipStatus: state.filters.sponsorshipStatus,
+        platform: state.filters.platform,
         flag: state.filters.flag,
         applyMethod: state.filters.applyMethod,
         manualStatus: state.filters.manualStatus
@@ -2346,11 +2242,18 @@ const DEFAULT_THEME = initialTheme();
       setOptions(els.runFilter, [["all", "All runs"], ...runOptions()], selected.run);
       setOptions(els.decisionFilter, [["all", "All decisions"], ...DECISIONS], selected.decision);
       setOptions(els.domainFilter, [["all", "All domains"], ...domainOptions()], selected.domain);
+      setOptions(els.searchGroupFilter, [["all", "All search paths"], ...searchGroupOptions()], selected.searchGroup);
+      setOptions(els.marketFilter, [["all", "All markets"], ...marketOptions()], selected.searchMarket);
+      setOptions(els.employmentFilter, [["all", "All employment types"], ...employmentTypeOptions()], selected.employmentType);
+      setOptions(els.sponsorshipFilter, [["all", "All sponsorship states"], ...sponsorshipOptions()], selected.sponsorshipStatus);
+      setOptions(els.platformFilter, [["all", "All platforms"], ...platformOptions()], selected.platform);
       setOptions(els.flagFilter, [["all", "All flags"], ...flagOptions()], selected.flag);
       setOptions(els.applyMethodFilter, [["all", "All apply methods"], ...applyMethodOptions()], selected.applyMethod);
       setOptions(els.manualStatusFilter, [["all", "All statuses"], ...manualStatusOptions()], selected.manualStatus);
       els.actionFilter.value = state.filters.actionScope;
+      els.flexibleHoursFilter.value = state.filters.flexibleHours;
       els.sortFilter.value = state.filters.sort;
+      renderCareerLaneTabs();
     }
 
     function setOptions(select, options, selectedValue) {
@@ -2365,18 +2268,74 @@ const DEFAULT_THEME = initialTheme();
           return option;
         }));
       }
-      select.value = options.some(([value]) => value === selectedValue) ? selectedValue : "all";
-      state.filters[filterNameFor(select)] = select.value;
+      const hasSelectedValue = options.some(([value]) => value === selectedValue);
+      select.value = hasSelectedValue ? selectedValue : "all";
+      if (hasSelectedValue || selectedValue === "all") {
+        state.filters[filterNameFor(select)] = select.value;
+      }
     }
 
     function filterNameFor(select) {
       if (select === els.runFilter) return "run";
       if (select === els.decisionFilter) return "decision";
       if (select === els.domainFilter) return "domain";
+      if (select === els.searchGroupFilter) return "searchGroup";
+      if (select === els.marketFilter) return "searchMarket";
+      if (select === els.employmentFilter) return "employmentType";
+      if (select === els.sponsorshipFilter) return "sponsorshipStatus";
+      if (select === els.platformFilter) return "platform";
       if (select === els.flagFilter) return "flag";
       if (select === els.applyMethodFilter) return "applyMethod";
       if (select === els.manualStatusFilter) return "manualStatus";
       return "";
+    }
+
+    function filterOptionValues(key, fallback = []) {
+      const values = state.data.filter_options && Array.isArray(state.data.filter_options[key])
+        ? state.data.filter_options[key]
+        : [];
+      return values.length ? values : fallback;
+    }
+
+    function marketOptions() {
+      const labels = {
+        netherlands: "Netherlands",
+        germany: "Germany",
+        uae: "United Arab Emirates",
+        "saudi-arabia": "Saudi Arabia",
+        qatar: "Qatar",
+        kuwait: "Kuwait",
+      };
+      return filterOptionValues("search_markets", Array.from(new Set(jobs().map((job) => safe(job.search_market)).filter(Boolean))))
+        .map((value) => [safe(value), labels[safe(value)] || labelize(value)])
+        .filter(([value]) => value);
+    }
+
+    function employmentTypeOptions() {
+      const values = filterOptionValues(
+        "employment_types",
+        Array.from(new Set(jobs().flatMap((job) => Array.isArray(job.employment_types) ? job.employment_types : [])))
+      );
+      return values.map((value) => [safe(value), labelize(value)]).filter(([value]) => value);
+    }
+
+    function sponsorshipOptions() {
+      const labels = {
+        not_required: "Not required",
+        confirmed: "Confirmed sponsorship",
+        likely: "Likely international hiring",
+        unknown: "Sponsorship unknown",
+        unavailable: "No sponsorship",
+      };
+      return filterOptionValues("sponsorship_statuses", Array.from(new Set(jobs().map((job) => safe(job.sponsorship_status)).filter(Boolean))))
+        .map((value) => [safe(value), labels[safe(value)] || labelize(value)])
+        .filter(([value]) => value);
+    }
+
+    function platformOptions() {
+      return filterOptionValues("platforms", Array.from(new Set(jobs().map((job) => safe(job.board)).filter(Boolean))))
+        .map((value) => [safe(value), labelize(value)])
+        .filter(([value]) => value);
     }
 
     function runOptions() {
@@ -2429,6 +2388,23 @@ const DEFAULT_THEME = initialTheme();
         }
       }
       return [...flags].sort().map((flag) => [flag, labelize(flag)]);
+    }
+
+    function searchGroupOptions() {
+      const labels = {
+        primary: "Primary Path",
+        bridge: "Bridge Opportunity",
+        fallback: "Fallback Income",
+      };
+      const configured = state.data.filter_options && Array.isArray(state.data.filter_options.search_groups)
+        ? state.data.filter_options.search_groups
+        : [];
+      const values = configured.length
+        ? configured
+        : Array.from(new Set(jobs().map((job) => safe(job.search_group)).filter(Boolean)));
+      return values
+        .map((group) => [safe(group), labels[safe(group)] || labelize(group)])
+        .filter(([value]) => value);
     }
 
     function manualStatusOptions() {
@@ -2490,6 +2466,24 @@ const DEFAULT_THEME = initialTheme();
       const jobCap = numeric(policy.global_new_jobs_soft_cap);
       const totalQueries = numeric(progress.total_queries || (Array.isArray(run.queries) ? run.queries.length : 0));
       const queryIndex = numeric(progress.current_query_index);
+      
+      if (els.overallProgressContainer) {
+        if (totalQueries > 0) {
+          els.overallProgressContainer.classList.remove("hidden");
+          let overallPercent = Math.min(100, Math.max(0, Math.round((queryIndex / totalQueries) * 100)));
+          if (run.status === "completed") overallPercent = 100;
+          els.overallProgressText.textContent = overallPercent + "%";
+          els.overallProgressFill.style.width = overallPercent + "%";
+          
+          if (run.status === "running") {
+            els.overallProgressFill.classList.add("active");
+          } else {
+            els.overallProgressFill.classList.remove("active");
+          }
+        } else {
+          els.overallProgressContainer.classList.add("hidden");
+        }
+      }
       const maxPages = numeric(policy.max_pages_per_query);
       const currentPage = numeric(progress.current_page_number);
       const stopReason = safe(progress.stop_reason);
@@ -2539,7 +2533,58 @@ const DEFAULT_THEME = initialTheme();
         stopReason,
         expanded,
       });
+      renderFreshSearchPathSummary(run, progress);
       renderFreshPages(fresh, policy);
+    }
+
+    function renderFreshSearchPathSummary(run, progress) {
+      const counts = progress.search_group_counts || run.stats?.by_search_group || {};
+      const selected = Array.isArray(run.selected_search_groups)
+        ? run.selected_search_groups
+        : [];
+      els.freshSearchPathSummary.replaceChildren();
+      const scope = run.search_scope || {};
+      if (scope.market_label || scope.country) {
+        els.freshSearchPathSummary.append(
+          freshSummaryChip("Market", safe(scope.market_label || scope.country))
+        );
+      }
+      if (scope.employment_label) {
+        els.freshSearchPathSummary.append(
+          freshSummaryChip("Employment", safe(scope.employment_label))
+        );
+      }
+      const goal = safe(run.search_goal).replace(/-/g, " ");
+      if (goal) {
+        els.freshSearchPathSummary.append(
+          freshSummaryChip("Goal", labelize(goal))
+        );
+      }
+      const currentGroup = safe(progress.current_search_group);
+      if (currentGroup) {
+        const currentLabels = {
+          primary: "Primary",
+          bridge: "Bridge",
+          fallback: "Fallback",
+        };
+        els.freshSearchPathSummary.append(
+          freshSummaryChip("Current", currentLabels[currentGroup] || labelize(currentGroup))
+        );
+      }
+      for (const [group, label] of [
+        ["primary", "Primary"],
+        ["bridge", "Bridge"],
+        ["fallback", "Fallback"],
+      ]) {
+        if (!selected.includes(group) && !counts[group]) continue;
+        els.freshSearchPathSummary.append(
+          freshSummaryChip(label, numeric(counts[group]?.processed_jobs))
+        );
+      }
+      els.freshSearchPathSummary.classList.toggle(
+        "hidden",
+        !els.freshSearchPathSummary.childElementCount
+      );
     }
 
     function selectedFreshRun() {
@@ -2711,7 +2756,7 @@ const DEFAULT_THEME = initialTheme();
       const items = bestNextJobs();
       els.bestNextList.replaceChildren();
       setIconText(els.bestNextCount, "target", items.length + (items.length === 1 ? " ready" : " ready"));
-      els.bestNextPanel.classList.remove("hidden");
+      els.bestNextPanel.classList.add("hidden"); // Hid Best Next Jobs panel to favor main columns
       if (!items.length) {
         els.bestNextList.append(bestNextEmptyState());
         return;
@@ -2751,6 +2796,10 @@ const DEFAULT_THEME = initialTheme();
           if (state.filters.run !== "all" && job.run_id !== state.filters.run) return false;
           if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
           if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
+          if (
+            state.filters.searchGroup !== "all"
+            && !jobSearchGroups(job).includes(state.filters.searchGroup)
+          ) return false;
           if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
           if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
           if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
@@ -2810,6 +2859,8 @@ const DEFAULT_THEME = initialTheme();
 
       const badges = document.createElement("div");
       badges.className = "badges";
+      badges.append(careerLaneBadge(job));
+      badges.append(...searchGroupBadges(job));
       badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
       for (const flag of importantFlags(job).slice(0, 3)) {
         badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
@@ -2840,37 +2891,130 @@ const DEFAULT_THEME = initialTheme();
         parts.push("All jobs view includes low probability, rejected, applied, and irrelevant records.");
       }
       if (state.filters.run !== "all") parts.push("Run filter is active.");
+      if (state.filters.searchGroup !== "all") parts.push("Search-path filter is active.");
+      if (state.filters.careerLane !== "all") {
+        parts.push(`${careerLaneLabel(state.filters.careerLane)} is the active career lane.`);
+      }
+      if (state.filters.searchMarket !== "all") parts.push("Market filter is active.");
+      if (state.filters.employmentType !== "all") parts.push("Employment filter is active.");
+      if (state.filters.sponsorshipStatus !== "all") parts.push("Sponsorship filter is active.");
       if (state.filters.applyMethod === "easy_apply") parts.push("Showing LinkedIn jobs where Easy Apply was detected.");
       if (state.filters.manualStatus !== "all") parts.push("Manual status filter is active.");
       els.filterHint.textContent = parts.join(" ");
     }
 
+    function careerLaneLabel(lane) {
+      return {
+        primary: "Primary Career",
+        bridge: "Bridge Roles",
+        fallback: "Fallback Income",
+        other: "Other",
+        all: "All Opportunities",
+      }[safe(lane).toLowerCase()] || "Other";
+    }
+
+    function renderCareerLaneTabs() {
+      if (!els.careerLaneTabs) return;
+      for (const button of els.careerLaneTabs.querySelectorAll("[data-career-lane]")) {
+        const active = button.dataset.careerLane === state.filters.careerLane;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-current", active ? "page" : "false");
+      }
+    }
+
+    function careerLaneBadge(job) {
+      const lane = safe(job.career_lane || "other").toLowerCase();
+      return badge(careerLaneLabel(lane), "career-lane " + lane);
+    }
+
+    function eligibilityBadges(job) {
+      const output = [];
+      const market = safe(job.search_market);
+      if (market) {
+        const option = marketOptions().find(([value]) => value === market);
+        output.push(badge(option ? option[1] : labelize(market), "market"));
+      }
+      const sponsorship = safe(job.sponsorship_status);
+      if (sponsorship && sponsorship !== "not_required" && sponsorship !== "unknown") {
+        const option = sponsorshipOptions().find(([value]) => value === sponsorship);
+        const label = option ? option[1] : labelize(sponsorship);
+        let cssClass = "sponsorship " + sponsorship;
+        if (sponsorship === "confirmed") cssClass = "international-detail benefit";
+        else if (sponsorship === "unavailable") cssClass = "international-detail concern";
+        output.push(badge(label, cssClass));
+      }
+      const contractType = safe(job.contract_type);
+      if (contractType && contractType !== "unknown") {
+        output.push(badge(labelize(contractType), "international-detail contract"));
+      }
+      for (const [key, label] of [
+        ["relocation_support", "Relocation support"],
+        ["housing_support", "Housing support"],
+        ["health_insurance", "Health insurance"],
+        ["annual_flight_support", "Annual flight"],
+      ]) {
+        const support = safe(job[key]);
+        if (support === "confirmed") {
+          output.push(badge(label, "international-detail benefit"));
+        } else if (support === "unavailable") {
+          output.push(badge(`No ${label.toLowerCase()}`, "international-detail concern"));
+        }
+      }
+      return output;
+    }
+
+    function jobDetailBadges(job) {
+      const output = [];
+      const employment = Array.isArray(job.employment_types) ? job.employment_types : [];
+      for (const value of employment.slice(0, 2)) {
+        output.push(badge(labelize(value), "employment"));
+      }
+      if (job.flexible_hours) output.push(badge("Flexible hours", "employment flexible"));
+      const compensation = safe(job.compensation_text);
+      if (compensation) {
+        output.push(badge(compensation, "international-detail compensation"));
+      }
+      output.push(badge(job.domain_label || labelize(job.domain_category), "domain"));
+      
+      const aiModel = safe(job.ai_model || job.model || (job.ai && job.ai.model));
+      if (aiModel) {
+        const modelLabel = aiModel.replace(/^models\//, "");
+        output.push(badge(modelLabel, "ai-model"));
+      }
+      return output;
+    }
+
     function runHistoryItem(run) {
       const item = document.createElement("article");
-      item.className = "run-history-item " + safe(run.status);
+      item.className = "run-history-item";
 
       const title = document.createElement("div");
-      title.className = "run-history-title";
-      const label = document.createElement("span");
-      label.textContent = safe(run.run_label) || safe(run.run_id) || "Run";
-      const status = document.createElement("span");
-      status.className = "decision-chip " + (
-        run.status === "interrupted" ? "INTERRUPTED" : ""
-      );
-      status.append(
-        createIcon(
-          run.status === "completed"
-            ? "check-circle"
-            : run.status === "running"
-              ? "activity"
-              : run.status === "interrupted"
-                ? "alert-circle"
-                : "clock",
-          "icon icon-sm"
-        ),
-        document.createTextNode(labelize(run.status || "unknown"))
-      );
-      title.append(label, status);
+      title.className = "run-history-identity";
+
+      let runText = safe(run.run_label) || safe(run.run_id) || "Run";
+      let dateText = "";
+      if (runText.includes(" - ")) {
+        const parts = runText.split(" - ");
+        runText = parts[0];
+        dateText = parts.slice(1).join(" - ");
+      }
+      
+      const label = document.createElement("strong");
+      label.className = "run-name";
+      label.textContent = runText;
+      
+      const dateEl = document.createElement("div");
+      dateEl.className = "run-date";
+      dateEl.textContent = dateText;
+
+      const statusClass = run.status === "completed" || run.status === "running" ? "live" : "interrupted";
+      const statusRow = document.createElement("div");
+      statusRow.className = "run-history-status";
+      const dot = document.createElement("span");
+      dot.className = `status-dot ${statusClass}`;
+      statusRow.append(dot, document.createTextNode(" " + labelize(run.status || "unknown")));
+
+      title.append(label, dateEl, statusRow);
 
       const stats = run.stats || {};
       const fresh = run.fresh_scout || {};
@@ -2882,23 +3026,57 @@ const DEFAULT_THEME = initialTheme();
         ["Skipped", numeric(progress.known_jobs_skipped)],
         ["AI", numeric(progress.ai_scored)]
       ];
+      
       const statRow = document.createElement("div");
-      statRow.className = "run-history-stats";
-      for (const [labelText, value] of counts) {
-        statRow.append(freshSummaryChip(labelText, value));
+      statRow.className = "run-history-stats minimalist-stats";
+      
+      const groupStats = stats.by_search_group || {};
+      for (const [group, labelText] of [
+        ["primary", "Primary"],
+        ["bridge", "Bridge"],
+        ["fallback", "Fallback"],
+      ]) {
+        const count = numeric(groupStats[group]?.processed_jobs);
+        if (count) counts.push([labelText, count]);
       }
 
-      const meta = document.createElement("div");
-      meta.className = "run-history-meta";
-      meta.textContent = [
-        safe(run.mode),
-        safe(run.location),
-        safe(progress.stop_reason || ""),
+      for (const [labelText, value] of counts) {
+        const group = document.createElement("div");
+        group.className = "stat-group";
+        const num = document.createElement("span");
+        num.className = "stat-num";
+        num.textContent = value;
+        const lbl = document.createElement("span");
+        lbl.className = "stat-lbl";
+        lbl.textContent = labelText;
+        group.append(num, lbl);
+        statRow.append(group);
+      }
+
+      const reasonBlock = document.createElement("div");
+      reasonBlock.className = "run-history-reason";
+      const actualReason = safe(progress.stop_reason) || (run.status === "completed" ? "Completed successfully" : "No reason recorded");
+      reasonBlock.textContent = `Stopped: ${actualReason}`;
+
+      const scope = run.search_scope || {};
+      const radius = scope.radius_km === null
+        ? "country-wide"
+        : scope.radius_km !== undefined
+          ? `${scope.radius_km} km`
+          : "";
+      const rawMeta = [
+        safe(scope.market_label || scope.country),
+        safe(scope.location || run.location),
+        radius,
+        safe(scope.employment_label),
+        safe(run.search_goal).replace(/-/g, " "),
+        safe(run.mode)
       ].filter(Boolean).join(" | ");
+      item.title = `Configuration: ${rawMeta}`;
 
       const filter = document.createElement("button");
       filter.type = "button";
-      filter.className = "fresh-action";
+      filter.className = "fresh-action button button-sm";
       setIconText(filter, "filter", "Filter to this run");
       filter.addEventListener("click", () => {
         state.filters.run = safe(run.run_id) || "all";
@@ -2908,7 +3086,7 @@ const DEFAULT_THEME = initialTheme();
         loadJobs();
       });
 
-      item.append(title, statRow, meta, filter);
+      item.append(title, statRow, reasonBlock, filter);
       return item;
     }
 
@@ -3031,6 +3209,83 @@ const DEFAULT_THEME = initialTheme();
       container.append(...items.map(jobCard));
     }
 
+    function filteredDescriptions() {
+      let items = jobs().filter((job) => Boolean(job.description));
+      const { search, source } = state.descriptionFilters;
+      if (source && source !== "all") {
+        items = items.filter((job) => (job.source || "linkedin").toLowerCase() === source);
+      }
+      if (search) {
+        const query = search.toLowerCase();
+        items = items.filter((job) => searchBlob(job).includes(query));
+      }
+      return items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+
+    function descriptionRow(job) {
+      const tr = document.createElement("tr");
+      
+      const jobTd = document.createElement("td");
+      const title = document.createElement("div");
+      title.className = "application-title";
+      title.textContent = job.title;
+      const company = document.createElement("div");
+      company.className = "application-company";
+      company.textContent = job.company;
+      jobTd.append(title, company);
+
+      const sourceTd = document.createElement("td");
+      const sourceSpan = document.createElement("span");
+      const isIndeed = (job.source || "").toLowerCase() === "indeed";
+      sourceSpan.className = "badge " + (isIndeed ? "badge-gray" : "badge-blue");
+      sourceSpan.textContent = isIndeed ? "Indeed" : "LinkedIn";
+      sourceTd.append(sourceSpan);
+
+      const descTd = document.createElement("td");
+      const descPreview = document.createElement("div");
+      descPreview.className = "description-preview";
+      descPreview.style.maxWidth = "400px";
+      descPreview.style.overflow = "hidden";
+      descPreview.style.textOverflow = "ellipsis";
+      descPreview.style.whiteSpace = "nowrap";
+      descPreview.style.color = "var(--muted)";
+      descPreview.textContent = (job.description || "").slice(0, 150) + "...";
+      descTd.append(descPreview);
+
+      const actionTd = document.createElement("td");
+      const viewBtn = document.createElement("button");
+      viewBtn.className = "button secondary icon-button";
+      viewBtn.title = "View Full Description";
+      viewBtn.innerHTML = '<svg class="icon"><use href="#icon-file-text"></use></svg>';
+      viewBtn.onclick = () => {
+        alert("Full Description:\n\n" + job.description);
+      };
+      actionTd.append(viewBtn);
+
+      tr.append(jobTd, sourceTd, descTd, actionTd);
+      return tr;
+    }
+
+    function renderDescriptions() {
+      if (!els.descriptionsTableBody) return;
+      
+      const allExtracted = filteredDescriptions();
+      const visible = allExtracted.slice(0, state.descriptionsLimit);
+      
+      els.descriptionsTableBody.replaceChildren(...visible.map(descriptionRow));
+      
+      const hasAny = allExtracted.length > 0;
+      els.descriptionsEmpty.classList.toggle("hidden", hasAny);
+      els.descriptionsTableWrap.classList.toggle("hidden", !hasAny);
+      
+      const hasMore = allExtracted.length > visible.length;
+      els.descriptionsTableFooter.classList.toggle("hidden", !hasMore && visible.length === 0);
+      els.descriptionsVisibleCount.textContent = `Showing ${visible.length} of ${allExtracted.length} descriptions`;
+      els.loadMoreDescriptionsButton.classList.toggle("hidden", !hasMore);
+      
+      els.descriptionsStatus.textContent = `Loaded ${visible.length} descriptions`;
+    }
+
     function emptyColumnState(decisionKey) {
       const empty = document.createElement("div");
       empty.className = "empty empty-state";
@@ -3118,6 +3373,8 @@ const DEFAULT_THEME = initialTheme();
 
       const badges = document.createElement("div");
       badges.className = "badges";
+      badges.append(careerLaneBadge(job));
+      badges.append(...searchGroupBadges(job));
       badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
       for (const flag of importantFlags(job).slice(0, 5)) {
         badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
@@ -3179,25 +3436,44 @@ const DEFAULT_THEME = initialTheme();
       reason.className = "reason";
       reason.textContent = safe(job.reason) || safe(job.terminal_status) || "No reason recorded";
 
-      const badges = document.createElement("div");
-      badges.className = "badges";
-      badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
+      const badgesContainer = document.createElement("div");
+      badgesContainer.className = "badges-container";
+
+      const eligibilityGroup = document.createElement("div");
+      eligibilityGroup.className = "badges eligibility-badges";
+      eligibilityGroup.append(...eligibilityBadges(job));
+
+      const detailsGroup = document.createElement("div");
+      detailsGroup.className = "badges detail-badges";
+      detailsGroup.append(...jobDetailBadges(job));
+
+      const internalGroup = document.createElement("div");
+      internalGroup.className = "badges internal-badges";
+      internalGroup.append(careerLaneBadge(job));
+      internalGroup.append(...searchGroupBadges(job));
       if (status !== "unreviewed") {
-        badges.append(badge(labelize(status), "status " + status));
+        internalGroup.append(badge(labelize(status), "status " + status));
       }
       for (const flag of importantFlags(job).slice(0, 8)) {
-        badges.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
+        internalGroup.append(badge(labelize(flag), isRiskFlag(flag) ? "risk" : ""));
       }
+
+      if (eligibilityGroup.children.length) badgesContainer.append(eligibilityGroup);
+      if (detailsGroup.children.length) badgesContainer.append(detailsGroup);
+      if (internalGroup.children.length) badgesContainer.append(internalGroup);
 
       const details = document.createElement("div");
       details.className = "subline";
+      const displayedModel = job.ai_model || job.model || (job.ai && job.ai.model);
       details.textContent = [
         job.page_number ? "Page " + job.page_number : "",
         job.processed_at ? formatDateTime(job.processed_at) : "",
-        safe(job.source_stage)
+        safe(job.source_stage) === "ai_scored" && displayedModel 
+          ? safe(displayedModel).replace(/^models\//, "") 
+          : safe(job.source_stage)
       ].filter(Boolean).join(" | ");
 
-      article.append(titleRow, subline, reason, badges, details, actionRow(job, status));
+      article.append(titleRow, subline, reason, badgesContainer, details, actionRow(job, status));
       return article;
     }
 
@@ -3216,7 +3492,7 @@ const DEFAULT_THEME = initialTheme();
     function openJobButton(job) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "job-action utility";
+      button.className = "job-action primary-cta";
       setIconText(button, "external-link", "Open job");
       button.title = "Open the job page in a new tab";
       button.setAttribute("aria-label", "Open job: " + (safe(job.title) || "Untitled job"));
@@ -3231,8 +3507,8 @@ const DEFAULT_THEME = initialTheme();
     function copyLinkButton(job) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "job-action utility";
-      setIconText(button, "copy", "Copy link");
+      button.className = "job-action icon-only";
+      button.innerHTML = '<svg class="icon icon-sm"><use href="#icon-copy"></use></svg>';
       button.title = "Copy the job URL";
       button.setAttribute("aria-label", "Copy link for: " + (safe(job.title) || "Untitled job"));
       button.disabled = !safe(job.url);
@@ -3314,25 +3590,40 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function showUndoToast(job, previousStatus, newStatus) {
-      if (!els.toast) return;
-      window.clearTimeout(state.toastTimer);
-      els.toast.textContent = "";
-      const message = document.createElement("span");
       const nextLabel = newStatus === "unreviewed" ? "Status cleared" : "Marked " + labelize(newStatus);
-      message.textContent = nextLabel + ".";
-      const undo = document.createElement("button");
-      undo.type = "button";
-      undo.textContent = "Undo";
-      undo.addEventListener("click", () => {
-        hideUndoToast();
-        undoLastManualStatus();
+      showToast(nextLabel + ".", {
+        actionLabel: "Undo",
+        duration: 5000,
+        onAction: undoLastManualStatus,
       });
-      els.toast.append(message, undo);
-      els.toast.classList.add("visible");
-      state.toastTimer = window.setTimeout(hideUndoToast, 5000);
     }
 
-    function hideUndoToast() {
+    function showToast(message, {
+      actionLabel = "",
+      onAction = null,
+      duration = 4000,
+    } = {}) {
+      if (!els.toast) return;
+      window.clearTimeout(state.toastTimer);
+      els.toast.replaceChildren();
+      const copy = document.createElement("span");
+      copy.textContent = safe(message);
+      els.toast.append(copy);
+      if (actionLabel && typeof onAction === "function") {
+        const action = document.createElement("button");
+        action.type = "button";
+        action.textContent = actionLabel;
+        action.addEventListener("click", async () => {
+          hideToast();
+          await onAction();
+        });
+        els.toast.append(action);
+      }
+      els.toast.classList.add("visible");
+      state.toastTimer = window.setTimeout(hideToast, duration);
+    }
+
+    function hideToast() {
       if (!els.toast) return;
       window.clearTimeout(state.toastTimer);
       els.toast.classList.remove("visible");
@@ -3356,7 +3647,7 @@ const DEFAULT_THEME = initialTheme();
       const action = state.manualUndoStack.pop();
       updateUndoButtonState();
       const currentJob = findCurrentJob(action.job) || action.job;
-      hideUndoToast();
+      hideToast();
       const saved = await saveManualStatus(currentJob, action.previousStatus || "unreviewed", {
         previousStatus: action.newStatus || manualStatus(currentJob),
         silent: true,
@@ -3418,6 +3709,27 @@ const DEFAULT_THEME = initialTheme();
       return span;
     }
 
+    function jobSearchGroups(job) {
+      const values = [
+        safe(job.search_group).toLowerCase(),
+        ...(Array.isArray(job.matched_search_groups)
+          ? job.matched_search_groups.map((group) => safe(group).toLowerCase())
+          : []),
+      ].filter(Boolean);
+      return Array.from(new Set(values));
+    }
+
+    function searchGroupBadges(job) {
+      const labels = {
+        primary: "Primary Path",
+        bridge: "Bridge Opportunity",
+        fallback: "Fallback Income",
+      };
+      return jobSearchGroups(job)
+        .filter((group) => labels[group])
+        .map((group) => badge(labels[group], "search-path " + group));
+    }
+
     function createIcon(name, className = "icon") {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.setAttribute("class", className);
@@ -3436,12 +3748,41 @@ const DEFAULT_THEME = initialTheme();
     function filteredJobs() {
       const text = state.filters.search.trim().toLowerCase();
       let output = jobs().filter((job) => {
+        if (
+          state.filters.careerLane !== "all"
+          && safe(job.career_lane || "other") !== state.filters.careerLane
+        ) return false;
         if (state.filters.actionScope === "needs_action" && !needsAction(job)) return false;
         if (state.filters.run !== "all" && job.run_id !== state.filters.run) return false;
         if (state.filters.decision !== "all" && job.decision_category !== state.filters.decision) return false;
         if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
         if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
         if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
+        if (
+          state.filters.searchGroup !== "all"
+          && !jobSearchGroups(job).includes(state.filters.searchGroup)
+        ) return false;
+        if (
+          state.filters.searchMarket !== "all"
+          && safe(job.search_market) !== state.filters.searchMarket
+        ) return false;
+        if (
+          state.filters.employmentType !== "all"
+          && !(Array.isArray(job.employment_types)
+            && job.employment_types.includes(state.filters.employmentType))
+        ) return false;
+        if (
+          state.filters.flexibleHours !== "all"
+          && Boolean(job.flexible_hours) !== (state.filters.flexibleHours === "true")
+        ) return false;
+        if (
+          state.filters.sponsorshipStatus !== "all"
+          && safe(job.sponsorship_status) !== state.filters.sponsorshipStatus
+        ) return false;
+        if (
+          state.filters.platform !== "all"
+          && safe(job.board) !== state.filters.platform
+        ) return false;
         if (state.filters.manualStatus !== "all" && manualStatus(job) !== state.filters.manualStatus) return false;
         if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
         if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
@@ -3596,6 +3937,7 @@ const DEFAULT_THEME = initialTheme();
       for (const button of [els.stopAfterJobButton, els.stopAfterPageButton, els.stopNowButton]) {
         if (button) button.disabled = !available || !active;
       }
+      updateRunScopeControls();
       updateWorkflowFields();
       syncGlobalRunStatus();
       renderScoutWorkspace();
@@ -3652,7 +3994,7 @@ const DEFAULT_THEME = initialTheme();
       } else if (state.runControlAvailable && state.runControl?.status === "interrupted") {
         setStatus("interrupted", "Run interrupted");
       } else {
-        setStatus("", state.apiAvailable ? "Ready" : "Read-only");
+        setStatus(state.apiAvailable ? "ready" : "", state.apiAvailable ? "Ready" : "Read-only");
       }
     }
 
@@ -3661,6 +4003,32 @@ const DEFAULT_THEME = initialTheme();
       els.runScoutOverlay.classList.remove("hidden");
       const modal = els.runScoutOverlay.querySelector(".modal");
       if (modal) modal.scrollTop = 0;
+
+      // Reset experience levels to default (Entry Level and Associate checked)
+      const experienceLevels = ["entry", "associate"];
+      const checkedMap = {
+        "internship": "runExpInternship",
+        "entry": "runExpEntry",
+        "associate": "runExpAssociate",
+        "mid-senior": "runExpMidSenior",
+        "director": "runExpDirector",
+        "executive": "runExpExecutive"
+      };
+      for (const [lvl, id] of Object.entries(checkedMap)) {
+        const cb = document.getElementById(id);
+        if (cb) {
+          cb.checked = experienceLevels.includes(lvl);
+        }
+      }
+
+      if (!state.strategyPayload && !state.strategyLoading) {
+        loadStrategyData();
+      }
+      if (!state.boardSettingsPayload && !state.boardSettingsLoading) {
+        loadBoardSettings();
+      } else {
+        updateRunScopeControls();
+      }
       updateWorkflowFields();
       loadRunControl();
       els.runWorkflow.focus();
@@ -3695,8 +4063,228 @@ const DEFAULT_THEME = initialTheme();
       }
     }
 
+    function populateSelect(select, options, selectedValue, fallbackValue = "") {
+      if (!select) return "";
+      select.replaceChildren(...options.map(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = String(value);
+        option.textContent = label;
+        return option;
+      }));
+      const resolved = options.some(([value]) => String(value) === String(selectedValue))
+        ? String(selectedValue)
+        : (options.some(([value]) => String(value) === String(fallbackValue))
+          ? String(fallbackValue)
+          : String(options[0]?.[0] || ""));
+      select.value = resolved;
+      return resolved;
+    }
+
+    function resumeScopeSnapshot() {
+      const context = state.runControl?.resume_context || {};
+      return context.search_scope && typeof context.search_scope === "object"
+        ? context.search_scope
+        : null;
+    }
+
+    function runScopeLocked() {
+      return Boolean(
+        els.runResumeMode.checked
+        && state.runControl?.resume_available
+        && resumeScopeSnapshot()
+      );
+    }
+
+    function marketLabel(market) {
+      const profile = runScopeSettings().markets[safe(market)];
+      return safe(profile?.label) || marketOptions().find(([value]) => value === market)?.[1] || labelize(market);
+    }
+
+    function employmentPreferenceLabel(value) {
+      return {
+        "full-time-preferred": "Full-time preferred",
+        "full-time-only": "Full-time only",
+        "part-time-only": "Part-time only",
+        "full-or-part-time": "Full-time or part-time equally",
+        any: "Any employment type",
+      }[safe(value)] || labelize(value);
+    }
+
+    function updateRunScopeControls() {
+      if (!els.runPlatform || !els.runSearchMarket) return;
+      const resumeScope = runScopeLocked() ? resumeScopeSnapshot() : null;
+      if (resumeScope) {
+        els.runPlatform.value = safe(resumeScope.platform) || "linkedin";
+      }
+
+      const workflow = els.runWorkflow.value;
+      const workflowPlatform = workflow === "indeed_description" ? "indeed" : "linkedin";
+      const platform = resumeScope
+        ? safe(resumeScope.platform) || workflowPlatform
+        : workflowPlatform;
+      els.runPlatform.value = platform;
+      const settings = runScopeSettings();
+      const capabilities = settings.capabilities[platform] || {};
+      const allowedMarkets = Array.isArray(capabilities.markets) && capabilities.markets.length
+        ? capabilities.markets
+        : ["netherlands"];
+      const currentMarket = resumeScope?.search_market || els.runSearchMarket.value || "netherlands";
+      const market = populateSelect(
+        els.runSearchMarket,
+        allowedMarkets.map((value) => [value, marketLabel(value)]),
+        currentMarket,
+        "netherlands"
+      );
+      Array.from(els.runSearchMarket.options).forEach((option) => {
+        const optionProfile = settings.markets[option.value] || {};
+        option.disabled = safe(optionProfile.availability) === "disabled";
+      });
+      const profile = settings.markets[market] || {};
+      const marketChanged = safe(currentMarket) !== safe(market);
+
+      if (resumeScope) {
+        els.runLocation.value = safe(resumeScope.location);
+        
+        // Load visa checkbox and experience levels on resume
+        els.runScopeSponsorshipPolicy.checked = (resumeScope.sponsorship_policy === "required");
+        const levels = Array.isArray(resumeScope.experience_levels) 
+          ? resumeScope.experience_levels 
+          : ["entry", "associate"];
+        const checkedMap = {
+          "internship": "runExpInternship",
+          "entry": "runExpEntry",
+          "associate": "runExpAssociate",
+          "mid-senior": "runExpMidSenior",
+          "director": "runExpDirector",
+          "executive": "runExpExecutive"
+        };
+        for (const [lvl, id] of Object.entries(checkedMap)) {
+          const cb = document.getElementById(id);
+          if (cb) {
+            cb.checked = levels.includes(lvl);
+          }
+        }
+      } else {
+        if (marketChanged || !els.runLocation.value) {
+          els.runLocation.value = safe(profile.default_location) || "Amstelveen";
+        }
+        // Sync default sponsorship checkbox on market change
+        els.runScopeSponsorshipPolicy.checked = (profile.sponsorship_policy === "required");
+      }
+      const locations = Array.isArray(profile.locations) ? profile.locations : [];
+      els.runLocationOptions.replaceChildren(...locations.map((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        return option;
+      }));
+
+      const radiusValues = Array.isArray(capabilities.radius_km)
+        ? capabilities.radius_km
+        : [];
+      const currentRadius = resumeScope?.radius_km ?? els.runRadius.value ?? 40;
+      populateSelect(
+        els.runRadius,
+        radiusValues.map((value) => [
+          value,
+          numeric(value) === 0 ? "Exact location (0 km)" : `${value} km`,
+        ]),
+        currentRadius,
+        platform === "linkedin" ? 40 : 25
+      );
+
+      const employmentValues = Array.isArray(capabilities.employment_preferences)
+        ? capabilities.employment_preferences
+        : ["any"];
+      populateSelect(
+        els.runEmployment,
+        employmentValues.map((value) => [value, employmentPreferenceLabel(value)]),
+        resumeScope?.employment || els.runEmployment.value,
+        "full-time-preferred"
+      );
+
+      if (resumeScope) {
+        els.runSearchGoal.value = safe(resumeScope.search_goal) || "career-growth";
+        const groups = Array.isArray(resumeScope.search_groups)
+          ? resumeScope.search_groups
+          : [];
+        els.runSearchPrimary.checked = groups.includes("primary");
+        els.runSearchBridge.checked = groups.includes("bridge");
+        els.runSearchFallback.checked = groups.includes("fallback");
+      }
+
+      const location = safe(els.runLocation.value).trim().toLowerCase();
+      const country = safe(profile.country).trim().toLowerCase();
+      const radiusDisabled = ["remote", country].includes(location);
+      els.runRadius.disabled = runScopeLocked() || radiusDisabled;
+      els.runRadius.title = radiusDisabled
+        ? "Radius is not used for country-wide or remote searches."
+        : "Platform-native search radius.";
+
+      const locked = runScopeLocked();
+      const experimental = safe(profile.availability) === "experimental";
+      if (els.runExperimentalConfirmRow && els.runExperimentalConfirm) {
+        els.runExperimentalConfirmRow.classList.toggle("hidden", !experimental || locked);
+        els.runExperimentalConfirm.disabled = locked || !experimental;
+      }
+      els.runPlatform.disabled = locked || workflow === "validate_boards";
+      els.runSearchMarket.disabled = locked || workflow === "validate_boards";
+      els.runLocation.disabled = locked || workflow === "validate_boards";
+      els.runEmployment.disabled = locked || workflow === "validate_boards";
+      if (els.runPlatform) {
+        els.runPlatform.disabled = locked;
+        els.runWorkflow.disabled = locked;
+      }
+      renderRunScopeSummary(profile, radiusDisabled);
+    }
+
+    function renderRunScopeSummary(profile = {}, radiusDisabled = false) {
+      if (!els.runScopeSummary) return;
+      const market = els.runSearchMarket.value;
+      const radius = radiusDisabled ? "Country-wide / remote" : `${els.runRadius.value} km`;
+      const goalGroups = selectedRunSearchGroups();
+      const groupLabels = {
+        primary: "Primary",
+        bridge: "Bridge",
+        fallback: "Fallback",
+      };
+      const searchPath = goalGroups.length
+        ? goalGroups.map((group) => groupLabels[group] || labelize(group)).join(" + ")
+        : labelize(els.runSearchGoal.value);
+      const language = {
+        english_required_german_optional: "English-friendly jobs",
+        english_or_arabic: "English/Arabic-compatible jobs",
+        dutch_nuanced: "Dutch-aware matching",
+      }[profile.language_policy] || "Market-aware language matching";
+      const sponsorship = profile.sponsorship_policy === "required"
+        ? "Visa sponsorship required"
+        : "No sponsorship required";
+      const parts = [
+        labelize(els.runPlatform.value),
+        marketLabel(market),
+        safe(els.runLocation.value),
+        radius,
+        searchPath,
+        employmentPreferenceLabel(els.runEmployment.value),
+        language,
+        sponsorship,
+      ].filter(Boolean);
+      if (profile.availability === "beta") parts.push("Beta validation");
+      if (profile.availability === "experimental") parts.push("Experimental market");
+      els.runScopeSummary.classList.toggle(
+        "sponsorship-required",
+        profile.sponsorship_policy === "required"
+      );
+      els.runScopeSummary.replaceChildren();
+      const title = document.createElement("strong");
+      title.textContent = runScopeLocked() ? "Saved scope - locked for resume" : "Run summary";
+      const copy = document.createElement("span");
+      copy.textContent = parts.join(" | ");
+      els.runScopeSummary.append(title, copy);
+    }
+
     function updateWorkflowFields() {
       const workflow = els.runWorkflow.value;
+      els.runPlatform.value = workflow === "indeed_description" ? "indeed" : "linkedin";
       const presentation = workflowPresentation(workflow, {
         runControlAvailable: state.runControlAvailable,
         resumeAvailable: Boolean(state.runControl?.resume_available),
@@ -3704,12 +4292,15 @@ const DEFAULT_THEME = initialTheme();
       els.runQuery.disabled = !presentation.needsQuery;
       els.runQuery.title = presentation.needsQuery
         ? "Search query for this workflow"
-        : "Not used here; multi-query runs read search_queries.txt.";
+        : "Not used here; multi-query runs use the selected Job Strategy query groups.";
       els.runLocation.disabled = presentation.disableLocation;
       els.runMaxPages.disabled = presentation.disablePages;
       els.runBrowser.disabled = presentation.disableBrowser;
       els.runHumanMode.disabled = presentation.disableHumanMode;
       els.runResumeMode.disabled = presentation.disableResume;
+      const supportsSearchGoal = workflow === "linkedin_multi_fresh";
+      els.runSearchGoalControl.classList.toggle("hidden", !supportsSearchGoal);
+      els.runSearchGoal.disabled = !supportsSearchGoal;
       els.runFreshMode.disabled = !presentation.supportsFresh;
       if (workflow === "linkedin_multi_fresh") {
         els.runFreshMode.checked = true;
@@ -3734,22 +4325,315 @@ const DEFAULT_THEME = initialTheme();
       if (els.startRunButton) {
         setIconText(els.startRunButton, presentation.startIcon, presentation.startLabel);
       }
+      updateRunScopeControls();
+      renderRunSearchGoalSummary();
+    }
+
+    function selectedRunSearchGroups() {
+      const goal = els.runSearchGoal.value;
+      const presets = {
+        "career-growth": ["primary", "bridge"],
+        "career-focus": ["primary"],
+        broad: ["primary", "bridge", "fallback"],
+        income: ["fallback"],
+      };
+      if (goal !== "custom") return presets[goal] || ["primary", "bridge"];
+      return [
+        els.runSearchPrimary.checked ? "primary" : "",
+        els.runSearchBridge.checked ? "bridge" : "",
+        els.runSearchFallback.checked ? "fallback" : "",
+      ].filter(Boolean);
+    }
+
+    function renderRunSearchGoalSummary() {
+      if (!els.runSearchGoalSummary) return;
+      const supportsSearchGoal = els.runWorkflow.value === "linkedin_multi_fresh";
+      els.runSearchGoalSummary.classList.toggle("hidden", !supportsSearchGoal);
+      if (!supportsSearchGoal) return;
+
+      const resumeLocked = Boolean(
+        els.runResumeMode.checked
+        && state.runControl?.resume_available
+        && state.runControl?.resume_context
+      );
+      const context = state.runControl?.resume_context || {};
+      const scope = context.search_scope || {};
+      if (resumeLocked && (scope.search_goal || context.search_goal)) {
+        els.runSearchGoal.value = scope.search_goal || context.search_goal;
+        const savedGroups = Array.isArray(scope.search_groups)
+          ? scope.search_groups
+          : Array.isArray(context.selected_search_groups)
+            ? context.selected_search_groups
+          : [];
+        els.runSearchPrimary.checked = savedGroups.includes("primary");
+        els.runSearchBridge.checked = savedGroups.includes("bridge");
+        els.runSearchFallback.checked = savedGroups.includes("fallback");
+      }
+
+      const goal = els.runSearchGoal.value;
+      const groups = selectedRunSearchGroups();
+      const custom = goal === "custom";
+      els.runCustomSearchGroups.classList.toggle("hidden", !custom);
+      els.runSearchGoal.disabled = resumeLocked;
+      for (const input of [
+        els.runSearchPrimary,
+        els.runSearchBridge,
+        els.runSearchFallback,
+      ]) {
+        input.disabled = resumeLocked || !custom;
+      }
+
+      const queryGroups = state.strategyPayload?.query_groups || {};
+      const labels = {
+        primary: "Primary",
+        bridge: "Bridge",
+        fallback: "Fallback",
+      };
+      const selectedQueries = [];
+      const counts = [];
+      for (const group of groups) {
+        const queries = Array.isArray(queryGroups[group]) ? queryGroups[group] : [];
+        counts.push(`${labels[group]} ${queries.length}`);
+        selectedQueries.push(...queries);
+      }
+      const uniqueQueries = Array.from(
+        new Map(selectedQueries.map((query) => [safe(query).toLowerCase(), safe(query)])).values()
+      ).filter(Boolean);
+      const focus = groups.length === 0
+        ? "Custom search"
+        : groups.includes("fallback")
+          ? (groups.length === 1 ? "Focused income search" : "Broad search")
+          : (groups.length === 1 ? "Focused career search" : "Balanced career search");
+      const fallbackEnabled = groups.includes("fallback");
+      const valid = groups.length > 0 && uniqueQueries.length > 0;
+      els.runSearchGoalSummary.classList.toggle("fallback-enabled", fallbackEnabled);
+      els.runSearchGoalSummary.replaceChildren();
+      const title = document.createElement("strong");
+      title.textContent = resumeLocked
+        ? `Resume saved ${focus.toLowerCase()}`
+        : `${focus} - ${uniqueQueries.length} unique queries`;
+      const detail = document.createElement("span");
+      detail.textContent = counts.length
+        ? counts.join(" - ")
+        : "Select at least one search group.";
+      const preview = document.createElement("span");
+      preview.className = "query-preview";
+      preview.textContent = uniqueQueries.length
+        ? `Preview: ${uniqueQueries.slice(0, 5).join(", ")}${uniqueQueries.length > 5 ? "..." : ""}`
+        : "No queries are available for this selection.";
+      els.runSearchGoalSummary.append(title, detail, preview);
+      if (fallbackEnabled) {
+        const note = document.createElement("span");
+        note.textContent = groups.length === 1
+          ? "Income Priority searches realistic fallback roles without changing their AI scores."
+          : "Fallback runs only if the earlier selected career phases do not reach the Fresh targets.";
+        els.runSearchGoalSummary.append(note);
+      }
+      if (els.startRunButton) {
+        const profile = runScopeSettings().markets[els.runSearchMarket.value] || {};
+        const availability = safe(profile.availability);
+        const marketReady = availability !== "disabled"
+          && (
+            availability !== "experimental"
+            || runScopeLocked()
+            || Boolean(els.runExperimentalConfirm?.checked)
+          );
+        els.startRunButton.disabled = !valid || !marketReady || isRunActive();
+      }
+      renderRunScopeSummary(
+        runScopeSettings().markets[els.runSearchMarket.value] || {},
+        els.runRadius.disabled && !runScopeLocked()
+      );
     }
 
     async function startDashboardRun() {
       if (!state.runControlAvailable) return;
       const payload = {
         workflow: els.runWorkflow.value,
+        search_goal: els.runSearchGoal.value,
+        search_groups: selectedRunSearchGroups(),
+        platform: els.runPlatform.value,
+        search_market: els.runSearchMarket.value,
         query: els.runQuery.value,
         location: els.runLocation.value,
+        radius_km: els.runRadius.value,
+        employment: els.runEmployment.value,
+        experimental_confirmed: Boolean(els.runExperimentalConfirm?.checked),
         max_pages: els.runMaxPages.value,
         browser: els.runBrowser.value,
         ai_budget_mode: els.runAiBudgetMode ? els.runAiBudgetMode.value : "smart",
         human_mode: els.runHumanMode.checked,
         fresh: els.runFreshMode.checked,
-        resume: els.runResumeMode.checked
+        test_run: els.runTestMode.checked,
+        resume: els.runResumeMode.checked,
+        sponsorship_policy: els.runScopeSponsorshipPolicy.checked ? "required" : "not_required",
+        experience_levels: selectedExperienceLevels()
       };
+      
+      // Immediate UI feedback
+      if (els.startRunButton) {
+        els.startRunButton.disabled = true;
+        els.startRunButton.innerHTML = `<svg class="icon icon-sm icon-spin"><use href="#icon-refresh"></use></svg>Initiating...`;
+      }
+      
       await postRunControl("start", payload);
+      
+      closeRunScoutModal();
+      
+      if (els.terminalContainer && els.terminalContainer.classList.contains("hidden")) {
+        els.terminalContainer.classList.remove("hidden");
+        if (els.toggleTerminalButton) {
+          els.toggleTerminalButton.setAttribute("aria-expanded", "true");
+          setIconText(els.toggleTerminalButton, "settings", "Hide Terminal");
+        }
+      }
+    }
+
+    function selectedExperienceLevels() {
+      const checked = [];
+      const levels = {
+        "internship": "runExpInternship",
+        "entry": "runExpEntry",
+        "associate": "runExpAssociate",
+        "mid-senior": "runExpMidSenior",
+        "director": "runExpDirector",
+        "executive": "runExpExecutive"
+      };
+      for (const [lvl, id] of Object.entries(levels)) {
+        const el = document.getElementById(id);
+        if (el && el.checked) {
+          checked.push(lvl);
+        }
+      }
+      return checked;
+    }
+
+    function openManageMarketsModal() {
+      els.manageMarketsOverlay.classList.remove("hidden");
+      renderCustomMarketsList();
+    }
+
+    function closeManageMarketsModal() {
+      els.manageMarketsOverlay.classList.add("hidden");
+      els.addMarketForm.reset();
+    }
+
+    function renderCustomMarketsList() {
+      if (!els.customMarketsList) return;
+      const settings = runScopeSettings();
+      const builtIn = ["netherlands", "germany", "uae", "saudi-arabia", "qatar", "kuwait"];
+      const customItems = [];
+
+      Object.entries(settings.markets).forEach(([id, profile]) => {
+        const li = document.createElement("li");
+        
+        const span = document.createElement("span");
+        span.textContent = `${profile.label || id} (${profile.country || ""})`;
+        li.appendChild(span);
+
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "10px";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "link-button";
+        editBtn.type = "button";
+        editBtn.textContent = "Edit";
+        editBtn.addEventListener("click", () => populateMarketForm(id, profile));
+        actions.appendChild(editBtn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "link-button";
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", () => deleteCustomMarket(id));
+        actions.appendChild(deleteBtn);
+
+        li.appendChild(actions);
+        customItems.push(li);
+      });
+
+      if (customItems.length === 0) {
+        els.customMarketsList.innerHTML = "<li class='empty-state-item' style='color: var(--muted); font-size: 0.9rem;'>No custom countries added yet.</li>";
+      } else {
+        els.customMarketsList.replaceChildren(...customItems);
+      }
+    }
+
+    function populateMarketForm(id, profile) {
+      els.marketIdInput.value = id;
+      els.marketLabelInput.value = profile.label || "";
+      els.marketCountryInput.value = profile.country || "";
+      els.marketLocationInput.value = profile.default_location || "";
+      els.marketLocationsInput.value = (profile.locations || []).join(", ");
+      els.marketAuthInput.checked = profile.authorized_without_sponsorship !== false;
+      els.marketIdInput.focus();
+    }
+
+    async function addCustomMarket(event) {
+      event.preventDefault();
+      const id = els.marketIdInput.value.trim().toLowerCase().replace(/_/g, "-");
+      if (!id) return;
+      
+      const label = els.marketLabelInput.value.trim();
+      const country = els.marketCountryInput.value.trim();
+      const defaultLocation = els.marketLocationInput.value.trim();
+      const locations = els.marketLocationsInput.value.split(",").map(loc => loc.trim()).filter(Boolean);
+      const authorized = els.marketAuthInput.checked;
+
+      const payload = {
+        id,
+        profile: {
+          label,
+          country,
+          default_location: defaultLocation,
+          locations,
+          authorized_without_sponsorship: authorized,
+          sponsorship_policy: authorized ? "not_required" : "required",
+          availability: "stable",
+          country_codes: []
+        }
+      };
+
+      try {
+        const response = await fetch("/api/markets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || "Failed to add market");
+        }
+        state.boardSettingsPayload = result.data || result;
+        renderCustomMarketsList();
+        updateRunScopeControls();
+        els.addMarketForm.reset();
+        showToast(`Market ${label} added successfully!`);
+      } catch (error) {
+        alert("Could not add search market: " + error.message);
+      }
+    }
+
+    async function deleteCustomMarket(id) {
+      if (!confirm(`Are you sure you want to delete this country?`)) return;
+      try {
+        const response = await fetch("/api/markets/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id })
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || "Failed to delete market");
+        }
+        state.boardSettingsPayload = result.data || result;
+        renderCustomMarketsList();
+        updateRunScopeControls();
+        showToast("Search market removed.");
+      } catch (error) {
+        alert("Could not delete search market: " + error.message);
+      }
     }
 
     async function stopDashboardRun(mode) {
@@ -3816,7 +4700,13 @@ const DEFAULT_THEME = initialTheme();
         event.preventDefault();
         saveStrategy();
       });
-      document.getElementById("strategyQueries").addEventListener("input", updateStrategyQueryCount);
+      for (const id of [
+        "strategyPrimaryQueries",
+        "strategyBridgeQueries",
+        "strategyFallbackQueries",
+      ]) {
+        document.getElementById(id).addEventListener("input", updateStrategyQueryCount);
+      }
       els.openScoutWorkspaceRunButton.addEventListener("click", () => openScoutModal());
       els.startRecommendedScoutButton.addEventListener("click", () => openScoutModal());
       els.openSearchStrategyButton.addEventListener("click", () => navigateToPage("strategy"));
@@ -3826,27 +4716,8 @@ const DEFAULT_THEME = initialTheme();
       els.validateBoardsButton.addEventListener("click", openValidationWorkflow);
       els.saveAiSettingsButton.addEventListener("click", saveAiSettings);
       els.saveBoardSettingsButton.addEventListener("click", saveBoardSettings);
-      els.refreshApplicationsButton.addEventListener("click", loadApplications);
-      els.applicationSearch.addEventListener("input", () => {
-        state.applicationFilters.search = els.applicationSearch.value;
-        window.clearTimeout(state.applicationSearchTimer);
-        state.applicationSearchTimer = window.setTimeout(() => loadApplications(), 250);
-      });
-      els.applicationStageFilter.addEventListener("change", () => {
-        state.applicationFilters.stage = els.applicationStageFilter.value;
-        loadApplications();
-      });
-      els.loadMoreApplicationsButton.addEventListener("click", () => {
-        loadApplications({ append: true });
-      });
-      els.saveAssistantKnowledgeButton.addEventListener("click", saveAssistantKnowledge);
-      els.addApplicationAnswerButton.addEventListener("click", () => addAnswerEditorRow(els.applicationAnswersEditor, "", "", "application"));
-      els.addLearnedAnswerButton.addEventListener("click", () => addAnswerEditorRow(els.learnedAnswersEditor, "", "", "learned"));
-      els.findAssistantAnswerButton.addEventListener("click", findAssistantAnswer);
-      els.createLocalDraftButton.addEventListener("click", () => generateAssistantDraft("local"));
-      els.createAiDraftButton.addEventListener("click", () => generateAssistantDraft("ai"));
-      els.copyAssistantDraftButton.addEventListener("click", copyAssistantDraft);
-      els.downloadAssistantDraftButton.addEventListener("click", downloadAssistantDraft);
+
+
       els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
       els.createBackupButton.addEventListener("click", createMaintenanceBackup);
       els.pruneLogsButton.addEventListener("click", pruneMaintenanceLogs);
@@ -3863,6 +4734,12 @@ const DEFAULT_THEME = initialTheme();
         [els.runFilter, "run"],
         [els.decisionFilter, "decision"],
         [els.domainFilter, "domain"],
+        [els.searchGroupFilter, "searchGroup"],
+        [els.marketFilter, "searchMarket"],
+        [els.employmentFilter, "employmentType"],
+        [els.sponsorshipFilter, "sponsorshipStatus"],
+        [els.platformFilter, "platform"],
+        [els.flexibleHoursFilter, "flexibleHours"],
         [els.flagFilter, "flag"],
         [els.applyMethodFilter, "applyMethod"],
         [els.manualStatusFilter, "manualStatus"],
@@ -3875,6 +4752,17 @@ const DEFAULT_THEME = initialTheme();
           loadJobs();
         });
       }
+      if (els.careerLaneTabs) {
+        els.careerLaneTabs.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-career-lane]");
+          if (!button) return;
+          state.filters.careerLane = button.dataset.careerLane || "primary";
+          state.filters.quickPreset = "";
+          renderCareerLaneTabs();
+          renderFilterHint();
+          loadJobs();
+        });
+      }
       for (const button of [els.boardViewButton, els.listViewButton]) {
         button.addEventListener("click", () => {
           state.filters.viewMode = button.dataset.viewMode || "board";
@@ -3882,8 +4770,34 @@ const DEFAULT_THEME = initialTheme();
           renderLayoutMode();
         });
       }
+      els.boardViewButton.addEventListener("click", () => setViewMode("board"));
+      els.listViewButton.addEventListener("click", () => setViewMode("list"));
       els.undoButton.addEventListener("click", undoLastManualStatus);
       els.refreshButton.addEventListener("click", loadData);
+      if (els.advancedFiltersToggle) {
+        els.advancedFiltersToggle.addEventListener("click", () => {
+          const isHidden = els.advancedFiltersContainer.classList.contains("hidden");
+          els.advancedFiltersContainer.classList.toggle("hidden");
+          els.advancedFiltersToggle.setAttribute("aria-expanded", String(isHidden));
+          els.advancedFiltersToggle.classList.toggle("active", isHidden);
+        });
+      }
+      if (els.runAdvancedOptionsToggle) {
+        els.runAdvancedOptionsToggle.addEventListener("click", () => {
+          const isHidden = els.runAdvancedOptionsContainer.classList.contains("hidden");
+          els.runAdvancedOptionsContainer.classList.toggle("hidden");
+          els.runAdvancedOptionsToggle.setAttribute("aria-expanded", String(isHidden));
+          els.runAdvancedOptionsToggle.classList.toggle("active", isHidden);
+        });
+      }
+      if (els.toggleTerminalButton) {
+        els.toggleTerminalButton.addEventListener("click", () => {
+          const isHidden = els.terminalContainer.classList.contains("hidden");
+          els.terminalContainer.classList.toggle("hidden");
+          els.toggleTerminalButton.setAttribute("aria-expanded", String(isHidden));
+          setIconText(els.toggleTerminalButton, "settings", isHidden ? "Hide Terminal" : "Show Terminal");
+        });
+      }
       els.loadMoreJobsButton.addEventListener("click", () => loadJobs({ append: true }));
       els.toggleRunHistoryButton.addEventListener("click", () => {
         state.runHistoryExpanded = !state.runHistoryExpanded;
@@ -3891,11 +4805,119 @@ const DEFAULT_THEME = initialTheme();
       });
       els.runScoutButton.addEventListener("click", openRunScoutModal);
       els.closeRunScoutButton.addEventListener("click", closeRunScoutModal);
+
+      els.trackManualJobButton.addEventListener("click", () => {
+        els.trackManualJobForm.reset();
+        els.trackManualJobOverlay.classList.remove("hidden");
+        els.trackManualJobUrl.focus();
+      });
+      const closeTrackManualJobModal = () => els.trackManualJobOverlay.classList.add("hidden");
+      els.closeTrackManualJobButton.addEventListener("click", closeTrackManualJobModal);
+      els.cancelTrackManualJobButton.addEventListener("click", closeTrackManualJobModal);
+      els.trackManualJobOverlay.addEventListener("click", (event) => {
+        if (event.target === els.trackManualJobOverlay) closeTrackManualJobModal();
+      });
+      els.trackManualJobForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const job_reference = els.trackManualJobUrl.value.trim();
+        const status = els.trackManualJobStatus.value;
+        if (!job_reference || !status) return;
+        try {
+          els.trackManualJobForm.querySelector("button[type=submit]").disabled = true;
+          const response = await fetch("/api/track-manual-job", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_reference, status })
+          });
+          const result = await response.json();
+          if (!response.ok || result.ok === false) {
+            throw new Error(result.error || "Failed to track job");
+          }
+          showToast("Job tracked successfully");
+          closeTrackManualJobModal();
+          if (state.currentPage === "jobs") {
+            loadJobs({ append: false });
+          }
+          loadData();
+        } catch (error) {
+          alert("Error tracking job: " + error.message);
+        } finally {
+          els.trackManualJobForm.querySelector("button[type=submit]").disabled = false;
+        }
+      });
+
       els.runScoutOverlay.addEventListener("click", (event) => {
         if (event.target === els.runScoutOverlay) closeRunScoutModal();
       });
+      els.manageMarketsButton.addEventListener("click", openManageMarketsModal);
+      els.closeManageMarketsButton.addEventListener("click", closeManageMarketsModal);
+      els.manageMarketsOverlay.addEventListener("click", (event) => {
+        if (event.target === els.manageMarketsOverlay) closeManageMarketsModal();
+      });
+      els.addMarketForm.addEventListener("submit", addCustomMarket);
+
+      if (els.descriptionSearch) {
+        els.descriptionSearch.addEventListener("input", () => {
+          clearTimeout(state.descriptionsSearchTimer);
+          state.descriptionFilters.search = els.descriptionSearch.value;
+          state.descriptionsSearchTimer = setTimeout(() => {
+            state.descriptionsLimit = 50;
+            renderDescriptions();
+          }, 250);
+        });
+        els.descriptionSourceFilter.addEventListener("change", () => {
+          state.descriptionFilters.source = els.descriptionSourceFilter.value;
+          state.descriptionsLimit = 50;
+          renderDescriptions();
+        });
+        els.loadMoreDescriptionsButton.addEventListener("click", () => {
+          state.descriptionsLimit += 50;
+          renderDescriptions();
+        });
+        els.refreshDescriptionsButton.addEventListener("click", () => {
+          els.descriptionsStatus.textContent = "Refreshing...";
+          loadData();
+        });
+      }
+      els.runPlatform.addEventListener("change", () => {
+        els.runWorkflow.value = els.runPlatform.value === "indeed"
+          ? "indeed_description"
+          : "linkedin_multi_fresh";
+        updateWorkflowFields();
+      });
       els.runWorkflow.addEventListener("change", updateWorkflowFields);
+      els.runSearchMarket.addEventListener("change", () => {
+        if (els.runExperimentalConfirm) els.runExperimentalConfirm.checked = false;
+        const profile = runScopeSettings().markets[els.runSearchMarket.value] || {};
+        els.runLocation.value = safe(profile.default_location) || "";
+        updateRunScopeControls();
+        renderRunSearchGoalSummary();
+      });
+      if (els.runExperimentalConfirm) {
+        els.runExperimentalConfirm.addEventListener("change", renderRunSearchGoalSummary);
+      }
+      els.runLocation.addEventListener("input", updateRunScopeControls);
+      els.runRadius.addEventListener("change", () => renderRunScopeSummary(
+        runScopeSettings().markets[els.runSearchMarket.value] || {},
+        false
+      ));
+      els.runEmployment.addEventListener("change", () => renderRunScopeSummary(
+        runScopeSettings().markets[els.runSearchMarket.value] || {},
+        els.runRadius.disabled && !runScopeLocked()
+      ));
       els.runFreshMode.addEventListener("change", updateWorkflowFields);
+      els.runSearchGoal.addEventListener("change", renderRunSearchGoalSummary);
+      els.runResumeMode.addEventListener("change", () => {
+        updateRunScopeControls();
+        renderRunSearchGoalSummary();
+      });
+      for (const input of [
+        els.runSearchPrimary,
+        els.runSearchBridge,
+        els.runSearchFallback,
+      ]) {
+        input.addEventListener("change", renderRunSearchGoalSummary);
+      }
       els.startRunButton.addEventListener("click", startDashboardRun);
       els.refreshRunControlButton.addEventListener("click", loadRunControl);
       els.stopAfterJobButton.addEventListener("click", () => stopDashboardRun("after_current_job"));
@@ -3922,6 +4944,22 @@ const DEFAULT_THEME = initialTheme();
       });
     }
 
+    initApplications({
+      state,
+      els,
+      apiUrls: { applications: API_APPLICATIONS_URL },
+      formatDateTime,
+      safe,
+      numeric,
+      loadData
+    });
+    initAssistant({
+      state,
+      els,
+      apiUrls: { assistant: API_ASSISTANT_URL },
+      safe,
+      numeric
+    });
     bindControls();
     syncMobileNavigation();
     navigateToPage(state.currentPage, { persist: false });

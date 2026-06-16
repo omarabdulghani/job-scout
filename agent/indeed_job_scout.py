@@ -41,6 +41,7 @@ class IndeedJobScout(LinkedInJobScout):
         tracking_status_path: Path | None = None,
         run_history_path: Path | None = None,
         reporter=None,
+        test_run: bool = False,
     ):
         super().__init__(
             profile=profile,
@@ -54,6 +55,7 @@ class IndeedJobScout(LinkedInJobScout):
             tracking_status_path=tracking_status_path,
             run_history_path=run_history_path,
             reporter=reporter,
+            test_run=test_run,
         )
         self.linkedin = None
         self.indeed = IndeedScraper(browser) if browser else None

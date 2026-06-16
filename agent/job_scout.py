@@ -17,6 +17,18 @@ from agent.scout_console_reporter import NullScoutConsoleReporter
 from agent.scout_stop import stop_reason, stop_requested
 from agent.scout_run_history import ScoutRunHistoryStore
 from agent.job_tracking import JobTrackingStore
+from agent.job_scope_metadata import (
+    cap_score_for_scope,
+    enrich_job_scope_metadata,
+    evaluate_employment_policy,
+    infer_employment_metadata,
+    market_eligibility,
+)
+from agent.search_scope import (
+    MARKET_PROFILES,
+    linkedin_employment_codes,
+    normalize_search_scope,
+)
 from scrapers.linkedin import LinkedInScraper
 
 
@@ -713,9 +725,26 @@ class LinkedInJobScout:
         tracking_status_path: Path | None = None,
         run_history_path: Path | None = None,
         reporter=None,
+        test_run: bool = False,
     ):
+        self.test_run = test_run
         self.profile = profile
         self.preferences = preferences
+        self.search_scope = normalize_search_scope(
+            preferences.get("_runtime_search_scope"),
+            platform="linkedin",
+            location=self.DEFAULT_LOCATION,
+            legacy_distance_miles=int(
+                (preferences.get("job_boards", {}).get("linkedin", {}) or {}).get(
+                    "distance_miles",
+                    self.DEFAULT_DISTANCE_MILES,
+                )
+                or self.DEFAULT_DISTANCE_MILES
+            ),
+        )
+        self.search_scope_fingerprint = self._fingerprint_text(
+            json.dumps(self.search_scope, sort_keys=True, ensure_ascii=True)
+        )
         self.browser = browser
         self.brain = JobBrain(profile, preferences)
         self.linkedin = LinkedInScraper(browser) if browser else None
@@ -756,6 +785,12 @@ class LinkedInJobScout:
         self.brain.scoring_audit_enabled = self.ai_payload_audit_enabled
         self.brain.scoring_event_logger = self._handle_scoring_event
         self._reset_global_known_job_counters()
+
+        if self.test_run:
+            self.collected_jobs._write = lambda: None
+            self.job_tracking._write = lambda: None
+            self.run_history._write = lambda: None
+            self._write_score_cache = lambda: None
 
     def _reset_global_known_job_counters(self) -> None:
         self._known_job_counters = {
@@ -1128,6 +1163,12 @@ class LinkedInJobScout:
         job_id = ai_result.get("job_id") or self._linkedin_job_id(url)
         filter_notes = list(verdict.get("reasons") or [])
         description = job.get("description") or job.get("preview_text") or ""
+        scope_metadata = enrich_job_scope_metadata(
+            job,
+            self.search_scope,
+            ai_result=ai_result,
+            user_country=self.profile.get("personal", {}).get("location", {}).get("country", ""),
+        )
         return {
             "board": self._live_dashboard_board_name(),
             "query": query,
@@ -1152,6 +1193,8 @@ class LinkedInJobScout:
             "match_tier": ai_result.get("match_tier", ""),
             "cache_status": ai_result.get("cache_status", ""),
             "used_cv_second_stage": bool(ai_result.get("second_stage_used")),
+            "search_scope": dict(self.search_scope),
+            **scope_metadata,
         }
 
     def _live_dashboard_board_name(self) -> str:
@@ -1278,6 +1321,7 @@ class LinkedInJobScout:
             "stats": {
                 "query": query,
                 "location": location,
+                "search_scope": dict(self.search_scope),
                 "pages_scanned": pages_scanned,
                 "ai_threshold": self.AI_THRESHOLD,
                 "ai_strong_match_threshold": self.AI_STRONG_MATCH_THRESHOLD,
@@ -1307,6 +1351,7 @@ class LinkedInJobScout:
                 "rejected_irrelevant": 0,
                 "rejected_entry_level": 0,
                 "rejected_excluded": 0,
+                "rejected_employment_type": 0,
                 "survived_non_ai": 0,
                 "ai_scored_new": 0,
                 "ai_cache_reused": 0,
@@ -1621,10 +1666,13 @@ class LinkedInJobScout:
             rejected_stat_key = {
                 "rejected_dutch": "rejected_dutch",
                 "rejected_outside_netherlands": "rejected_outside_netherlands",
+                "rejected_outside_search_market": "rejected_outside_netherlands",
                 "rejected_internship": "rejected_internship",
                 "rejected_irrelevant": "rejected_irrelevant",
                 "rejected_entry_level": "rejected_entry_level",
                 "rejected_excluded": "rejected_excluded",
+                "rejected_market_eligibility": "rejected_excluded",
+                "rejected_employment_type": "rejected_employment_type",
             }.get(verdict["status"])
             if rejected_stat_key:
                 stats[rejected_stat_key] += 1
@@ -1709,6 +1757,9 @@ class LinkedInJobScout:
             if ai_result["status"] == "ai_error":
                 stats["ai_errors"] += 1
                 output_record = self._build_ai_output_job_record(details, verdict, ai_result)
+            elif ai_result["status"] == "rejected_employment_type":
+                stats["rejected_employment_type"] += 1
+                output_record = self._build_ai_output_job_record(details, verdict, ai_result)
                 rejected_or_below_threshold.append(output_record)
             elif ai_result["status"] == "below_threshold":
                 stats["ai_below_threshold"] += 1
@@ -1763,6 +1814,7 @@ class LinkedInJobScout:
                 "mode": "linkedin_scout_processing_batch",
                 "query": query,
                 "location": location,
+                "search_scope": dict(self.search_scope),
                 "pages_scanned": pages_scanned,
                 "stats": stats,
                 "processing_state": processing_state,
@@ -1827,6 +1879,7 @@ class LinkedInJobScout:
             "mode": "linkedin_scout_ai",
             "query": query,
             "location": location,
+            "search_scope": dict(self.search_scope),
             "pages_scanned": pages_scanned,
             "ai_threshold": self.AI_THRESHOLD,
             "ai_strong_match_threshold": self.AI_STRONG_MATCH_THRESHOLD,
@@ -1847,6 +1900,7 @@ class LinkedInJobScout:
             "mode": "linkedin_scout_non_ai_debug",
             "query": query,
             "location": location,
+            "search_scope": dict(self.search_scope),
             "pages_scanned": pages_scanned,
             "stats": stats,
             "rejected_jobs": rejected_jobs,
@@ -1858,6 +1912,7 @@ class LinkedInJobScout:
             "mode": "linkedin_scout_ai_debug",
             "query": query,
             "location": location,
+            "search_scope": dict(self.search_scope),
             "pages_scanned": pages_scanned,
             "ai_threshold": self.AI_THRESHOLD,
             "ai_strong_match_threshold": self.AI_STRONG_MATCH_THRESHOLD,
@@ -3044,7 +3099,7 @@ class LinkedInJobScout:
         location_reason = self._location_scope_reason(job, preopen=False)
         if location_reason:
             return {
-                "status": "rejected_outside_netherlands",
+                "status": "rejected_outside_search_market",
                 "language": "unknown",
                 "matched_terms": [],
                 "reasons": [location_reason],
@@ -3058,6 +3113,27 @@ class LinkedInJobScout:
                 "language": language,
                 "matched_terms": [],
                 "reasons": [incompatible_language],
+            }
+        market_verdict = market_eligibility(job, self.search_scope)
+        if not market_verdict["eligible"]:
+            return {
+                "status": "rejected_market_eligibility",
+                "language": language,
+                "matched_terms": [],
+                "reasons": list(market_verdict["reasons"]),
+            }
+        employment = infer_employment_metadata(job)
+        employment_verdict = evaluate_employment_policy(
+            employment.get("employment_types"),
+            bool(employment.get("flexible_hours")),
+            self.search_scope,
+        )
+        if not employment_verdict["employment_eligible"]:
+            return {
+                "status": "rejected_employment_type",
+                "language": language,
+                "matched_terms": [],
+                "reasons": [employment_verdict["employment_adjustment_reason"]],
             }
 
         qualification_reason = self._mandatory_qualification_reason(job, preopen=False)
@@ -3112,6 +3188,7 @@ class LinkedInJobScout:
             )
         reasons.extend(internship_review_notes)
         reasons.extend(dutch_risk_notes)
+        reasons.extend(market_verdict["concerns"])
         return {
             "status": "accepted",
             "language": language,
@@ -3199,10 +3276,18 @@ class LinkedInJobScout:
                 if expected_geo_id
                 else "location=" in current_url
             )
+            expected_exp_codes = self._linkedin_experience_level_codes()
+            if expected_exp_codes:
+                expected_exp_param = urllib.parse.quote(",".join(expected_exp_codes))
+                expected_exp_param_alt = ",".join(expected_exp_codes)
+                experience_in_url = (f"f_E={expected_exp_param}" in current_url or f"f_E={expected_exp_param_alt}" in current_url)
+            else:
+                experience_in_url = "f_E=" not in current_url
+
             url_ready = (
                 url_location_ready
                 and f"distance={expected_distance}" in current_url
-                and "f_E=2%2C3" in current_url
+                and experience_in_url
             )
             inputs_ready = expected_query in title_input and expected_location in location_input
             no_results = bool(page_state.get("noResults"))
@@ -3256,10 +3341,16 @@ class LinkedInJobScout:
         params = {
             "keywords": query,
             "distance": str(self._linkedin_distance_miles()),
-            "f_E": ",".join(self.DEFAULT_EXPERIENCE_LEVELS),
             "origin": self.DEFAULT_SEARCH_ORIGIN,
             "refresh": "true",
         }
+        exp_codes = self._linkedin_experience_level_codes()
+        if exp_codes:
+            params["f_E"] = ",".join(exp_codes)
+
+        employment_codes = linkedin_employment_codes(self.search_scope)
+        if employment_codes:
+            params["f_JT"] = ",".join(employment_codes)
         location_key = self._normalize_text(location)
         geo_id = self.LINKEDIN_GEO_IDS.get(location_key)
         if geo_id:
@@ -3270,7 +3361,34 @@ class LinkedInJobScout:
             params["start"] = str(start)
         return f"{LinkedInScraper.JOBS_URL}?{urllib.parse.urlencode(params)}"
 
+    def _linkedin_experience_level_codes(self) -> list[str]:
+        levels = self.search_scope.get("experience_levels")
+        if levels is None:
+            return list(self.DEFAULT_EXPERIENCE_LEVELS)
+        codes = []
+        mapping = {
+            "internship": "1",
+            "entry": "2",
+            "entry_level": "2",
+            "associate": "3",
+            "mid-senior": "4",
+            "mid_senior": "4",
+            "director": "5",
+            "executive": "6",
+        }
+        for lvl in levels:
+            code = mapping.get(str(lvl).lower())
+            if code and code not in codes:
+                codes.append(code)
+        return codes
+
     def _linkedin_distance_miles(self) -> int:
+        scope_distance = self.search_scope.get("radius_miles")
+        if scope_distance is not None:
+            try:
+                return max(0, int(scope_distance))
+            except (TypeError, ValueError):
+                pass
         linkedin_prefs = self.preferences.get("job_boards", {}).get("linkedin", {})
         raw_distance = linkedin_prefs.get("distance_miles", self.DEFAULT_DISTANCE_MILES)
         try:
@@ -3344,6 +3462,7 @@ class LinkedInJobScout:
                     "rejected_or_below_threshold", 0
                 ),
                 "results_layout_types": stats.get("results_layout_types", []),
+                "search_scope": dict(output.get("search_scope") or self.search_scope),
             }
         )
         self._report(
@@ -3508,6 +3627,14 @@ class LinkedInJobScout:
         description_fingerprint = self._fingerprint_text(description)
         cache_key = self._cache_key_from_parts(job_id, url)
         cached_entry = self.score_cache.get(cache_key)
+        cache_scope_matches = bool(
+            self.search_scope.get("legacy_mode")
+            or (
+                cached_entry
+                and cached_entry.get("search_scope_fingerprint")
+                == self.search_scope_fingerprint
+            )
+        )
         cache_status = "new"
         cache_dirty = False
         second_stage_used = False
@@ -3518,13 +3645,34 @@ class LinkedInJobScout:
             and cached_entry.get("perfect_job_profile_fingerprint") == self.perfect_job_profile_fingerprint
             and cached_entry.get("ai_scoring_version") == self.AI_SCORING_VERSION
             and cached_entry.get("ai_model") in self.brain.scoring_model_labels_for_cache()
+            and cache_scope_matches
         ):
             cache_status = "reused_unchanged"
+            base_score = int(
+                cached_entry.get(
+                    "base_interview_probability_score",
+                    cached_entry.get("interview_probability_score", 0),
+                )
+                or 0
+            )
             ai_payload = {
-                "interview_probability_score": int(cached_entry.get("interview_probability_score", 0) or 0),
+                "interview_probability_score": base_score,
+                "base_interview_probability_score": base_score,
                 "reason": cached_entry.get("short_ai_reasoning", ""),
                 "model": cached_entry.get("ai_model", self.brain.scoring_model_label),
                 "used_cv": bool(cached_entry.get("used_cv_second_stage")),
+                "career_lane": cached_entry.get("career_lane", ""),
+                "employment_types": cached_entry.get("employment_types", []),
+                "weekly_hours": cached_entry.get("weekly_hours", ""),
+                "flexible_hours": bool(cached_entry.get("flexible_hours")),
+                "sponsorship_status": cached_entry.get("sponsorship_status", ""),
+                "relocation_support": cached_entry.get("relocation_support", "unknown"),
+                "housing_support": cached_entry.get("housing_support", "unknown"),
+                "health_insurance": cached_entry.get("health_insurance", "unknown"),
+                "annual_flight_support": cached_entry.get("annual_flight_support", "unknown"),
+                "compensation_text": cached_entry.get("compensation_text", ""),
+                "contract_type": cached_entry.get("contract_type", "unknown"),
+                "market_concerns": cached_entry.get("market_concerns", []),
             }
             second_stage_used = bool(cached_entry.get("used_cv_second_stage"))
             cached_entry["last_seen_at"] = now
@@ -3597,6 +3745,33 @@ class LinkedInJobScout:
                     ),
                 }
 
+            base_score = int(ai_payload.get("interview_probability_score", 0) or 0)
+            ai_payload["base_interview_probability_score"] = base_score
+            scope_metadata = enrich_job_scope_metadata(
+                job,
+                self.search_scope,
+                ai_result=ai_payload,
+                user_country=self.profile.get("personal", {}).get("location", {}).get("country", ""),
+            )
+            adjusted_score = max(
+                0,
+                min(
+                    100,
+                    base_score + int(scope_metadata.get("employment_score_adjustment", 0) or 0),
+                ),
+            )
+            capped_score, cap_reason = cap_score_for_scope(
+                adjusted_score,
+                scope_metadata,
+            )
+            ai_payload["interview_probability_score"] = capped_score
+            if cap_reason:
+                ai_payload["reason"] = " ".join(
+                    value
+                    for value in (ai_payload.get("reason", ""), cap_reason)
+                    if value
+                ).strip()
+            ai_payload.update(scope_metadata)
             self.score_cache[cache_key] = {
                 "cache_key": cache_key,
                 "job_id": job_id,
@@ -3607,6 +3782,7 @@ class LinkedInJobScout:
                 "easy_apply": bool(job.get("easy_apply")),
                 "apply_method": job.get("apply_method", "unknown"),
                 "apply_method_detection_source": job.get("apply_method_detection_source", ""),
+                "base_interview_probability_score": base_score,
                 "interview_probability_score": ai_payload["interview_probability_score"],
                 "short_ai_reasoning": ai_payload["reason"],
                 "scored_at": now,
@@ -3624,6 +3800,29 @@ class LinkedInJobScout:
                 "ai_model": ai_payload.get("model", self.brain.scoring_model_label),
                 "used_cv_second_stage": second_stage_used,
                 "last_recommended_at": (cached_entry or {}).get("last_recommended_at", ""),
+                "search_scope_fingerprint": self.search_scope_fingerprint,
+                "search_scope": dict(self.search_scope),
+                "career_lane": ai_payload.get("career_lane", ""),
+                "employment_types": ai_payload.get("employment_types", []),
+                "weekly_hours": ai_payload.get("weekly_hours", ""),
+                "flexible_hours": bool(ai_payload.get("flexible_hours")),
+                "employment_match": ai_payload.get("employment_match", "unknown"),
+                "employment_eligible": bool(ai_payload.get("employment_eligible", True)),
+                "employment_score_adjustment": int(
+                    ai_payload.get("employment_score_adjustment", 0) or 0
+                ),
+                "employment_adjustment_reason": ai_payload.get(
+                    "employment_adjustment_reason",
+                    "",
+                ),
+                "sponsorship_status": ai_payload.get("sponsorship_status", ""),
+                "relocation_support": ai_payload.get("relocation_support", "unknown"),
+                "housing_support": ai_payload.get("housing_support", "unknown"),
+                "health_insurance": ai_payload.get("health_insurance", "unknown"),
+                "annual_flight_support": ai_payload.get("annual_flight_support", "unknown"),
+                "compensation_text": ai_payload.get("compensation_text", ""),
+                "contract_type": ai_payload.get("contract_type", "unknown"),
+                "market_concerns": ai_payload.get("market_concerns", []),
             }
             cached_entry = self.score_cache[cache_key]
             cache_dirty = True
@@ -3636,7 +3835,78 @@ class LinkedInJobScout:
                 style="green" if int(ai_payload["interview_probability_score"] or 0) >= self.AI_STRONG_MATCH_THRESHOLD else "yellow",
             )
 
-        passed_threshold = ai_payload["interview_probability_score"] >= self.AI_THRESHOLD
+        if cache_status == "reused_unchanged":
+            base_score = int(
+                (cached_entry or {}).get(
+                    "base_interview_probability_score",
+                    ai_payload.get("interview_probability_score", 0),
+                )
+                or 0
+            )
+            ai_payload["interview_probability_score"] = base_score
+            ai_payload["base_interview_probability_score"] = base_score
+            scope_metadata = enrich_job_scope_metadata(
+                job,
+                self.search_scope,
+                ai_result=ai_payload,
+                user_country=self.profile.get("personal", {}).get("location", {}).get("country", ""),
+            )
+            adjusted_score = max(
+                0,
+                min(
+                    100,
+                    base_score + int(scope_metadata.get("employment_score_adjustment", 0) or 0),
+                ),
+            )
+            capped_score, cap_reason = cap_score_for_scope(
+                adjusted_score,
+                scope_metadata,
+            )
+            ai_payload["interview_probability_score"] = capped_score
+            if cap_reason and cap_reason not in ai_payload.get("reason", ""):
+                ai_payload["reason"] = " ".join(
+                    value
+                    for value in (ai_payload.get("reason", ""), cap_reason)
+                    if value
+                ).strip()
+            ai_payload.update(scope_metadata)
+            cached_entry.update(
+                {
+                    "base_interview_probability_score": base_score,
+                    "interview_probability_score": capped_score,
+                    "short_ai_reasoning": ai_payload.get("reason", ""),
+                    "career_lane": ai_payload.get("career_lane", ""),
+                    "employment_types": ai_payload.get("employment_types", []),
+                    "weekly_hours": ai_payload.get("weekly_hours", ""),
+                    "flexible_hours": bool(ai_payload.get("flexible_hours")),
+                    "employment_match": ai_payload.get("employment_match", "unknown"),
+                    "employment_eligible": bool(ai_payload.get("employment_eligible", True)),
+                    "employment_score_adjustment": int(
+                        ai_payload.get("employment_score_adjustment", 0) or 0
+                    ),
+                    "employment_adjustment_reason": ai_payload.get(
+                        "employment_adjustment_reason",
+                        "",
+                    ),
+                    "sponsorship_status": ai_payload.get("sponsorship_status", ""),
+                    "relocation_support": ai_payload.get("relocation_support", "unknown"),
+                    "housing_support": ai_payload.get("housing_support", "unknown"),
+                    "health_insurance": ai_payload.get("health_insurance", "unknown"),
+                    "annual_flight_support": ai_payload.get("annual_flight_support", "unknown"),
+                    "compensation_text": ai_payload.get("compensation_text", ""),
+                    "contract_type": ai_payload.get("contract_type", "unknown"),
+                    "market_concerns": ai_payload.get("market_concerns", []),
+                }
+            )
+            cache_dirty = True
+
+        employment_eligible = bool(ai_payload.get("employment_eligible", True))
+        market_eligible = bool(ai_payload.get("market_eligible", True))
+        passed_threshold = (
+            employment_eligible
+            and market_eligible
+            and ai_payload["interview_probability_score"] >= self.AI_THRESHOLD
+        )
         match_tier = self._match_tier(ai_payload["interview_probability_score"])
         previous_recommended_at = (cached_entry or {}).get("last_recommended_at", "")
         duplicate_suppressed = bool(
@@ -3645,7 +3915,13 @@ class LinkedInJobScout:
             and previous_recommended_at
         )
 
-        output_status = "below_threshold"
+        output_status = (
+            "below_threshold"
+            if employment_eligible and market_eligible
+            else "rejected_market_eligibility"
+            if employment_eligible
+            else "rejected_employment_type"
+        )
         if passed_threshold and duplicate_suppressed:
             output_status = "duplicate_suppressed"
         elif passed_threshold:
@@ -3668,6 +3944,32 @@ class LinkedInJobScout:
             "found_at": found_at,
             "first_seen_at": (cached_entry or {}).get("first_seen_at", now),
             "last_seen_at": (cached_entry or {}).get("last_seen_at", now),
+            "career_lane": ai_payload.get("career_lane", ""),
+            "search_market": ai_payload.get("search_market", ""),
+            "country": ai_payload.get("country", ""),
+            "employment_types": ai_payload.get("employment_types", []),
+            "weekly_hours": ai_payload.get("weekly_hours", ""),
+            "flexible_hours": bool(ai_payload.get("flexible_hours")),
+            "employment_match": ai_payload.get("employment_match", "unknown"),
+            "employment_eligible": employment_eligible,
+            "employment_score_adjustment": int(
+                ai_payload.get("employment_score_adjustment", 0) or 0
+            ),
+            "employment_adjustment_reason": ai_payload.get(
+                "employment_adjustment_reason",
+                "",
+            ),
+            "sponsorship_status": ai_payload.get("sponsorship_status", ""),
+            "relocation_required": bool(ai_payload.get("relocation_required")),
+            "relocation_support": ai_payload.get("relocation_support", "unknown"),
+            "housing_support": ai_payload.get("housing_support", "unknown"),
+            "health_insurance": ai_payload.get("health_insurance", "unknown"),
+            "annual_flight_support": ai_payload.get("annual_flight_support", "unknown"),
+            "compensation_text": ai_payload.get("compensation_text", ""),
+            "contract_type": ai_payload.get("contract_type", "unknown"),
+            "market_eligible": market_eligible,
+            "market_rejection_reasons": ai_payload.get("market_rejection_reasons", []),
+            "market_concerns": ai_payload.get("market_concerns", []),
             "debug_record": self._build_ai_debug_record(
                 job=job,
                 verdict=verdict,
@@ -3728,6 +4030,10 @@ class LinkedInJobScout:
             "apply_method_detection_source": job.get("apply_method_detection_source", ""),
             "cache_status": cache_status,
             "interview_probability_score": ai_payload.get("interview_probability_score", 0),
+            "base_interview_probability_score": ai_payload.get(
+                "base_interview_probability_score",
+                ai_payload.get("interview_probability_score", 0),
+            ),
             "short_ai_reasoning": ai_payload.get("reason", ""),
             "ai_model": ai_payload.get("model", self.brain.scoring_model_label),
             "ai_scoring_version": self.AI_SCORING_VERSION,
@@ -3737,6 +4043,26 @@ class LinkedInJobScout:
             "output_status": output_status,
             "duplicate_suppressed": duplicate_suppressed,
             "previously_recommended_at": previous_recommended_at,
+            "employment_match": ai_payload.get("employment_match", "unknown"),
+            "employment_eligible": bool(ai_payload.get("employment_eligible", True)),
+            "employment_score_adjustment": int(
+                ai_payload.get("employment_score_adjustment", 0) or 0
+            ),
+            "employment_adjustment_reason": ai_payload.get(
+                "employment_adjustment_reason",
+                "",
+            ),
+            "search_market": ai_payload.get("search_market", ""),
+            "sponsorship_status": ai_payload.get("sponsorship_status", ""),
+            "relocation_support": ai_payload.get("relocation_support", "unknown"),
+            "housing_support": ai_payload.get("housing_support", "unknown"),
+            "health_insurance": ai_payload.get("health_insurance", "unknown"),
+            "annual_flight_support": ai_payload.get("annual_flight_support", "unknown"),
+            "compensation_text": ai_payload.get("compensation_text", ""),
+            "contract_type": ai_payload.get("contract_type", "unknown"),
+            "market_eligible": bool(ai_payload.get("market_eligible", True)),
+            "market_rejection_reasons": ai_payload.get("market_rejection_reasons", []),
+            "market_concerns": ai_payload.get("market_concerns", []),
         }
 
     def _build_ai_output_job_record(self, job: dict, verdict: dict, ai_result: dict) -> dict:
@@ -3764,6 +4090,33 @@ class LinkedInJobScout:
             "ai_used_cv_second_stage": bool(ai_result.get("second_stage_used")),
             "output_status": output_status,
             "ai_status": output_status,
+            "search_scope": dict(self.search_scope),
+            "career_lane": ai_result.get("career_lane", ""),
+            "search_market": ai_result.get("search_market", ""),
+            "country": ai_result.get("country", ""),
+            "employment_types": ai_result.get("employment_types", []),
+            "weekly_hours": ai_result.get("weekly_hours", ""),
+            "flexible_hours": bool(ai_result.get("flexible_hours")),
+            "employment_match": ai_result.get("employment_match", "unknown"),
+            "employment_eligible": bool(ai_result.get("employment_eligible", True)),
+            "employment_score_adjustment": int(
+                ai_result.get("employment_score_adjustment", 0) or 0
+            ),
+            "employment_adjustment_reason": ai_result.get(
+                "employment_adjustment_reason",
+                "",
+            ),
+            "sponsorship_status": ai_result.get("sponsorship_status", ""),
+            "relocation_required": bool(ai_result.get("relocation_required")),
+            "relocation_support": ai_result.get("relocation_support", "unknown"),
+            "housing_support": ai_result.get("housing_support", "unknown"),
+            "health_insurance": ai_result.get("health_insurance", "unknown"),
+            "annual_flight_support": ai_result.get("annual_flight_support", "unknown"),
+            "compensation_text": ai_result.get("compensation_text", ""),
+            "contract_type": ai_result.get("contract_type", "unknown"),
+            "market_eligible": bool(ai_result.get("market_eligible", True)),
+            "market_rejection_reasons": ai_result.get("market_rejection_reasons", []),
+            "market_concerns": ai_result.get("market_concerns", []),
         }
         tracking_entry = self.job_tracking.get(
             job_id=record.get("job_id", ""),
@@ -4056,6 +4409,8 @@ class LinkedInJobScout:
             "rejected_entry_level": "Seniority / non-entry-level",
             "rejected_irrelevant": "Irrelevant to search query",
             "rejected_excluded": "Excluded unrelated field",
+            "rejected_market_eligibility": "Market eligibility",
+            "rejected_employment_type": "Employment type",
         }.get(status, "Rejected by filter")
 
     def _detect_description_language(self, job: dict) -> str:
@@ -4714,7 +5069,7 @@ class LinkedInJobScout:
         location_reason = self._location_scope_reason(job, preopen=True)
         if location_reason:
             return {
-                "status": "skipped_preopen_outside_netherlands",
+                "status": "skipped_preopen_outside_search_market",
                 "language": "unknown",
                 "matched_terms": [],
                 "reasons": [location_reason],
@@ -4774,19 +5129,32 @@ class LinkedInJobScout:
         return ""
 
     def _location_scope_reason(self, job: dict, preopen: bool) -> str:
+        if self.search_scope.get("legacy_mode"):
+            return self._legacy_netherlands_location_scope_reason(job, preopen)
+
         location = (job.get("location") or "").strip()
         normalized_location = self._normalize_text(location)
         combined_text = self._combined_job_text(job)
+        market = self.search_scope.get("search_market", "netherlands")
+        profile = MARKET_PROFILES.get(market, MARKET_PROFILES["netherlands"])
+        target_markers = {
+            self._normalize_text(profile.get("country", "")),
+            *(
+                self._normalize_text(value)
+                for value in profile.get("locations", [])
+                if self._normalize_text(value) != "remote"
+            ),
+        }
+        target_markers.discard("")
 
-        if self._contains_netherlands_marker(normalized_location):
+        if any(self._contains_term(normalized_location, marker) for marker in target_markers):
             return ""
 
         if not normalized_location:
-            if preopen:
-                return ""
-            if self._contains_netherlands_compatibility(combined_text):
-                return ""
-            return "Job location is missing and the description does not show Netherlands compatibility"
+            return "" if preopen else (
+                f"Job location is missing and the description does not show "
+                f"{profile['label']} compatibility"
+            )
 
         has_remote_marker = any(
             self._contains_term(normalized_location, marker)
@@ -4802,18 +5170,50 @@ class LinkedInJobScout:
         remaining_location = re.sub(r"\s+", " ", remaining_location).strip()
 
         if has_remote_marker and not remaining_location:
-            if preopen:
+            return ""
+
+        if has_remote_marker and remaining_location and not any(
+            self._contains_term(remaining_location, marker) for marker in target_markers
+        ):
+            return f"Location is outside the {profile['label']} scope: {location}"
+
+        if not any(
+            self._contains_term(normalized_location, marker) for marker in target_markers
+        ):
+            return f"Location is outside the {profile['label']} scope: {location}"
+
+        return ""
+
+    def _legacy_netherlands_location_scope_reason(self, job: dict, preopen: bool) -> str:
+        location = (job.get("location") or "").strip()
+        normalized_location = self._normalize_text(location)
+        combined_text = self._combined_job_text(job)
+        if self._contains_netherlands_marker(normalized_location):
+            return ""
+        if not normalized_location:
+            if preopen or self._contains_netherlands_compatibility(combined_text):
                 return ""
-            if self._contains_netherlands_compatibility(combined_text):
+            return "Job location is missing and the description does not show Netherlands compatibility"
+        has_remote_marker = any(
+            self._contains_term(normalized_location, marker)
+            for marker in self.REMOTE_LOCATION_MARKERS
+        )
+        remaining_location = normalized_location
+        for marker in self.REMOTE_LOCATION_MARKERS:
+            remaining_location = re.sub(
+                rf"(?<!\w){re.escape(self._normalize_text(marker))}(?!\w)",
+                " ",
+                remaining_location,
+            )
+        remaining_location = re.sub(r"\s+", " ", remaining_location).strip()
+        if has_remote_marker and not remaining_location:
+            if preopen or self._contains_netherlands_compatibility(combined_text):
                 return ""
             return "Remote role does not clearly indicate Netherlands compatibility"
-
         if has_remote_marker and remaining_location and not self._contains_netherlands_marker(remaining_location):
             return f"Location is outside the Netherlands scope: {location}"
-
         if not self._contains_netherlands_marker(normalized_location):
             return f"Location is outside the Netherlands scope: {location}"
-
         return ""
 
     def _internship_reason(self, job: dict, preopen: bool) -> str:

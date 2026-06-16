@@ -80,6 +80,54 @@ class DashboardRunControllerTests(unittest.TestCase):
         self.assertIn("--ai-budget-mode", command)
         self.assertEqual(command[command.index("--ai-budget-mode") + 1], "deep")
         self.assertIn("--browser", command)
+        self.assertIn("--search-goal", command)
+        self.assertEqual(command[command.index("--search-goal") + 1], "career-growth")
+
+    def test_custom_search_goal_allows_only_approved_groups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            command, _workflow, _label = controller.build_command(
+                {
+                    "workflow": "linkedin_multi_fresh",
+                    "search_goal": "custom",
+                    "search_groups": ["fallback", "primary", "not-a-group"],
+                }
+            )
+
+        self.assertEqual(command[command.index("--search-goal") + 1], "custom")
+        self.assertEqual(
+            command[command.index("--search-groups") + 1],
+            "primary,fallback",
+        )
+
+    def test_custom_search_goal_requires_a_group(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            with self.assertRaisesRegex(ValueError, "at least one"):
+                controller.build_command(
+                    {
+                        "workflow": "linkedin_multi_fresh",
+                        "search_goal": "custom",
+                        "search_groups": [],
+                    }
+                )
+
+    def test_all_search_goal_presets_are_allowlisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            for goal in ("career-growth", "career-focus", "broad", "income"):
+                with self.subTest(goal=goal):
+                    command, _workflow, _label = controller.build_command(
+                        {
+                            "workflow": "linkedin_multi_fresh",
+                            "search_goal": goal,
+                        }
+                    )
+                    self.assertEqual(
+                        command[command.index("--search-goal") + 1],
+                        goal,
+                    )
+                    self.assertNotIn("--search-groups", command)
 
     def test_single_query_requires_query(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,6 +173,64 @@ class DashboardRunControllerTests(unittest.TestCase):
             )
 
         self.assertNotIn("--ai-budget-mode", command)
+
+    def test_germany_beta_scope_is_allowlisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            command, _workflow, _label = controller.build_command(
+                {
+                    "workflow": "linkedin_multi_fresh",
+                    "search_market": "germany",
+                    "location": "Berlin",
+                    "radius_km": 40,
+                    "employment": "full-time-preferred",
+                }
+            )
+
+        self.assertEqual(command[command.index("--search-market") + 1], "germany")
+        self.assertEqual(command[command.index("--location") + 1], "Berlin")
+        self.assertEqual(command[command.index("--radius-km") + 1], "40")
+
+    def test_experimental_market_requires_explicit_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            with patch.dict(
+                "serve_dashboard.MARKET_PROFILES",
+                {"uae": {"label": "United Arab Emirates", "availability": "experimental"}},
+            ):
+                with self.assertRaisesRegex(ValueError, "experimental"):
+                    controller.build_command(
+                        {
+                            "workflow": "linkedin_multi_fresh",
+                            "search_market": "uae",
+                            "location": "Dubai",
+                        }
+                    )
+                command, _workflow, _label = controller.build_command(
+                    {
+                        "workflow": "linkedin_multi_fresh",
+                        "search_market": "uae",
+                        "location": "Dubai",
+                        "experimental_confirmed": True,
+                    }
+                )
+        self.assertEqual(command[command.index("--search-market") + 1], "uae")
+
+    def test_disabled_market_cannot_start_from_dashboard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = DashboardRunController(Path(tmp))
+            with patch.dict(
+                "serve_dashboard.MARKET_PROFILES",
+                {"qatar": {"label": "Qatar", "availability": "disabled"}},
+            ):
+                with self.assertRaisesRegex(ValueError, "not enabled"):
+                    controller.build_command(
+                        {
+                            "workflow": "linkedin_multi_fresh",
+                            "search_market": "qatar",
+                            "location": "Doha",
+                        }
+                    )
 
     def test_validation_workflow_uses_exact_non_applying_command(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -622,6 +728,110 @@ class DashboardRunControllerTests(unittest.TestCase):
 
             self.assertEqual(status["status"], "stopped")
             self.assertTrue(status["resume_available"])
+
+    def test_resume_ignores_progress_from_another_explicit_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            progress_path = root / "progress.json"
+            progress_path.write_text(
+                json.dumps(
+                    {
+                        "status": "in_progress",
+                        "run_id": "run_new",
+                        "updated_at": "2026-06-14T15:00:00+02:00",
+                        "queries": ["junior product designer"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            controller = DashboardRunController(root, progress_path=progress_path)
+            controller.state.update(
+                {
+                    "status": "interrupted",
+                    "active": False,
+                    "run_id": "run_old",
+                    "started_at": "2026-06-13T00:10:00+02:00",
+                    "completed_at": "2026-06-13T01:46:00+02:00",
+                    "log_path": str(root / "old-run.txt"),
+                }
+            )
+
+            status = controller.status()
+
+            self.assertFalse(status["resume_available"])
+            self.assertEqual(status["resume_context"], {})
+
+    def test_resume_ignores_newer_legacy_progress_after_terminal_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            progress_path = root / "progress.json"
+            progress_path.write_text(
+                json.dumps(
+                    {
+                        "status": "in_progress",
+                        "updated_at": "2026-06-14T15:00:00+02:00",
+                        "queries": ["junior product designer"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            controller = DashboardRunController(root, progress_path=progress_path)
+            controller.state.update(
+                {
+                    "status": "interrupted",
+                    "active": False,
+                    "run_id": "run_old",
+                    "started_at": "2026-06-13T00:10:00+02:00",
+                    "completed_at": "2026-06-13T01:46:00+02:00",
+                    "log_path": str(root / "old-run.txt"),
+                }
+            )
+
+            status = controller.status()
+
+            self.assertFalse(status["resume_available"])
+            self.assertEqual(status["resume_context"], {})
+
+    def test_resume_uses_progress_with_matching_run_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            progress_path = root / "progress.json"
+            progress_path.write_text(
+                json.dumps(
+                    {
+                        "status": "in_progress",
+                        "run_id": "run_1",
+                        "updated_at": "2026-06-13T00:18:00+02:00",
+                        "queries": ["ux designer", "product designer"],
+                        "current_query_index": 1,
+                        "current_query": "product designer",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            controller = DashboardRunController(root, progress_path=progress_path)
+            controller.state.update(
+                {
+                    "status": "interrupted",
+                    "active": False,
+                    "run_id": "run_1",
+                    "started_at": "2026-06-13T00:10:00+02:00",
+                    "completed_at": "2026-06-13T01:46:00+02:00",
+                    "log_path": str(root / "run-1.txt"),
+                }
+            )
+
+            status = controller.status()
+
+            self.assertTrue(status["resume_available"])
+            self.assertEqual(
+                status["resume_context"]["current_query"],
+                "product designer",
+            )
+            self.assertEqual(
+                status["resume_context"]["log_path"],
+                str(root / "run-1.txt"),
+            )
 
 
 if __name__ == "__main__":

@@ -20,6 +20,68 @@ class FixedClock:
 
 
 class LiveDashboardWriterTests(unittest.TestCase):
+    def test_historical_lane_backfill_is_conservative_versioned_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data_path = Path(tmp) / "recommended_jobs_dashboard_data.json"
+            original = {
+                "schema_version": "live_dashboard.v1",
+                "active_run_id": "",
+                "runs": [],
+                "jobs": [
+                    {
+                        "job_id": "strong",
+                        "title": "Junior Product Designer",
+                        "company": "Example",
+                        "domain_category": "UX_UI_PRODUCT_DESIGN",
+                        "career_lane": "other",
+                    },
+                    {
+                        "job_id": "uncertain",
+                        "title": "Coordinator",
+                        "company": "Example",
+                        "description": "May occasionally support content tasks.",
+                        "domain_category": "OTHER",
+                        "career_lane": "other",
+                    },
+                    {
+                        "job_id": "explicit",
+                        "title": "Product Designer",
+                        "company": "Example",
+                        "domain_category": "UX_UI_PRODUCT_DESIGN",
+                        "career_lane": "bridge",
+                    },
+                ],
+                "summary": {},
+                "filter_options": {},
+            }
+            data_path.write_text(json.dumps(original), encoding="utf-8")
+
+            first = LiveRecommendedJobsDashboard(
+                data_path,
+                now_provider=FixedClock(),
+            )
+            first_payload = json.loads(data_path.read_text(encoding="utf-8"))
+            second = LiveRecommendedJobsDashboard(
+                data_path,
+                now_provider=FixedClock(),
+            )
+            second_payload = json.loads(data_path.read_text(encoding="utf-8"))
+
+            by_id = {job["job_id"]: job for job in first_payload["jobs"]}
+            self.assertEqual(len(first.data["jobs"]), len(original["jobs"]))
+            self.assertEqual(by_id["strong"]["career_lane"], "primary")
+            self.assertEqual(by_id["uncertain"]["career_lane"], "other")
+            self.assertEqual(by_id["explicit"]["career_lane"], "bridge")
+            report = first_payload["migrations"]["career_lane_backfill"]
+            self.assertEqual(report["version"], 1)
+            self.assertEqual(report["changed_count"], 1)
+            scope_report = first_payload["migrations"]["scope_metadata_backfill"]
+            self.assertEqual(scope_report["version"], 1)
+            self.assertEqual(scope_report["changed_count"], 3)
+            self.assertIn("contract_type", by_id["strong"])
+            self.assertEqual(first_payload, second_payload)
+            self.assertEqual(second.data, first.data)
+
     def test_start_run_writes_contract_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
             data_path = Path(tmp) / "recommended_jobs_dashboard_data.json"
@@ -78,6 +140,17 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(job["decision_category"], "APPLY_FIRST")
             self.assertEqual(job["decision_label"], "APPLY FIRST")
             self.assertEqual(job["domain_category"], "UX_UI_PRODUCT_DESIGN")
+            payload = json.loads(
+                (Path(tmp) / "recommended_jobs_dashboard_data.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            run_stats = payload["runs"][0]["stats"]
+            self.assertEqual(run_stats["by_career_lane"]["primary"]["apply_first"], 1)
+            self.assertEqual(
+                run_stats["by_search_market"]["netherlands"]["apply_first"],
+                1,
+            )
             self.assertEqual(job["job_id"], "123456789")
             self.assertTrue(job["easy_apply"])
             self.assertEqual(job["apply_method"], "easy_apply")
@@ -87,6 +160,61 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(writer.data["summary"]["by_apply_method"]["easy_apply"], 1)
             self.assertIn("UX_UI_PRODUCT_DESIGN", writer.data["filter_options"]["domains"])
             self.assertIn("easy_apply", writer.data["filter_options"]["apply_methods"])
+
+    def test_record_job_persists_international_scope_details(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = LiveRecommendedJobsDashboard(
+                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                now_provider=FixedClock(),
+            )
+            run = writer.start_run(
+                mode="linkedin_scout_ai",
+                board="linkedin",
+                location="Dubai",
+                max_pages=1,
+                queries=["junior product designer"],
+                started_at="2026-05-26T14:03:00+02:00",
+                search_scope={
+                    "platform": "linkedin",
+                    "search_market": "uae",
+                    "location": "Dubai",
+                    "radius_km": 40,
+                    "employment": "full-time-preferred",
+                },
+            )
+
+            job = writer.record_job(
+                {
+                    "run_id": run["run_id"],
+                    "query": "junior product designer",
+                    "page_number": 1,
+                    "title": "Junior Product Designer",
+                    "company": "Example Gulf",
+                    "location": "Dubai, United Arab Emirates",
+                    "url": "https://www.linkedin.com/jobs/view/987654321/",
+                    "score": 69,
+                    "terminal_status": "accepted",
+                    "source_stage": "ai_scored",
+                    "description": (
+                        "Permanent contract with relocation package, housing allowance, "
+                        "health insurance, annual flight, and visa sponsorship provided."
+                    ),
+                }
+            )
+
+            self.assertEqual(job["search_market"], "uae")
+            self.assertEqual(job["sponsorship_status"], "confirmed")
+            self.assertEqual(job["relocation_support"], "confirmed")
+            self.assertEqual(job["housing_support"], "confirmed")
+            self.assertEqual(job["health_insurance"], "confirmed")
+            self.assertEqual(job["annual_flight_support"], "confirmed")
+            self.assertEqual(job["contract_type"], "permanent")
+            payload = json.loads(
+                (Path(tmp) / "recommended_jobs_dashboard_data.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(payload["runs"][0]["stats"]["by_search_market"]["uae"]["good_options"], 1)
 
     def test_fresh_run_progress_tracks_goals_and_page_quality(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -215,6 +343,8 @@ class LiveDashboardWriterTests(unittest.TestCase):
                 max_pages=2,
                 queries=["junior ux designer", "product designer"],
                 started_at="2026-05-26T14:03:00+02:00",
+                search_goal="career-growth",
+                selected_search_groups=["primary", "bridge"],
             )
 
             base_event = {
@@ -227,13 +357,33 @@ class LiveDashboardWriterTests(unittest.TestCase):
                 "terminal_status": "accepted",
                 "source_stage": "ai_scored",
             }
-            writer.record_job({**base_event, "query": "junior ux designer", "page_number": 1})
-            merged = writer.record_job({**base_event, "query": "product designer", "page_number": 2})
+            writer.record_job({
+                **base_event,
+                "query": "junior ux designer",
+                "page_number": 1,
+                "search_group": "primary",
+                "matched_search_groups": ["primary"],
+            })
+            merged = writer.record_job({
+                **base_event,
+                "query": "product designer",
+                "page_number": 2,
+                "search_group": "bridge",
+                "matched_search_groups": ["bridge"],
+            })
 
             self.assertEqual(len(writer.data["jobs"]), 1)
             self.assertEqual(merged["seen_queries"], ["junior ux designer", "product designer"])
             self.assertEqual(merged["seen_pages"], [1, 2])
             self.assertEqual(merged["duplicate_count"], 1)
+            self.assertEqual(merged["search_goal"], "career-growth")
+            self.assertEqual(merged["matched_search_groups"], ["primary", "bridge"])
+            self.assertIn("primary", writer.data["filter_options"]["search_groups"])
+            self.assertIn("bridge", writer.data["filter_options"]["search_groups"])
+            self.assertEqual(
+                writer.data["runs"][0]["stats"]["by_search_group"]["bridge"]["processed_jobs"],
+                1,
+            )
 
     def test_complete_run_updates_status_and_stats(self):
         with tempfile.TemporaryDirectory() as tmp:

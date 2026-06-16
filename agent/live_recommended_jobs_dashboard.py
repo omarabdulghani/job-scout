@@ -13,6 +13,10 @@ import re
 from typing import Any, Callable
 
 from agent.job_metadata import APPLY_METHOD_LABELS, normalize_apply_method
+from agent.job_scope_metadata import (
+    classify_historical_career_lane,
+    enrich_job_scope_metadata,
+)
 from agent.safe_file_io import (
     DEFAULT_RETRY_DELAYS,
     atomic_write_json,
@@ -21,6 +25,8 @@ from agent.safe_file_io import (
 
 
 SCHEMA_VERSION = "live_dashboard.v1"
+CAREER_LANE_BACKFILL_VERSION = 1
+SCOPE_METADATA_BACKFILL_VERSION = 1
 DEFAULT_DATA_PATH = Path("recommended_jobs_dashboard_data.json")
 
 DECISION_LABELS = {
@@ -56,7 +62,11 @@ class LiveRecommendedJobsDashboard:
     ):
         self.data_path = Path(data_path or DEFAULT_DATA_PATH)
         self.now_provider = now_provider or (lambda: datetime.now().astimezone())
+        self._migration_applied = False
         self.data = self._load_or_create()
+        if self._migration_applied:
+            self._refresh_metadata()
+            self.write()
 
     def start_run(
         self,
@@ -69,6 +79,10 @@ class LiveRecommendedJobsDashboard:
         started_at: str | None = None,
         run_id: str | None = None,
         fresh_policy: dict[str, Any] | None = None,
+        search_goal: str = "",
+        selected_search_groups: list[str] | None = None,
+        query_plan: dict[str, Any] | None = None,
+        search_scope: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started_at = started_at or self._now_iso()
         run_id = run_id or self._unique_run_id(started_at)
@@ -85,6 +99,10 @@ class LiveRecommendedJobsDashboard:
             "location": _clean_text(location),
             "max_pages": "" if max_pages is None else str(max_pages),
             "queries": [_clean_text(query) for query in queries if _clean_text(query)],
+            "search_goal": _clean_text(search_goal),
+            "selected_search_groups": _clean_string_list(selected_search_groups or []),
+            "query_plan": dict(query_plan or {}),
+            "search_scope": dict(search_scope or {}),
             "stats": self._empty_run_stats(),
             "fresh_scout": self._empty_fresh_scout(fresh_policy),
         }
@@ -133,6 +151,8 @@ class LiveRecommendedJobsDashboard:
         allowed_text = {
             "phase",
             "current_query",
+            "current_search_group",
+            "current_search_phase",
             "stop_reason",
             "latest_persistence_warning",
         }
@@ -268,6 +288,35 @@ class LiveRecommendedJobsDashboard:
         self.write()
         return dict(run)
 
+    def trim_historical_runs(self, keep_latest_runs: int = 10) -> None:
+        """Keep only the N most recent runs and their associated jobs."""
+        runs = self.data.get("runs", [])
+        if not isinstance(runs, list) or len(runs) <= max(1, keep_latest_runs):
+            return
+            
+        runs.sort(key=lambda r: str(r.get("started_at") or ""))
+        kept_runs = runs[-max(1, keep_latest_runs):]
+        kept_run_ids = {str(r.get("run_id") or "") for r in kept_runs if r.get("run_id")}
+        
+        active_run_id = self.data.get("active_run_id")
+        if active_run_id and active_run_id not in kept_run_ids:
+            active_run = self._find_run(active_run_id)
+            if active_run:
+                kept_runs.append(active_run)
+                kept_run_ids.add(active_run_id)
+                
+        jobs = self.data.get("jobs", [])
+        if isinstance(jobs, list):
+            kept_jobs = [
+                job for job in jobs
+                if isinstance(job, dict) and str(job.get("run_id") or "") in kept_run_ids
+            ]
+            self.data["jobs"] = kept_jobs
+            
+        self.data["runs"] = kept_runs
+        self._refresh_metadata()
+        self.write()
+
     def write(
         self,
         *,
@@ -282,6 +331,110 @@ class LiveRecommendedJobsDashboard:
             payload.setdefault("jobs", [])
             payload.setdefault("summary", {})
             payload.setdefault("filter_options", {})
+            run_scopes = {
+                str(run.get("run_id") or ""): dict(run.get("search_scope") or {})
+                for run in payload["runs"]
+                if isinstance(run, dict) and run.get("run_id")
+            }
+            migration = payload.setdefault("migrations", {})
+            backfill = migration.get("career_lane_backfill", {})
+            backfill_version = _safe_int(
+                backfill.get("version") if isinstance(backfill, dict) else 0
+            )
+            scope_backfill = migration.get("scope_metadata_backfill", {})
+            scope_backfill_version = _safe_int(
+                scope_backfill.get("version") if isinstance(scope_backfill, dict) else 0
+            )
+            scope_backfill_fields = (
+                "career_lane",
+                "search_market",
+                "country",
+                "employment_types",
+                "weekly_hours",
+                "flexible_hours",
+                "sponsorship_status",
+                "relocation_required",
+                "relocation_support",
+                "housing_support",
+                "health_insurance",
+                "annual_flight_support",
+                "compensation_text",
+                "contract_type",
+                "market_concerns",
+            )
+            before_counts = self._career_lane_counts(payload["jobs"])
+            changed_samples: list[dict[str, str]] = []
+            changed_count = 0
+            scope_changed_count = 0
+            scope_changed_samples: list[dict[str, str]] = []
+            for job in payload["jobs"]:
+                if not isinstance(job, dict):
+                    continue
+                existing_lane = _clean_text(job.get("career_lane")).lower()
+                metadata = enrich_job_scope_metadata(
+                    job,
+                    job.get("search_scope")
+                    or run_scopes.get(str(job.get("run_id") or ""), {}),
+                    ai_result=job,
+                )
+                if (
+                    backfill_version < CAREER_LANE_BACKFILL_VERSION
+                    and existing_lane in {"", "other"}
+                ):
+                    historical_lane = classify_historical_career_lane(job)
+                    metadata["career_lane"] = historical_lane
+                    if historical_lane != "other":
+                        job["career_lane_source"] = (
+                            f"historical_backfill_v{CAREER_LANE_BACKFILL_VERSION}"
+                        )
+                        changed_count += 1
+                        if len(changed_samples) < 20:
+                            changed_samples.append(
+                                {
+                                    "job_id": _clean_text(job.get("job_id")),
+                                    "title": _clean_text(job.get("title")),
+                                    "company": _clean_text(job.get("company")),
+                                    "from": existing_lane or "missing",
+                                    "to": historical_lane,
+                                }
+                            )
+                scope_changed = (
+                    scope_backfill_version < SCOPE_METADATA_BACKFILL_VERSION
+                    and any(job.get(key) in (None, "", [], {}) for key in scope_backfill_fields)
+                )
+                for key, value in metadata.items():
+                    if key == "career_lane" and existing_lane in {"", "other"}:
+                        job[key] = value
+                    elif job.get(key) in (None, "", [], {}):
+                        job[key] = value
+                if scope_changed:
+                    scope_changed_count += 1
+                    if len(scope_changed_samples) < 20:
+                        scope_changed_samples.append(
+                            {
+                                "job_id": _clean_text(job.get("job_id")),
+                                "title": _clean_text(job.get("title")),
+                                "company": _clean_text(job.get("company")),
+                            }
+                        )
+            if backfill_version < CAREER_LANE_BACKFILL_VERSION:
+                migration["career_lane_backfill"] = {
+                    "version": CAREER_LANE_BACKFILL_VERSION,
+                    "applied_at": self._now_iso(),
+                    "changed_count": changed_count,
+                    "before_counts": before_counts,
+                    "after_counts": self._career_lane_counts(payload["jobs"]),
+                    "sample_changes": changed_samples,
+                }
+                self._migration_applied = True
+            if scope_backfill_version < SCOPE_METADATA_BACKFILL_VERSION:
+                migration["scope_metadata_backfill"] = {
+                    "version": SCOPE_METADATA_BACKFILL_VERSION,
+                    "applied_at": self._now_iso(),
+                    "changed_count": scope_changed_count,
+                    "sample_changes": scope_changed_samples,
+                }
+                self._migration_applied = True
             return payload
         return {
             "schema_version": SCHEMA_VERSION,
@@ -292,7 +445,32 @@ class LiveRecommendedJobsDashboard:
             "jobs": [],
             "summary": {},
             "filter_options": {},
+            "migrations": {
+                "career_lane_backfill": {
+                    "version": CAREER_LANE_BACKFILL_VERSION,
+                    "applied_at": self._now_iso(),
+                    "changed_count": 0,
+                    "before_counts": {},
+                    "after_counts": {},
+                    "sample_changes": [],
+                },
+                "scope_metadata_backfill": {
+                    "version": SCOPE_METADATA_BACKFILL_VERSION,
+                    "applied_at": self._now_iso(),
+                    "changed_count": 0,
+                    "sample_changes": [],
+                }
+            },
         }
+
+    def _career_lane_counts(self, jobs: list[Any]) -> dict[str, int]:
+        counts = {lane: 0 for lane in ("primary", "bridge", "fallback", "other")}
+        for job in jobs:
+            if not isinstance(job, dict):
+                continue
+            lane = _clean_text(job.get("career_lane")).lower()
+            counts[lane if lane in counts else "other"] += 1
+        return counts
 
     def _normalize_job_event(self, event: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
         score = _safe_int(event.get("score") or event.get("interview_probability_score"))
@@ -341,6 +519,18 @@ class LiveRecommendedJobsDashboard:
             apply_method = "easy_apply"
         elif apply_method == "unknown" and "external_apply" in normalized_flags:
             apply_method = "external_apply"
+        scope_metadata = enrich_job_scope_metadata(
+            {
+                **event,
+                "title": title,
+                "company": company,
+                "location": location,
+                "query": query,
+                "domain": DOMAIN_LABELS.get(domain_category, ""),
+            },
+            event.get("search_scope") or run.get("search_scope"),
+            ai_result=event,
+        )
 
         normalized = {
             "event_id": _clean_text(event.get("event_id")) or identity,
@@ -349,6 +539,28 @@ class LiveRecommendedJobsDashboard:
             "processed_at": _clean_text(event.get("processed_at")) or self._now_iso(),
             "board": _clean_text(event.get("board") or run.get("board")),
             "query": query,
+            "search_goal": _clean_text(event.get("search_goal") or run.get("search_goal")),
+            "search_group": _clean_text(event.get("search_group")),
+            "search_group_label": _search_group_label(event.get("search_group")),
+            "matched_search_groups": _clean_string_list(
+                event.get("matched_search_groups", [])
+            ),
+            "search_scope": dict(event.get("search_scope") or run.get("search_scope") or {}),
+            "career_lane": scope_metadata["career_lane"],
+            "search_market": scope_metadata["search_market"],
+            "country": scope_metadata["country"],
+            "employment_types": scope_metadata["employment_types"],
+            "weekly_hours": scope_metadata["weekly_hours"],
+            "flexible_hours": scope_metadata["flexible_hours"],
+            "sponsorship_status": scope_metadata["sponsorship_status"],
+            "relocation_required": scope_metadata["relocation_required"],
+            "relocation_support": scope_metadata["relocation_support"],
+            "housing_support": scope_metadata["housing_support"],
+            "health_insurance": scope_metadata["health_insurance"],
+            "annual_flight_support": scope_metadata["annual_flight_support"],
+            "compensation_text": scope_metadata["compensation_text"],
+            "contract_type": scope_metadata["contract_type"],
+            "market_concerns": scope_metadata["market_concerns"],
             "page_number": _safe_int(event.get("page_number")),
             "job_index": _safe_int(event.get("job_index")),
             "title": title,
@@ -375,6 +587,7 @@ class LiveRecommendedJobsDashboard:
             "source_stage": source_stage,
             "terminal_status": terminal_status,
             "filter_notes": _clean_string_list(event.get("filter_notes", [])),
+            "ai_model": _clean_text(event.get("ai_model") or event.get("model")),
             "ai": {
                 "model": _clean_text(event.get("ai_model") or event.get("model")),
                 "match_tier": _clean_text(event.get("match_tier") or event.get("ai_match_tier")),
@@ -404,7 +617,15 @@ class LiveRecommendedJobsDashboard:
     def _merge_job_event(self, existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
         merged = dict(existing)
         for key, value in incoming.items():
-            if key in {"seen_queries", "seen_pages", "flags", "filter_notes"}:
+            if key in {
+                "seen_queries",
+                "seen_pages",
+                "flags",
+                "filter_notes",
+                "matched_search_groups",
+                "employment_types",
+                "market_concerns",
+            }:
                 continue
             if value not in ("", None, [], {}):
                 merged[key] = value
@@ -421,6 +642,18 @@ class LiveRecommendedJobsDashboard:
         merged["filter_notes"] = _merge_unique_strings(
             existing.get("filter_notes", []),
             incoming.get("filter_notes", []),
+        )
+        merged["matched_search_groups"] = _merge_unique_strings(
+            existing.get("matched_search_groups", []),
+            incoming.get("matched_search_groups", []),
+        )
+        merged["employment_types"] = _merge_unique_strings(
+            existing.get("employment_types", []),
+            incoming.get("employment_types", []),
+        )
+        merged["market_concerns"] = _merge_unique_strings(
+            existing.get("market_concerns", []),
+            incoming.get("market_concerns", []),
         )
         merged["duplicate_count"] = _safe_int(existing.get("duplicate_count")) + 1
         return merged
@@ -439,6 +672,8 @@ class LiveRecommendedJobsDashboard:
         by_decision = {key: 0 for key in DECISION_LABELS}
         by_domain = {key: 0 for key in DOMAIN_LABELS}
         by_apply_method = {key: 0 for key in APPLY_METHOD_LABELS}
+        by_career_lane = {key: 0 for key in ("primary", "bridge", "fallback", "other")}
+        by_search_market: dict[str, int] = {}
         for job in jobs:
             decision = job.get("decision_category")
             domain = job.get("domain_category")
@@ -449,6 +684,10 @@ class LiveRecommendedJobsDashboard:
                 by_domain[domain] += 1
             if apply_method in by_apply_method:
                 by_apply_method[apply_method] += 1
+            lane = str(job.get("career_lane") or "other")
+            by_career_lane[lane if lane in by_career_lane else "other"] += 1
+            market = str(job.get("search_market") or "netherlands")
+            by_search_market[market] = by_search_market.get(market, 0) + 1
         active_run_id = self.data.get("active_run_id", "")
         return {
             "total_runs": len(self.data.get("runs", [])),
@@ -457,25 +696,51 @@ class LiveRecommendedJobsDashboard:
             "by_decision": by_decision,
             "by_domain": by_domain,
             "by_apply_method": by_apply_method,
+            "by_career_lane": by_career_lane,
+            "by_search_market": by_search_market,
             "last_event_at": max((job.get("processed_at", "") for job in jobs), default=""),
         }
 
-    def _build_run_stats(self, run_id: str) -> dict[str, int]:
+    def _build_run_stats(self, run_id: str) -> dict[str, Any]:
         stats = self._empty_run_stats()
+        stats["by_search_group"] = {}
+        stats["by_career_lane"] = {}
+        stats["by_search_market"] = {}
         for job in self.data.get("jobs", []):
             if not isinstance(job, dict) or job.get("run_id") != run_id:
                 continue
-            stats["processed_jobs"] += 1
             decision = job.get("decision_category")
-            if decision == "APPLY_FIRST":
-                stats["apply_first"] += 1
-            elif decision == "GOOD_OPTIONS":
-                stats["good_options"] += 1
-            elif decision == "LOW_PROBABILITY":
-                stats["low_probability"] += 1
-            elif decision == "REJECTED":
-                stats["rejected"] += 1
+            self._increment_decision_stats(stats, decision)
+            lane = _clean_text(job.get("career_lane") or "other").lower()
+            lane_key = lane if lane in {"primary", "bridge", "fallback", "other"} else "other"
+            self._increment_decision_stats(
+                stats["by_career_lane"].setdefault(lane_key, self._empty_run_stats()),
+                decision,
+            )
+            market = _clean_text(job.get("search_market") or "netherlands").lower()
+            self._increment_decision_stats(
+                stats["by_search_market"].setdefault(market, self._empty_run_stats()),
+                decision,
+            )
+            search_group = _clean_text(job.get("search_group"))
+            if search_group:
+                group_stats = stats["by_search_group"].setdefault(
+                    search_group,
+                    self._empty_run_stats(),
+                )
+                self._increment_decision_stats(group_stats, decision)
         return stats
+
+    def _increment_decision_stats(self, stats: dict[str, Any], decision: str) -> None:
+        stats["processed_jobs"] = _safe_int(stats.get("processed_jobs")) + 1
+        if decision == "APPLY_FIRST":
+            stats["apply_first"] = _safe_int(stats.get("apply_first")) + 1
+        elif decision == "GOOD_OPTIONS":
+            stats["good_options"] = _safe_int(stats.get("good_options")) + 1
+        elif decision == "LOW_PROBABILITY":
+            stats["low_probability"] = _safe_int(stats.get("low_probability")) + 1
+        elif decision == "REJECTED":
+            stats["rejected"] = _safe_int(stats.get("rejected")) + 1
 
     def _build_filter_options(self) -> dict[str, Any]:
         jobs = [job for job in self.data.get("jobs", []) if isinstance(job, dict)]
@@ -493,6 +758,40 @@ class LiveRecommendedJobsDashboard:
             "domains": sorted({job.get("domain_category", "OTHER") for job in jobs if job.get("domain_category")}),
             "flags": sorted({flag for job in jobs for flag in job.get("flags", []) if flag}),
             "apply_methods": list(APPLY_METHOD_LABELS),
+            "search_groups": sorted(
+                {
+                    group
+                    for job in jobs
+                    for group in _merge_unique_strings(
+                        [job.get("search_group")],
+                        job.get("matched_search_groups", []),
+                    )
+                    if group
+                }
+            ),
+            "career_lanes": sorted(
+                {str(job.get("career_lane") or "other") for job in jobs}
+            ),
+            "search_markets": sorted(
+                {str(job.get("search_market") or "netherlands") for job in jobs}
+            ),
+            "employment_types": sorted(
+                {
+                    str(value)
+                    for job in jobs
+                    for value in job.get("employment_types", [])
+                    if str(value)
+                }
+            ),
+            "sponsorship_statuses": sorted(
+                {
+                    str(job.get("sponsorship_status") or "not_required")
+                    for job in jobs
+                }
+            ),
+            "platforms": sorted(
+                {str(job.get("board") or "linkedin") for job in jobs}
+            ),
         }
 
     def _decision_category(self, score: int, terminal_status: str, source_stage: str) -> str:
@@ -694,6 +993,9 @@ class LiveRecommendedJobsDashboard:
             _safe_int(progress.get("pages_scanned")),
             len(page_history),
         )
+        progress["search_group_counts"] = dict(
+            (run.get("stats", {}) or {}).get("by_search_group", {})
+        )
 
     def _now_iso(self) -> str:
         return self.now_provider().isoformat()
@@ -860,3 +1162,11 @@ def _human_datetime(value: str) -> str:
     if len(cleaned) >= 16:
         return cleaned[:16].replace("T", " ")
     return cleaned
+
+
+def _search_group_label(value: Any) -> str:
+    return {
+        "primary": "Primary Path",
+        "bridge": "Bridge Opportunity",
+        "fallback": "Fallback Income",
+    }.get(_clean_text(value).lower(), "")

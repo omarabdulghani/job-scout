@@ -47,6 +47,7 @@ def order_queries_with_learning(
     enabled: bool = True,
     multi_output_path: Path | str = Path("high_success_probability_jobs_multi.json"),
     run_history_path: Path | str = Path("scout_run_history.json"),
+    learning_context: dict[str, Any] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     policy = QueryLearningPolicy.from_preferences(preferences, enabled=enabled)
     cleaned_queries = _dedupe_queries(queries)
@@ -70,9 +71,20 @@ def order_queries_with_learning(
     }
     sources_used: list[str] = []
 
-    if _apply_multi_output_scores(scores, Path(multi_output_path), query_index):
+    if _apply_multi_output_scores(
+        scores,
+        Path(multi_output_path),
+        query_index,
+        learning_context=learning_context,
+    ):
         sources_used.append(str(multi_output_path))
-    if _apply_run_history_scores(scores, Path(run_history_path), query_index, policy.history_run_limit):
+    if _apply_run_history_scores(
+        scores,
+        Path(run_history_path),
+        query_index,
+        policy.history_run_limit,
+        learning_context=learning_context,
+    ):
         sources_used.append(str(run_history_path))
 
     if not sources_used:
@@ -90,9 +102,15 @@ def order_queries_with_learning(
     )
 
 
-def _apply_multi_output_scores(scores: dict[str, dict[str, Any]], path: Path, query_index: dict[str, int]) -> bool:
+def _apply_multi_output_scores(
+    scores: dict[str, dict[str, Any]],
+    path: Path,
+    query_index: dict[str, int],
+    *,
+    learning_context: dict[str, Any] | None = None,
+) -> bool:
     payload = _load_json(path)
-    if not payload:
+    if not payload or not _scope_matches(payload.get("search_scope"), learning_context):
         return False
 
     used = False
@@ -134,6 +152,8 @@ def _apply_run_history_scores(
     path: Path,
     query_index: dict[str, int],
     limit: int,
+    *,
+    learning_context: dict[str, Any] | None = None,
 ) -> bool:
     payload = _load_json(path)
     runs = payload.get("runs", []) if isinstance(payload, dict) else []
@@ -143,6 +163,8 @@ def _apply_run_history_scores(
     used = False
     for entry in runs[: max(1, limit)]:
         if not isinstance(entry, dict):
+            continue
+        if not _scope_matches(entry.get("search_scope"), learning_context):
             continue
         query_key = _normalize_query(entry.get("query", ""))
         if query_key not in scores:
@@ -160,6 +182,33 @@ def _apply_run_history_scores(
             stat["score"] -= 3
         used = True
     return used
+
+
+def _scope_matches(
+    candidate: Any,
+    expected: dict[str, Any] | None,
+) -> bool:
+    if not expected:
+        return True
+    if not isinstance(candidate, dict):
+        return False
+    for key in ("platform", "search_market", "employment"):
+        expected_value = str(expected.get(key) or "").strip().lower()
+        if not expected_value:
+            continue
+        candidate_value = str(candidate.get(key) or "").strip().lower()
+        if candidate_value != expected_value:
+            return False
+    expected_group = str(expected.get("search_group") or "").strip().lower()
+    if expected_group:
+        candidate_group = str(
+            candidate.get("search_group")
+            or candidate.get("current_search_group")
+            or ""
+        ).strip().lower()
+        if candidate_group and candidate_group != expected_group:
+            return False
+    return True
 
 
 def _interleaved_order(

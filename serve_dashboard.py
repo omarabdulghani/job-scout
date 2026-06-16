@@ -32,6 +32,15 @@ from agent.operational_store import OperationalStore
 from agent.process_identity import inspect_process, terminate_process
 from agent.safe_file_io import PersistenceError, atomic_write_json, load_json_with_recovery
 from agent.scout_stop import clear_stop_request, request_stop
+from agent.search_scope import (
+    EMPLOYMENT_PREFERENCES,
+    MARKET_PROFILES,
+    SEARCH_MARKETS,
+    build_search_scope,
+    built_in_missions,
+    market_profiles,
+    platform_capabilities,
+)
 from agent.strategy_service import StrategyService
 from agent.user_workspace import UserWorkspace
 
@@ -57,6 +66,20 @@ class DashboardRunController:
     MAX_PAGE_CHOICES = {"1", "2", "3", "4", "all"}
     BROWSER_CHOICES = {"chromium", "firefox"}
     AI_BUDGET_MODE_CHOICES = {"smart", "deep", "off"}
+    SEARCH_GOAL_CHOICES = {
+        "career-growth",
+        "career-focus",
+        "broad",
+        "income",
+        "custom",
+    }
+    SEARCH_GROUP_CHOICES = {"primary", "bridge", "fallback"}
+    @property
+    def SEARCH_MARKET_CHOICES(self) -> set[str]:
+        return set(SEARCH_MARKETS)
+
+    RADIUS_KM_CHOICES = {"0", "8", "16", "40", "80", "160"}
+    EMPLOYMENT_CHOICES = set(EMPLOYMENT_PREFERENCES)
 
     def __init__(
         self,
@@ -180,6 +203,21 @@ class DashboardRunController:
                 "process_creation_token": str(identity.get("creation_token") or ""),
                 "process_executable": str(identity.get("executable") or ""),
                 "command_fingerprint": self._command_fingerprint(display_command),
+                "search_scope": (
+                    build_search_scope(
+                        platform="linkedin",
+                        search_market=payload.get("search_market", "netherlands"),
+                        location=payload.get("location") or "Amstelveen",
+                        radius_km=payload.get("radius_km", 40),
+                        employment=payload.get("employment", "full-time-preferred"),
+                        search_goal=payload.get("search_goal", "career-growth"),
+                        search_groups=self._clean_search_groups(payload.get("search_groups")),
+                        experience_levels=payload.get("experience_levels"),
+                        sponsorship_policy=payload.get("sponsorship_policy"),
+                    )
+                    if workflow.startswith("linkedin_")
+                    else {}
+                ),
             }
             self._save_state_locked()
             return self.status()
@@ -216,11 +254,56 @@ class DashboardRunController:
         ai_budget_mode = self._clean_choice(payload.get("ai_budget_mode"), self.AI_BUDGET_MODE_CHOICES, "smart")
         human_mode = bool(payload.get("human_mode", True))
         fresh = bool(payload.get("fresh", workflow == "linkedin_multi_fresh"))
+        test_run = bool(payload.get("test_run", False))
         resume = bool(payload.get("resume", False))
+        search_goal = self._clean_choice(
+            payload.get("search_goal"),
+            self.SEARCH_GOAL_CHOICES,
+            "career-growth",
+        )
+        search_groups = self._clean_search_groups(payload.get("search_groups"))
+        search_market = self._clean_choice(
+            payload.get("search_market"),
+            self.SEARCH_MARKET_CHOICES,
+            "netherlands",
+        )
+        radius_km = self._clean_choice(
+            str(payload.get("radius_km", "40")),
+            self.RADIUS_KM_CHOICES,
+            "40",
+        )
+        employment = self._clean_choice(
+            payload.get("employment"),
+            self.EMPLOYMENT_CHOICES,
+            "full-time-preferred",
+        )
+        market_profile = MARKET_PROFILES.get(search_market, {})
+        market_availability = str(
+            market_profile.get("availability") or "disabled"
+        ).lower()
+        if workflow.startswith("linkedin_") and market_availability == "disabled":
+            raise ValueError(
+                f"{market_profile.get('label', search_market)} is not enabled yet"
+            )
+        if (
+            workflow.startswith("linkedin_")
+            and market_availability == "experimental"
+            and not resume
+            and not bool(payload.get("experimental_confirmed"))
+        ):
+            raise ValueError(
+                f"{market_profile.get('label', search_market)} is experimental; "
+                "confirm the market warning before starting"
+            )
 
         command = [sys.executable]
         if workflow == "linkedin_multi_fresh":
             command += ["scout_jobs_multi.py", "--linkedin", "--location", location, "--max-pages", max_pages]
+            command += ["--search-goal", search_goal]
+            if search_goal == "custom":
+                if not search_groups:
+                    raise ValueError("Custom search goal requires at least one search group")
+                command += ["--search-groups", ",".join(search_groups)]
             if fresh:
                 command.append("--fresh")
         elif workflow == "linkedin_single":
@@ -244,6 +327,30 @@ class DashboardRunController:
         else:
             raise ValueError("Unsupported workflow")
 
+        if workflow in {"linkedin_multi_fresh", "linkedin_single", "linkedin_process_only"}:
+            command += [
+                "--search-market",
+                search_market,
+                "--radius-km",
+                radius_km,
+                "--employment",
+                employment,
+            ]
+            sponsorship_policy = payload.get("sponsorship_policy")
+            if sponsorship_policy in {"required", "not_required"}:
+                command += ["--sponsorship-policy", sponsorship_policy]
+            experience_levels = payload.get("experience_levels")
+            if isinstance(experience_levels, list) and experience_levels:
+                valid_levels = {"internship", "entry", "associate", "mid-senior", "director", "executive"}
+                cleaned_levels = [
+                    lvl.strip().lower() for lvl in experience_levels
+                    if str(lvl).strip().lower() in valid_levels
+                ]
+                if cleaned_levels:
+                    command += ["--experience-levels", ",".join(cleaned_levels)]
+            if test_run:
+                command.append("--test-run")
+
         if human_mode:
             command.append("--human-mode")
         if resume and workflow != "linkedin_process_only":
@@ -261,7 +368,7 @@ class DashboardRunController:
                     return
                 run_status = self._associated_run_status(candidate_min_age_seconds=0)
                 progress_status = str(
-                    self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+                    self._associated_progress(candidate_min_age_seconds=0).get("status") or ""
                 )
                 if run_status in {"completed", "stopped", "interrupted", "failed"}:
                     self._transition_lifecycle_locked(run_status)
@@ -294,7 +401,7 @@ class DashboardRunController:
         self.state["completed_at"] = self.state.get("completed_at") or datetime.now().astimezone().isoformat()
         run_status = self._associated_run_status(candidate_min_age_seconds=0)
         progress_status = str(
-            self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+            self._associated_progress(candidate_min_age_seconds=0).get("status") or ""
         )
         if run_status in {"completed", "stopped", "interrupted", "failed"}:
             resolved_status = run_status
@@ -323,11 +430,13 @@ class DashboardRunController:
             return False
         if self._associated_run_status() == "completed":
             return False
-        payload = self._read_progress()
-        return isinstance(payload, dict) and payload.get("status") != "completed"
+        payload = self._associated_progress()
+        return bool(payload) and payload.get("status") != "completed"
 
     def _resume_context(self) -> dict[str, Any]:
-        progress = self._read_progress()
+        progress = self._associated_progress()
+        if not progress:
+            return {}
         queries = progress.get("queries", []) if isinstance(progress, dict) else []
         total_queries = len(queries) if isinstance(queries, list) else 0
         current_index = int(progress.get("current_query_index", 0) or 0)
@@ -338,6 +447,25 @@ class DashboardRunController:
             "current_page_number": int(progress.get("current_page_number", 0) or 0),
             "processed_jobs": int(progress.get("total_jobs_processed", 0) or 0),
             "last_completed_query": str(progress.get("last_completed_query") or ""),
+            "search_goal": str(progress.get("search_goal") or ""),
+            "selected_search_groups": list(
+                progress.get("selected_search_groups", [])
+                if isinstance(progress.get("selected_search_groups"), list)
+                else []
+            ),
+            "current_search_group": str(
+                progress.get("current_search_group") or ""
+            ),
+            "phase_order": list(
+                progress.get("phase_order", [])
+                if isinstance(progress.get("phase_order"), list)
+                else []
+            ),
+            "search_scope": dict(
+                progress.get("search_scope")
+                if isinstance(progress.get("search_scope"), dict)
+                else {}
+            ),
             "log_path": str(self.state.get("log_path") or ""),
             "restart_note": (
                 "The unfinished query may restart from its beginning; completed queries are preserved."
@@ -355,6 +483,51 @@ class DashboardRunController:
             self.progress_path,
             candidate_min_age_seconds=candidate_min_age_seconds,
         )
+
+    def _associated_progress(
+        self,
+        *,
+        candidate_min_age_seconds: float = 2.0,
+    ) -> dict[str, Any]:
+        progress = self._read_progress(
+            candidate_min_age_seconds=candidate_min_age_seconds
+        )
+        return progress if self._progress_matches_state(progress) else {}
+
+    def _progress_matches_state(self, progress: dict[str, Any]) -> bool:
+        if not isinstance(progress, dict) or not progress:
+            return False
+        state_run_id = str(self.state.get("run_id") or "")
+        progress_run_id = str(progress.get("run_id") or "")
+        if state_run_id and progress_run_id:
+            return state_run_id == progress_run_id
+        if progress_run_id and not state_run_id:
+            return False
+
+        # Legacy progress files predate run IDs. When timestamps are available,
+        # only associate a checkpoint that was written during this controller run.
+        progress_updated = self._parse_timestamp(progress.get("updated_at"))
+        state_started = self._parse_timestamp(self.state.get("started_at"))
+        state_completed = self._parse_timestamp(self.state.get("completed_at"))
+        if progress_updated and state_started and progress_updated < state_started:
+            return False
+        if progress_updated and state_completed and progress_updated > state_completed:
+            return False
+        return True
+
+    def _parse_timestamp(self, value: Any) -> datetime | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            return (
+                parsed
+                if parsed.tzinfo is not None
+                else parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+            )
+        except ValueError:
+            return None
 
     def _load_state(self) -> dict[str, Any]:
         return load_json_with_recovery(self.state_path)
@@ -427,7 +600,7 @@ class DashboardRunController:
                 return
             run_status = self._associated_run_status(candidate_min_age_seconds=0)
             progress_status = str(
-                self._read_progress(candidate_min_age_seconds=0).get("status") or ""
+                self._associated_progress(candidate_min_age_seconds=0).get("status") or ""
             )
             if run_status in {"completed", "stopped", "interrupted", "failed"}:
                 self._transition_lifecycle_locked(run_status)
@@ -601,6 +774,18 @@ class DashboardRunController:
         cleaned = " ".join(str(value or "").split())
         return cleaned[:max_length]
 
+    def _clean_search_groups(self, value: Any) -> list[str]:
+        candidates = value if isinstance(value, list) else str(value or "").split(",")
+        selected = {
+            str(group or "").strip().lower()
+            for group in candidates
+        }
+        return [
+            group
+            for group in ("primary", "bridge", "fallback")
+            if group in selected and group in self.SEARCH_GROUP_CHOICES
+        ]
+
 
 class DashboardRequestHandler(SimpleHTTPRequestHandler):
     """Static dashboard server plus tiny JSON API for manual job status."""
@@ -637,6 +822,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     decision=self._query_value("decision"),
                     run=self._query_value("run"),
                     domain=self._query_value("domain"),
+                    search_group=self._query_value("search_group"),
+                    career_lane=self._query_value("career_lane"),
+                    search_market=self._query_value("search_market"),
+                    country=self._query_value("country"),
+                    employment_type=self._query_value("employment_type"),
+                    flexible_hours=self._query_value("flexible_hours"),
+                    sponsorship_status=self._query_value("sponsorship_status"),
+                    platform=self._query_value("platform"),
                     flag=self._query_value("flag"),
                     apply_method=self._query_value("apply_method"),
                     status=self._query_value("status"),
@@ -764,17 +957,25 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             "/api/application-assistant/answer",
             "/api/maintenance/backup",
             "/api/maintenance/prune-logs",
+            "/api/maintenance/archive",
+            "/api/markets",
+            "/api/markets/delete",
         }:
             try:
                 payload = self._read_json_body(max_bytes=12 * 1024 * 1024)
                 if self._path_without_query() == "/api/ai-settings/test":
                     data = self._ai_settings_service().test_connection(
-                        str(payload.get("provider") or "")
+                        str(payload.get("provider") or ""),
+                        payload.get("provider_settings")
                     )
                 elif self._path_without_query() == "/api/ai-settings":
                     data = self._ai_settings_service().save(payload)
                 elif self._path_without_query() == "/api/board-settings":
                     data = self._board_settings_service().save(payload)
+                elif self._path_without_query() == "/api/markets":
+                    data = self._board_settings_service().save_market(payload)
+                elif self._path_without_query() == "/api/markets/delete":
+                    data = self._board_settings_service().delete_market(payload)
                 elif self._path_without_query() == "/api/application":
                     job = payload.get("job") if isinstance(payload.get("job"), dict) else {}
                     data = DashboardUserStateStore(self.user_state_path).update_application(
@@ -809,6 +1010,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         older_than_days=int(payload.get("older_than_days") or 90),
                         keep_latest=int(payload.get("keep_latest") or 10),
                     )
+                elif self._path_without_query() == "/api/maintenance/archive":
+                    data = self._maintenance_service().archive_historical_data()
                 elif self._path_without_query() == "/api/strategy":
                     data = self._strategy_service().save(payload)
                 elif self._path_without_query().endswith("/cv"):
@@ -839,6 +1042,33 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 else:
                     state = self.run_controller.stop(payload)
                 self._send_json({"ok": True, "state": state})
+            except ValueError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
+        if self._path_without_query() == "/api/track-manual-job":
+            try:
+                payload = self._read_json_body()
+                job_ref = str(payload.get("job_reference") or "").strip()
+                status = str(payload.get("status") or "").strip()
+                if not job_ref or not status:
+                    raise ValueError("job_reference and status are required")
+                
+                from agent.job_tracking import JobTrackingStore
+                store = JobTrackingStore()
+                from track_job_status import _find_known_metadata
+                metadata = _find_known_metadata(store, job_ref)
+                record = store.set_status(
+                    status=status,
+                    job_id=metadata.get("job_id", ""),
+                    url=metadata.get("url", ""),
+                    title=metadata.get("title", ""),
+                    company=metadata.get("company", ""),
+                    location=metadata.get("location", ""),
+                )
+                self._send_json({"ok": True, "record": record})
             except ValueError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
             except Exception as exc:
@@ -1100,6 +1330,15 @@ def serve(
     user_workspace = UserWorkspace(root).ensure_initialized()
     operational_store = OperationalStore(user_workspace.path / "job_scout.db")
     operational_store.sync_if_changed(data_path, state_path)
+    
+    from agent.scout_collected_jobs import ScoutCollectedJobsStore
+    collected_jobs_path = root / "scout_collected_jobs.json"
+    collected_jobs_store = ScoutCollectedJobsStore(
+        path=collected_jobs_path,
+        operational_store=operational_store,
+    )
+    operational_store.sync_collected_jobs(collected_jobs_store.jobs)
+    
     run_controller = DashboardRunController(root, dashboard_data_path=data_path)
     handler = make_handler(
         directory=root,

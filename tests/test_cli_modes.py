@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import urllib.parse
+from unittest.mock import patch
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
@@ -202,7 +203,8 @@ class BrowserControllerNavigationTests(unittest.IsolatedAsyncioTestCase):
         browser.context = FakeNavigationContext()
         browser.page = FakeNavigationPage(target_visible_after_timeout=True)
 
-        await browser.goto("https://www.linkedin.com/feed/")
+        with patch("builtins.print"):
+            await browser.goto("https://www.linkedin.com/feed/")
 
         self.assertEqual(browser.page.goto_calls, 1)
         self.assertEqual(browser.page.url, "https://www.linkedin.com/feed/")
@@ -212,7 +214,8 @@ class BrowserControllerNavigationTests(unittest.IsolatedAsyncioTestCase):
         browser.context = FakeNavigationContext()
         browser.page = FakeNavigationPage(target_visible_after_timeout=False)
 
-        await browser.goto("https://www.linkedin.com/feed/")
+        with patch("builtins.print"):
+            await browser.goto("https://www.linkedin.com/feed/")
 
         self.assertEqual(browser.page.goto_calls, 2)
         self.assertEqual(browser.page.evaluate_calls, 1)

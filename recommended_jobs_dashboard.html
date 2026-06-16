@@ -17,10 +17,11 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="dashboard/styles.css" />
+  <link rel="stylesheet" href="dashboard/styles.css?v=20260615-minimalist-run-history" />
 </head>
 <body>
   <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01"/><path d="M11 12h1v4h1"/></symbol>
     <symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 7h18"/><path d="M5 7l1 13h12l1-13"/><path d="M8 7V4h8v3"/><path d="M10 12h4"/></symbol>
     <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
     <symbol id="icon-alert-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 17h.01"/></symbol>
@@ -40,15 +41,18 @@
     <symbol id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
     <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18 9a7 7 0 0 0-11-3l-3 3"/><path d="M6 15a7 7 0 0 0 11 3l3-3"/></symbol>
     <symbol id="icon-rotate-ccw" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 12a9 9 0 0 0-15-6l-3 3"/><path d="M7 17a9 9 0 0 0 14-5"/></symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/></symbol>
     <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
     <symbol id="icon-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
     <symbol id="icon-star" viewBox="0 0 24 24"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2 7.5 14 3 9.6l6.2-.9z"/></symbol>
     <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></symbol>
     <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
     <symbol id="icon-trending-down" viewBox="0 0 24 24"><path d="M22 17l-8-8-4 4-6-6"/><path d="M16 17h6v-6"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 14h8l1-14"/><path d="M10 11v6"/><path d="M14 11v6"/></symbol>
     <symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/></symbol>
     <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1z"/></symbol>
     <symbol id="icon-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></symbol>
   </svg>
   <div class="app-frame">
     <button id="mobileNavBackdrop" class="mobile-nav-backdrop" type="button" aria-label="Close workspace navigation" tabindex="-1"></button>
@@ -64,6 +68,7 @@
         <button class="app-nav-button" type="button" data-app-page="profile"><svg class="icon"><use href="#icon-file-text"></use></svg>Profile &amp; CV</button>
         <button class="app-nav-button" type="button" data-app-page="strategy"><svg class="icon"><use href="#icon-target"></use></svg>Job Strategy</button>
         <button class="app-nav-button" type="button" data-app-page="applications"><svg class="icon"><use href="#icon-check-circle"></use></svg>Applications</button>
+        <button class="app-nav-button" type="button" data-app-page="descriptions"><svg class="icon"><use href="#icon-file-text"></use></svg>Descriptions</button>
         <button class="app-nav-button" type="button" data-app-page="assistant"><svg class="icon"><use href="#icon-file-text"></use></svg>Assistant</button>
         <button class="app-nav-button" type="button" data-app-page="runs"><svg class="icon"><use href="#icon-clock"></use></svg>Runs &amp; Logs</button>
         <button class="app-nav-button" type="button" data-app-page="settings"><svg class="icon"><use href="#icon-settings"></use></svg>Settings</button>
@@ -93,6 +98,7 @@
       <div class="top-actions">
         <div class="top-button-row">
           <button id="runScoutButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Run Scout</button>
+          <button id="trackManualJobButton" class="button secondary" type="button" style="margin-left: 8px;"><svg class="icon icon-sm"><use href="#icon-target"></use></svg>Track External Job</button>
         </div>
         <div class="meta" aria-live="polite">
           <span><span id="statusDot" class="status-dot"></span> <span id="statusText">Waiting for data</span></span>
@@ -121,7 +127,12 @@
         </div>
         <div class="decision-chip" id="freshRunLabel">No fresh run</div>
       </div>
+      <div id="overallProgressContainer" class="overall-progress-container hidden">
+        <span>Overall Scout Progress: <span id="overallProgressText">0%</span></span>
+        <div class="overall-progress-bar"><div id="overallProgressFill" class="overall-progress-fill"></div></div>
+      </div>
       <div id="freshCompleteSummary" class="fresh-complete-summary hidden"></div>
+      <div id="freshSearchPathSummary" class="fresh-complete-summary hidden" aria-label="Search path progress"></div>
       <div class="fresh-metrics">
         <div class="fresh-metric">
           <span>Apply first</span>
@@ -164,6 +175,27 @@
       <div id="bestNextList" class="best-grid"></div>
     </section>
 
+    <section id="dashboardTerminalPanel" class="panel terminal-panel" aria-label="Scout run status terminal">
+      <div class="section-head">
+        <div>
+          <h2><span class="section-title"><svg class="icon icon-lg"><use href="#icon-activity"></use></svg>Run Status Terminal</span></h2>
+          <p id="runStatusText">Checking dashboard controller...</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <span id="runStatusBadge" class="decision-chip">Idle</span>
+          <button id="toggleTerminalButton" class="fresh-action" type="button" aria-expanded="false"><svg class="icon icon-sm"><use href="#icon-settings"></use></svg>Show Terminal</button>
+        </div>
+      </div>
+      <div id="terminalContainer" class="terminal-container hidden">
+        <div class="run-control-actions" style="margin-bottom: 10px;">
+          <button id="stopAfterJobButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current job</button>
+          <button id="stopAfterPageButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current page</button>
+          <button id="stopNowButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop now</button>
+        </div>
+        <pre id="runLogTail" class="run-log">No run log yet.</pre>
+      </div>
+    </section>
+
     <section id="runHistoryPanel" class="panel run-history-panel compact" aria-label="Scout run history">
       <div class="section-head">
         <div>
@@ -174,6 +206,14 @@
       </div>
       <div id="runHistoryList" class="run-history-list"></div>
     </section>
+
+    <nav id="careerLaneTabs" class="career-lane-tabs" aria-label="Career lane">
+      <button class="career-lane-tab active" type="button" data-career-lane="primary"><svg class="icon icon-sm"><use href="#icon-star"></use></svg><span>Primary Career</span></button>
+      <button class="career-lane-tab" type="button" data-career-lane="bridge"><svg class="icon icon-sm"><use href="#icon-activity"></use></svg><span>Bridge Roles</span></button>
+      <button class="career-lane-tab" type="button" data-career-lane="fallback"><svg class="icon icon-sm"><use href="#icon-briefcase"></use></svg><span>Fallback Income</span></button>
+      <button class="career-lane-tab" type="button" data-career-lane="other"><svg class="icon icon-sm"><use href="#icon-layout"></use></svg><span>Other</span></button>
+      <button class="career-lane-tab" type="button" data-career-lane="all"><svg class="icon icon-sm"><use href="#icon-list"></use></svg><span>All Opportunities</span></button>
+    </nav>
 
     <section class="filters" aria-label="Dashboard filters">
       <div id="quickPresets" class="quick-presets" aria-label="Quick filter presets"></div>
@@ -190,28 +230,8 @@
         </select>
       </div>
       <div class="control compact-control">
-        <label for="runFilter">Run</label>
-        <select id="runFilter"></select>
-      </div>
-      <div class="control compact-control">
-        <label for="decisionFilter">Decision</label>
-        <select id="decisionFilter"></select>
-      </div>
-      <div class="control compact-control">
-        <label for="domainFilter">Domain</label>
-        <select id="domainFilter"></select>
-      </div>
-      <div class="control compact-control">
-        <label for="flagFilter">Flag</label>
-        <select id="flagFilter"></select>
-      </div>
-      <div class="control wide-control">
-        <label for="applyMethodFilter">Apply</label>
-        <select id="applyMethodFilter"></select>
-      </div>
-      <div class="control compact-control">
-        <label for="manualStatusFilter">Status</label>
-        <select id="manualStatusFilter"></select>
+        <label for="marketFilter">Market</label>
+        <select id="marketFilter"></select>
       </div>
       <div class="control compact-control">
         <label for="sortFilter">Sort</label>
@@ -221,6 +241,58 @@
           <option value="company">Company</option>
           <option value="location">Location</option>
         </select>
+      </div>
+      <button id="advancedFiltersToggle" class="button secondary" type="button" aria-expanded="false"><svg class="icon icon-sm"><use href="#icon-settings"></use></svg>Advanced Filters</button>
+
+      <div id="advancedFiltersContainer" class="advanced-filters hidden">
+        <div class="control compact-control">
+          <label for="runFilter">Run</label>
+          <select id="runFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="decisionFilter">Decision</label>
+          <select id="decisionFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="domainFilter">Domain</label>
+          <select id="domainFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="searchGroupFilter">Search path</label>
+          <select id="searchGroupFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="employmentFilter">Employment</label>
+          <select id="employmentFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="sponsorshipFilter">Sponsorship</label>
+          <select id="sponsorshipFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="platformFilter">Platform</label>
+          <select id="platformFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="flexibleHoursFilter">Hours</label>
+          <select id="flexibleHoursFilter">
+            <option value="all">All hours</option>
+            <option value="true">Flexible hours</option>
+            <option value="false">Fixed/unspecified</option>
+          </select>
+        </div>
+        <div class="control compact-control">
+          <label for="flagFilter">Flag</label>
+          <select id="flagFilter"></select>
+        </div>
+        <div class="control wide-control">
+          <label for="applyMethodFilter">Apply</label>
+          <select id="applyMethodFilter"></select>
+        </div>
+        <div class="control compact-control">
+          <label for="manualStatusFilter">Status</label>
+          <select id="manualStatusFilter"></select>
+        </div>
       </div>
       <div class="control compact-control">
         <label>Layout</label>
@@ -514,9 +586,21 @@
         </div>
       </section>
       <section class="form-section">
-        <div class="form-section-head"><div><h2>Search queries</h2><p>One query per line. Commas and semicolons are preserved. Query learning can prioritize historically productive searches while still exploring others.</p></div><span id="strategyQueryCount" class="decision-chip">0 queries</span></div>
+        <div class="form-section-head"><div><h2>Search queries</h2><p>Curated search phrases are separate from the richer career descriptions above. Enter one query per line; punctuation is preserved.</p></div><span id="strategyQueryCount" class="decision-chip">0 queries</span></div>
         <div class="form-grid">
-          <div class="field full"><label for="strategyQueries">Active search queries</label><textarea id="strategyQueries" style="min-height:260px;"></textarea></div>
+          <div class="field">
+            <label for="strategyPrimaryQueries">Primary queries <span id="strategyPrimaryQueryCount" class="field-count">0</span></label>
+            <textarea id="strategyPrimaryQueries" style="min-height:260px;" placeholder="junior ux designer&#10;junior product designer"></textarea>
+          </div>
+          <div class="field">
+            <label for="strategyBridgeQueries">Bridge queries <span id="strategyBridgeQueryCount" class="field-count">0</span></label>
+            <textarea id="strategyBridgeQueries" style="min-height:260px;" placeholder="customer success coordinator&#10;junior data analyst"></textarea>
+          </div>
+          <div class="field full">
+            <label for="strategyFallbackQueries">Fallback income queries <span id="strategyFallbackQueryCount" class="field-count">0</span></label>
+            <textarea id="strategyFallbackQueries" style="min-height:190px;" placeholder="customer support&#10;back office"></textarea>
+          </div>
+          <div id="strategyQueryDuplicateNotice" class="query-duplicate-notice hidden" role="status" aria-live="polite"></div>
           <label class="check-row" for="strategyQueryLearningEnabled"><input id="strategyQueryLearningEnabled" type="checkbox" />Use query-learning order</label>
           <div class="field"><label for="strategyExplorationInterval">Explore a lower-ranked query every</label><input id="strategyExplorationInterval" type="number" min="1" /></div>
           <div class="field full"><label>What the app has learned</label><div id="strategyQueryLearningSummary" class="workflow-hint"></div></div>
@@ -569,6 +653,29 @@
       <div id="applicationsTableFooter" class="application-table-footer hidden">
         <span id="applicationsVisibleCount">Showing 0 applications</span>
         <button id="loadMoreApplicationsButton" class="button secondary" type="button">Show 50 more</button>
+      </div>
+    </section>
+  </main>
+  <main id="descriptionsPage" class="shell app-page workspace-page" data-page-id="descriptions" hidden>
+    <header class="workspace-header">
+      <div><h1><svg class="icon"><use href="#icon-file-text"></use></svg>Descriptions</h1><p>Browse jobs with successfully extracted descriptions.</p></div>
+      <button id="refreshDescriptionsButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh</button>
+    </header>
+    <div id="descriptionsStatus" class="profile-status" role="status" aria-live="polite">Loading descriptions...</div>
+    <section class="application-toolbar">
+      <div class="field"><label for="descriptionSearch">Search</label><input id="descriptionSearch" placeholder="Title, company, location" /></div>
+      <div class="field"><label for="descriptionSourceFilter">Source</label><select id="descriptionSourceFilter"><option value="all">All Sources</option><option value="linkedin">LinkedIn</option><option value="indeed">Indeed</option></select></div>
+    </section>
+    <section id="descriptionsTableWrap" class="application-table-wrap">
+      <table class="application-table">
+        <caption class="sr-only">Jobs with extracted descriptions</caption>
+        <thead><tr><th>Job &amp; Company</th><th>Source</th><th>Description Preview</th><th>Action</th></tr></thead>
+        <tbody id="descriptionsTableBody"></tbody>
+      </table>
+      <div id="descriptionsEmpty" class="empty-workspace hidden">No extracted descriptions found. Run a description extraction workflow to populate this list.</div>
+      <div id="descriptionsTableFooter" class="application-table-footer hidden">
+        <span id="descriptionsVisibleCount">Showing 0 descriptions</span>
+        <button id="loadMoreDescriptionsButton" class="button secondary" type="button">Show 50 more</button>
       </div>
     </section>
   </main>
@@ -685,6 +792,8 @@
               <option value="gemini">Gemini only</option>
               <option value="claude">Claude only</option>
               <option value="openai_compatible">OpenAI-compatible only</option>
+              <option value="deepseek">DeepSeek only</option>
+              <option value="openrouter">OpenRouter only</option>
               <option value="lmstudio">LM Studio only</option>
             </select>
           </div>
@@ -766,6 +875,40 @@
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+  <div id="trackManualJobOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="trackManualJobTitle" aria-describedby="trackManualJobDescription">
+    <section class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="trackManualJobTitle">Track External Job</h2>
+          <p id="trackManualJobDescription">Track a job found outside the scout process by entering its LinkedIn URL and a status.</p>
+        </div>
+        <button id="closeTrackManualJobButton" class="icon-button" type="button" aria-label="Close track manual job dialog"><svg class="icon"><use href="#icon-x"></use></svg></button>
+      </div>
+      <div class="modal-body">
+        <form id="trackManualJobForm">
+          <div class="modal-grid">
+            <div class="control full-control">
+              <label for="trackManualJobUrl">LinkedIn Job URL or ID *</label>
+              <input id="trackManualJobUrl" type="text" placeholder="https://www.linkedin.com/jobs/view/..." required />
+            </div>
+            <div class="control compact-control">
+              <label for="trackManualJobStatus">Status *</label>
+              <select id="trackManualJobStatus" required>
+                <option value="unreviewed" selected>Unreviewed</option>
+                <option value="applied">Applied</option>
+                <option value="irrelevant">Irrelevant</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelTrackManualJobButton" class="button secondary" type="button">Cancel</button>
+        <button id="submitTrackManualJobButton" class="button primary" type="submit" form="trackManualJobForm">Track Job</button>
+      </div>
+    </section>
+  </div>
+
   <div id="runScoutOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="runScoutTitle" aria-describedby="runScoutDescription runWorkflowHint">
     <section class="modal">
       <div class="modal-head">
@@ -773,90 +916,209 @@
           <h2 id="runScoutTitle">Run Scout</h2>
           <p id="runScoutDescription">Start a safe approved scout workflow from the dashboard. Login and verification still stay manual in the browser.</p>
         </div>
-        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog"><svg class="icon"><use href="#icon-x-circle"></use></svg></button>
+        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog"><svg class="icon"><use href="#icon-x"></use></svg></button>
       </div>
       <div class="modal-body">
         <div id="runControlNotice" class="subline"></div>
         <div id="runWorkflowHint" class="workflow-hint" aria-live="polite"></div>
         <div class="modal-grid">
+
           <div class="control">
-            <label for="runWorkflow">Workflow</label>
-            <select id="runWorkflow">
-              <option value="linkedin_multi_fresh">LinkedIn multi-query fresh</option>
-              <option value="linkedin_single">LinkedIn single query</option>
-              <option value="linkedin_process_only">LinkedIn process-only</option>
-              <option value="indeed_description">Indeed description extraction</option>
-              <option value="validate_boards">Validate job boards (no applications)</option>
-            </select>
+            <div class="label-with-action">
+              <label for="runSearchMarket">Search market</label>
+              <button id="manageMarketsButton" class="link-button" type="button">Manage</button>
+            </div>
+            <select id="runSearchMarket"></select>
           </div>
           <div class="control">
             <label for="runLocation">Location</label>
-            <input id="runLocation" type="text" value="Amstelveen" />
+            <input id="runLocation" type="text" value="Amstelveen" list="runLocationOptions" />
+            <datalist id="runLocationOptions"></datalist>
           </div>
-          <div class="control">
-            <label for="runQuery">Query</label>
-            <input id="runQuery" type="text" value="ux designer" />
-          </div>
-          <div class="control">
-            <label for="runMaxPages">Max pages</label>
-            <select id="runMaxPages">
-              <option value="1">1 page</option>
-              <option value="2">2 pages</option>
-              <option value="3">3 pages</option>
-              <option value="all">All pages</option>
+          <div id="runSearchGoalControl" class="control full-control">
+            <label for="runSearchGoal">Search goal</label>
+            <select id="runSearchGoal">
+              <option value="career-growth" selected>Career + Growth - Recommended</option>
+              <option value="career-focus">Career Focus</option>
+              <option value="broad">Broaden Opportunities</option>
+              <option value="income">Income Priority</option>
+              <option value="custom">Custom</option>
             </select>
           </div>
           <div class="control">
-            <label for="runBrowser">Browser</label>
-            <select id="runBrowser">
-              <option value="chromium">Chromium</option>
-              <option value="firefox">Firefox</option>
+            <label for="runEmployment">Employment preference</label>
+            <select id="runEmployment">
+              <option value="full-time-preferred" selected>Full-time preferred</option>
+              <option value="full-time-only">Full-time only</option>
+              <option value="part-time-only">Part-time only</option>
+              <option value="full-or-part-time">Full-time or part-time equally</option>
+              <option value="any">Any employment type</option>
             </select>
           </div>
-          <label class="check-row" for="runHumanMode">
-            <input id="runHumanMode" type="checkbox" checked />
-            Human mode
-          </label>
-          <label class="check-row" for="runFreshMode">
-            <input id="runFreshMode" type="checkbox" checked />
-            Fresh mode
-          </label>
-          <div class="control">
-            <label for="runAiBudgetMode">AI budget</label>
-            <select id="runAiBudgetMode">
-              <option value="smart" selected>Smart Guard</option>
-              <option value="deep">Deep Search</option>
-              <option value="off">Off</option>
-            </select>
+          <div id="runCustomSearchGroups" class="search-group-picker hidden" aria-label="Custom search groups">
+            <label class="check-row" for="runSearchPrimary"><input id="runSearchPrimary" type="checkbox" checked />Primary paths</label>
+            <label class="check-row" for="runSearchBridge"><input id="runSearchBridge" type="checkbox" checked />Bridge opportunities</label>
+            <label class="check-row" for="runSearchFallback"><input id="runSearchFallback" type="checkbox" />Fallback income</label>
           </div>
-          <label class="check-row" for="runResumeMode">
-            <input id="runResumeMode" type="checkbox" />
-            Resume saved progress
+          <div id="runSponsorshipControl" class="control full-control">
+            <label class="check-row" for="runScopeSponsorshipPolicy">
+              <input id="runScopeSponsorshipPolicy" type="checkbox" checked />
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                Require visa sponsorship for this run
+                <svg class="icon tooltip-icon" style="color: var(--muted); cursor: help; width: 16px; height: 16px;" title="Caps jobs with unknown sponsorship at 69 (Good Options tier) and filters out local-visa-only roles."><use href="#icon-info"></use></svg>
+              </span>
+            </label>
+            <p class="help-text" id="runSponsorshipWarning">
+              I understand this market is experimental and sponsorship details require manual verification.
+            </p>
+          </div>
+          <div id="runExperienceLevelsControl" class="experience-level-picker full-control">
+            <label>Experience levels (LinkedIn)</label>
+            <div class="checkbox-row-group">
+              <label class="check-row" for="runExpInternship"><input id="runExpInternship" type="checkbox" data-level="internship" />Internship</label>
+              <label class="check-row" for="runExpEntry"><input id="runExpEntry" type="checkbox" data-level="entry" checked />Entry Level</label>
+              <label class="check-row" for="runExpAssociate"><input id="runExpAssociate" type="checkbox" data-level="associate" checked />Associate</label>
+              <label class="check-row" for="runExpMidSenior"><input id="runExpMidSenior" type="checkbox" data-level="mid-senior" />Mid-Senior</label>
+              <label class="check-row" for="runExpDirector"><input id="runExpDirector" type="checkbox" data-level="director" />Director</label>
+              <label class="check-row" for="runExpExecutive"><input id="runExpExecutive" type="checkbox" data-level="executive" />Executive</label>
+            </div>
+          </div>
+          <div id="runSearchGoalSummary" class="search-goal-summary full-control" aria-live="polite"></div>
+          <div id="runScopeSummary" class="search-goal-summary scope-summary full-control" aria-live="polite"></div>
+          <label id="runExperimentalConfirmRow" class="check-row full-control hidden" for="runExperimentalConfirm">
+            <input id="runExperimentalConfirm" type="checkbox" />
+            I understand this market is experimental and sponsorship details require manual verification.
           </label>
+
+          <button id="runAdvancedOptionsToggle" class="button secondary full-control" type="button" aria-expanded="false" style="margin-top: 10px;">
+            <svg class="icon icon-sm"><use href="#icon-settings"></use></svg>Advanced Execution Options
+          </button>
+
+          <div id="runAdvancedOptionsContainer" class="advanced-options-grid hidden">
+            <div class="control">
+              <label for="runPlatform">Platform</label>
+              <select id="runPlatform">
+                <option value="linkedin" selected>LinkedIn</option>
+                <option value="indeed">Indeed Netherlands (descriptions only)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runWorkflow">Workflow</label>
+              <select id="runWorkflow">
+                <option value="linkedin_multi_fresh">LinkedIn multi-query fresh</option>
+                <option value="linkedin_single">LinkedIn single query</option>
+                <option value="linkedin_process_only">LinkedIn process-only</option>
+                <option value="indeed_description">Indeed description extraction</option>
+                <option value="validate_boards">Validate job boards (no applications)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runRadius">Radius</label>
+              <select id="runRadius"></select>
+            </div>
+            <div class="control">
+              <label for="runQuery">Query</label>
+              <input id="runQuery" type="text" value="ux designer" />
+            </div>
+            <div class="control">
+              <label for="runMaxPages">Max pages</label>
+              <select id="runMaxPages">
+                <option value="1">1 page</option>
+                <option value="2">2 pages</option>
+                <option value="3">3 pages</option>
+                <option value="all">All pages</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runBrowser">Browser</label>
+              <select id="runBrowser">
+                <option value="chromium">Chromium</option>
+                <option value="firefox">Firefox</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runAiBudgetMode">AI budget</label>
+              <select id="runAiBudgetMode">
+                <option value="smart" selected>Smart Guard</option>
+                <option value="deep">Deep Search</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+            <label class="check-row" for="runHumanMode">
+              <input id="runHumanMode" type="checkbox" checked />
+              Human mode
+            </label>
+            <label class="check-row" for="runFreshMode">
+              <input id="runFreshMode" type="checkbox" checked />
+              Fresh mode
+            </label>
+            <label class="check-row" for="runTestMode">
+              <input id="runTestMode" type="checkbox" />
+              Test Run (Dry run: do not save progress)
+            </label>
+            <label class="check-row" for="runResumeMode">
+              <input id="runResumeMode" type="checkbox" />
+              Resume saved progress
+            </label>
+          </div>
         </div>
         <div class="modal-actions">
           <button id="startRunButton" class="button primary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Start run</button>
           <button id="refreshRunControlButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-refresh"></use></svg>Refresh status</button>
         </div>
-        <div id="runStatusPanel" class="run-status-panel">
-          <div class="section-head">
-            <div>
-              <h2><span class="section-title"><svg class="icon icon-lg"><use href="#icon-activity"></use></svg>Run Status</span></h2>
-              <p id="runStatusText">Checking dashboard controller...</p>
-            </div>
-            <span id="runStatusBadge" class="decision-chip">Idle</span>
-          </div>
-          <div class="run-control-actions">
-            <button id="stopAfterJobButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current job</button>
-            <button id="stopAfterPageButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop after current page</button>
-            <button id="stopNowButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-ban"></use></svg>Stop now</button>
-          </div>
-          <pre id="runLogTail" class="run-log">No run log yet.</pre>
-        </div>
       </div>
     </section>
   </div>
 
-  <script type="module" src="dashboard/app.js?v=20260613-interrupted-lifecycle"></script>
+  <div id="manageMarketsOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="manageMarketsTitle">
+    <section class="modal sm">
+      <div class="modal-head">
+        <div>
+          <h2 id="manageMarketsTitle">Manage Search Markets</h2>
+          <p>Add or remove custom search countries dynamically.</p>
+        </div>
+        <button id="closeManageMarketsButton" class="icon-button" type="button" aria-label="Close dialog"><svg class="icon"><use href="#icon-x"></use></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="markets-list-container">
+          <ul id="customMarketsList" class="custom-markets-list"></ul>
+        </div>
+        <form id="addMarketForm" class="add-market-form">
+          <h3>Add custom market</h3>
+          <div class="modal-grid">
+            <div class="control">
+              <label for="marketIdInput">ID (e.g. france)</label>
+              <input id="marketIdInput" type="text" placeholder="france" required />
+            </div>
+            <div class="control">
+              <label for="marketLabelInput">Label (e.g. France)</label>
+              <input id="marketLabelInput" type="text" placeholder="France" required />
+            </div>
+            <div class="control">
+              <label for="marketCountryInput">Country Name</label>
+              <input id="marketCountryInput" type="text" placeholder="France" required />
+            </div>
+            <div class="control">
+              <label for="marketLocationInput">Default Location</label>
+              <input id="marketLocationInput" type="text" placeholder="Paris" required />
+            </div>
+            <div class="control full-control">
+              <label for="marketLocationsInput">Locations (comma-separated)</label>
+              <input id="marketLocationsInput" type="text" placeholder="Paris, Lyon, Marseille, France, Remote" required />
+            </div>
+            <div class="control full-control">
+              <label class="check-row" for="marketAuthInput">
+                <input id="marketAuthInput" type="checkbox" checked />
+                Authorized to work without sponsorship by default
+              </label>
+            </div>
+          </div>
+          <button id="addMarketButton" class="button primary" type="submit"><svg class="icon icon-sm"><use href="#icon-plus-circle"></use></svg>Add country</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="dashboard/app.js?v=20260615-minimalist-run-history"></script>
 </body>
 </html>

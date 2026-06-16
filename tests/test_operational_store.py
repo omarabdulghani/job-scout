@@ -38,7 +38,7 @@ class OperationalStoreTests(unittest.TestCase):
             counts = store.sync(dashboard, state)
             records = store.application_records(search="designer")
 
-            self.assertEqual(counts, {"jobs": 1, "runs": 1, "applications": 1})
+            self.assertEqual(counts, {"jobs": 1, "runs": 1, "applications": 1, "collected_jobs": 0})
             self.assertEqual(records[0]["application_stage"], "interview")
             self.assertEqual(records[0]["score"], 82)
             self.assertEqual(store.stage_counts()["interview"], 1)
@@ -62,6 +62,12 @@ class OperationalStoreTests(unittest.TestCase):
                         "run_id": "run_1" if index < 3 else "run_2",
                         "processed_at": f"2026-06-0{index + 1}T12:00:00+02:00",
                         "domain_category": "UX_UI_PRODUCT_DESIGN",
+                        "search_group": "primary" if index < 3 else "bridge",
+                        "matched_search_groups": (
+                            ["primary", "bridge"] if index == 0
+                            else ["primary"] if index < 3
+                            else ["bridge"]
+                        ),
                         "flags": ["easy_apply", "dutch_risk"] if index == 0 else [],
                         "apply_method": "easy_apply" if index == 0 else "external_apply",
                     }
@@ -94,6 +100,7 @@ class OperationalStoreTests(unittest.TestCase):
                 preset="dutch_risk",
             )
             hybrid = store.job_records(preset="remote_hybrid")
+            bridge = store.job_records(search_group="bridge")
 
             self.assertEqual(first_page["total"], 4)
             self.assertEqual(len(first_page["jobs"]), 2)
@@ -107,6 +114,13 @@ class OperationalStoreTests(unittest.TestCase):
             self.assertEqual(len(keys), 4)
             self.assertEqual(easy_apply["total"], 1)
             self.assertEqual(hybrid["total"], 3)
+            self.assertEqual(bridge["total"], 3)
+            self.assertTrue(
+                all(
+                    "bridge" in job.get("matched_search_groups", [])
+                    for job in bridge["jobs"]
+                )
+            )
             self.assertEqual(first_page["by_decision"], {
                 "APPLY_FIRST": 1,
                 "GOOD_OPTIONS": 3,
@@ -218,6 +232,45 @@ class OperationalStoreTests(unittest.TestCase):
             self.assertTrue(migrated["synced"])
             self.assertFalse(unchanged["synced"])
             self.assertEqual(store.job_records(apply_method="easy_apply")["total"], 1)
+
+    def test_jobs_api_payload_exposes_international_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = OperationalStore(Path(temporary) / "job_scout.db")
+            store.sync(
+                {
+                    "jobs": [
+                        {
+                            "board": "linkedin",
+                            "job_id": "intl-1",
+                            "title": "Product Designer",
+                            "company": "Example Gulf",
+                            "location": "Dubai, United Arab Emirates",
+                            "description": (
+                                "Permanent contract with relocation support, housing allowance, "
+                                "health insurance, annual flight, and visa sponsorship provided."
+                            ),
+                            "search_scope": {
+                                "platform": "linkedin",
+                                "search_market": "uae",
+                                "location": "Dubai",
+                                "radius_km": 40,
+                                "employment": "full-time-preferred",
+                            },
+                        }
+                    ],
+                    "runs": [],
+                },
+                {"jobs": {}},
+            )
+
+            record = store.job_records(search_market="uae")["jobs"][0]
+
+            self.assertEqual(record["sponsorship_status"], "confirmed")
+            self.assertEqual(record["relocation_support"], "confirmed")
+            self.assertEqual(record["housing_support"], "confirmed")
+            self.assertEqual(record["health_insurance"], "confirmed")
+            self.assertEqual(record["annual_flight_support"], "confirmed")
+            self.assertEqual(record["contract_type"], "permanent")
 
 
 if __name__ == "__main__":

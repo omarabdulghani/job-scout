@@ -27,9 +27,16 @@ from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
 from agent.scout_review_latest import ScoutReviewLatestWriter
 from agent.scout_run_logger import ScoutRunLogger
 from agent.scout_stop import clear_stop_request, stop_requested
+from agent.search_scope import (
+    EMPLOYMENT_PREFERENCES,
+    SEARCH_MARKETS,
+    build_search_scope,
+    normalize_search_scope,
+    search_scope_summary,
+)
 from agent.user_workspace import load_user_config
 
-load_dotenv()
+load_dotenv(override=True)
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 
@@ -90,8 +97,38 @@ async def main():
     parser.add_argument("query", help="Job search query, for example: 'brand strategy'")
     parser.add_argument(
         "--location",
-        default="Amstelveen",
+        default=None,
         help="Search location. Defaults to 'Amstelveen'.",
+    )
+    parser.add_argument(
+        "--search-market",
+        choices=list(SEARCH_MARKETS),
+        default=None,
+        help="Search market. Existing commands default to the Netherlands.",
+    )
+    parser.add_argument(
+        "--radius-km",
+        choices=[0, 8, 16, 40, 80, 160],
+        type=int,
+        default=None,
+        help="LinkedIn-native search radius in kilometres.",
+    )
+    parser.add_argument(
+        "--employment",
+        choices=list(EMPLOYMENT_PREFERENCES),
+        default=None,
+        help="Employment preference for discovery and scoring.",
+    )
+    parser.add_argument(
+        "--sponsorship-policy",
+        choices=["required", "not_required"],
+        default=None,
+        help="Sponsorship policy for the run. Overrides market defaults.",
+    )
+    parser.add_argument(
+        "--experience-levels",
+        default=None,
+        help="Comma-separated list of LinkedIn experience level names to filter.",
     )
     parser.add_argument(
         "--max-pages",
@@ -129,6 +166,11 @@ async def main():
         "--resume",
         action="store_true",
         help="Resume from saved scout progress when possible.",
+    )
+    parser.add_argument(
+        "--test-run",
+        action="store_true",
+        help="Run without saving any collected jobs or progress.",
     )
     parser.add_argument(
         "--process-only",
@@ -178,6 +220,10 @@ async def main():
         console.print(f"[yellow]Warning:[/yellow] {executable_warning}")
 
     profile, preferences = load_config()
+    explicit_scope_requested = any(
+        value is not None
+        for value in (args.search_market, args.radius_km, args.employment)
+    )
     fresh_policy = FreshScoutPolicy.from_preferences(
         preferences,
         enabled=args.fresh,
@@ -201,9 +247,38 @@ async def main():
         and progress.get("mode") == progress_mode
         and progress.get("status") != "completed"
         and _normalize_query(progress.get("current_query", "")) == _normalize_query(args.query)
-        and progress.get("location", "") == args.location
         and str(progress.get("max_pages", "")) == page_label
     )
+    if resume_active:
+        search_scope = normalize_search_scope(
+            progress.get("search_scope"),
+            platform=board_mode,
+            location=progress.get("location") or args.location,
+            legacy_distance_miles=int(
+                (preferences.get("linkedin") or {}).get("distance_miles", 25) or 25
+            ),
+        )
+    else:
+        # Parse experience levels
+        exp_levels = None
+        if getattr(args, "experience_levels", None):
+            exp_levels = [lvl.strip().lower() for lvl in args.experience_levels.split(",") if lvl.strip()]
+        search_scope = build_search_scope(
+            platform=board_mode,
+            search_market=args.search_market or "netherlands",
+            location=args.location,
+            radius_km=args.radius_km if args.radius_km is not None else 40,
+            employment=args.employment or "full-time-preferred",
+            search_goal="single-query",
+            legacy_mode=not explicit_scope_requested,
+            legacy_distance_miles=int(
+                (preferences.get("linkedin") or {}).get("distance_miles", 25) or 25
+            ),
+            experience_levels=exp_levels,
+            sponsorship_policy=getattr(args, "sponsorship_policy", None),
+        )
+    args.location = search_scope["location"]
+    preferences["_runtime_search_scope"] = dict(search_scope)
     stable_pages = int(progress.get("stable_total_pages_processed", 0) or 0) if resume_active else 0
     stable_jobs = int(progress.get("stable_total_jobs_processed", 0) or 0) if resume_active else 0
 
@@ -221,7 +296,7 @@ async def main():
     reporter = ScoutConsoleReporter(console=console)
     review_writer = ScoutReviewLatestWriter()
     scout_cls = IndeedJobScout if board_mode == "indeed" else LinkedInJobScout
-    scout = scout_cls(profile, preferences, browser, reporter=reporter)
+    scout = scout_cls(profile, preferences, browser, reporter=reporter, test_run=args.test_run)
     live_dashboard = None
     live_run = None
     live_run_completed = False
@@ -237,6 +312,7 @@ async def main():
                 queries=[args.query],
                 started_at=run_started_at,
                 fresh_policy=fresh_policy.as_dict() if fresh_policy.enabled else None,
+                search_scope=search_scope,
             )
             console.print(
                 "[green]Live dashboard:[/green] "
@@ -252,6 +328,8 @@ async def main():
             return
         event = dict(event)
         event["run_id"] = live_run["run_id"]
+        event["search_scope"] = dict(search_scope)
+        event["search_market"] = search_scope.get("search_market", "")
         live_dashboard.record_job(event)
 
     def update_live_progress(**updates):
@@ -272,7 +350,7 @@ async def main():
         Panel(
             f"[bold green]{board_name} Scout[/bold green]\n"
             f"Query: {args.query}\n"
-            f"Location: {args.location}\n"
+            f"Search scope: {search_scope_summary(search_scope)}\n"
             f"Pages: {page_label}\n"
             f"Fresh mode: {fresh_policy.panel_label()}\n"
             f"Browser: {args.browser}\n"
@@ -285,10 +363,13 @@ async def main():
     )
 
     progress_state = {
+        "run_id": str((live_run or {}).get("run_id") or progress.get("run_id") or ""),
+        "started_at": run_started_at,
         "mode": progress_mode,
         "status": "in_progress",
         "phase": "idle",
         "location": args.location,
+        "search_scope": dict(search_scope),
         "max_pages": page_label,
         "queries": [args.query],
         "current_query_index": 0,
@@ -308,6 +389,8 @@ async def main():
     }
 
     def save_progress(**updates):
+        if args.test_run:
+            return
         if args.process_only:
             return
         progress_state.update(updates)

@@ -1,15 +1,25 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent.safe_file_io import atomic_write_json, load_json_with_recovery
+
+if TYPE_CHECKING:
+    from agent.operational_store import OperationalStore
 
 
 class ScoutCollectedJobsStore:
     COLLECTED_JOBS_PATH = Path("scout_collected_jobs.json")
 
-    def __init__(self, path: Path | None = None):
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        operational_store: "OperationalStore | None" = None,
+    ):
         self.path = Path(path) if path else self.COLLECTED_JOBS_PATH
+        self.operational_store = operational_store
         self.jobs = self._load()
         self.index = self._build_index()
 
@@ -18,6 +28,11 @@ class ScoutCollectedJobsStore:
             entry = self.index.get(key)
             if entry:
                 return dict(entry)
+                
+        if getattr(self, "operational_store", None) and identity_keys:
+            fallback = self.operational_store.get_collected_job(identity_keys)
+            if fallback:
+                return fallback
         return None
 
     def is_analyzed(self, identity_keys: list[str]) -> bool:
@@ -126,6 +141,21 @@ class ScoutCollectedJobsStore:
             )
         )
         return matched
+
+    def trim_old_records(self, keep_days: int = 14) -> None:
+        cutoff = datetime.now().astimezone() - timedelta(days=max(1, keep_days))
+        cutoff_iso = cutoff.isoformat()
+        
+        trimmed_jobs = []
+        for job in self.jobs:
+            collected_at = str(job.get("collected_at") or "")
+            if not collected_at or collected_at >= cutoff_iso:
+                trimmed_jobs.append(job)
+                
+        if len(trimmed_jobs) < len(self.jobs):
+            self.jobs = trimmed_jobs
+            self.index = self._build_index()
+            self._write()
 
     def clear(self) -> None:
         self.jobs = []

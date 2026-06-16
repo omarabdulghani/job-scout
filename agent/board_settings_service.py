@@ -6,6 +6,15 @@ from copy import deepcopy
 from typing import Any
 
 from agent.user_workspace import UserWorkspace
+from agent.search_scope import (
+    EMPLOYMENT_PREFERENCES,
+    SEARCH_MARKETS,
+    build_search_scope,
+    built_in_missions,
+    market_profiles,
+    normalize_radius,
+    platform_capabilities,
+)
 
 
 class BoardSettingsService:
@@ -27,6 +36,11 @@ class BoardSettingsService:
             if isinstance(preferences.get("dashboard_defaults"), dict)
             else {}
         )
+        custom_missions = (
+            preferences.get("search_missions")
+            if isinstance(preferences.get("search_missions"), list)
+            else []
+        )
         return {
             "job_boards": deepcopy(boards),
             "application_behavior": deepcopy(behavior),
@@ -41,7 +55,15 @@ class BoardSettingsService:
                 "human_mode": defaults.get("human_mode", True),
                 "fresh_mode": defaults.get("fresh_mode", True),
                 "ai_budget_mode": defaults.get("ai_budget_mode", "smart"),
+                "search_market": defaults.get("search_market", "netherlands"),
+                "radius_km": defaults.get("radius_km", 40),
+                "employment": defaults.get("employment", "full-time-preferred"),
+                "search_goal": defaults.get("search_goal", "career-growth"),
             },
+            "market_profiles": market_profiles(),
+            "platform_capabilities": platform_capabilities(),
+            "built_in_missions": built_in_missions(),
+            "search_missions": deepcopy(custom_missions),
         }
 
     def save(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -143,6 +165,60 @@ class BoardSettingsService:
             defaults["fresh_mode"] = self._bool(submitted_defaults.get("fresh_mode"), True)
             budget = str(submitted_defaults.get("ai_budget_mode") or "smart").strip().lower()
             defaults["ai_budget_mode"] = budget if budget in {"smart", "deep", "off"} else "smart"
+            market = str(
+                submitted_defaults.get("search_market") or "netherlands"
+            ).strip().lower()
+            defaults["search_market"] = (
+                market if market in SEARCH_MARKETS else "netherlands"
+            )
+            defaults["radius_km"] = normalize_radius(
+                "linkedin",
+                submitted_defaults.get("radius_km", 40),
+            )
+            employment = str(
+                submitted_defaults.get("employment") or "full-time-preferred"
+            ).strip().lower()
+            defaults["employment"] = (
+                employment
+                if employment in EMPLOYMENT_PREFERENCES
+                else "full-time-preferred"
+            )
+            goal = str(
+                submitted_defaults.get("search_goal") or "career-growth"
+            ).strip().lower()
+            defaults["search_goal"] = (
+                goal
+                if goal in {"career-growth", "career-focus", "broad", "income", "custom"}
+                else "career-growth"
+            )
+
+        submitted_missions = payload.get("search_missions")
+        if isinstance(submitted_missions, list):
+            normalized_missions = [
+                mission
+                for mission in (
+                    self._mission(value, index)
+                    for index, value in enumerate(submitted_missions)
+                )
+                if mission
+            ][:20]
+            seen_ids: set[str] = set()
+            seen_names = {
+                str(mission.get("name") or "").strip().casefold()
+                for mission in built_in_missions().values()
+            }
+            for mission in normalized_missions:
+                mission_id = str(mission["id"]).casefold()
+                mission_name = str(mission["name"]).casefold()
+                if mission_id in seen_ids:
+                    raise ValueError("Saved mission IDs must be unique")
+                if mission_name in seen_names:
+                    raise ValueError(
+                        f"A saved mission named '{mission['name']}' already exists"
+                    )
+                seen_ids.add(mission_id)
+                seen_names.add(mission_name)
+            preferences["search_missions"] = normalized_missions
 
         self.workspace.save_preferences(preferences)
         return self.payload()
@@ -169,3 +245,121 @@ class BoardSettingsService:
         if cleaned and not cleaned.lower().startswith(("http://", "https://")):
             raise ValueError("Indeed search URL must start with http:// or https://")
         return cleaned
+
+    def _mission(self, value: Any, index: int) -> dict[str, Any] | None:
+        if not isinstance(value, dict):
+            return None
+        name = self._text(value.get("name"), 60)
+        if not name:
+            return None
+        platform = str(value.get("platform") or "linkedin").strip().lower()
+        if platform not in platform_capabilities():
+            raise ValueError(f"Unsupported mission platform: {platform}")
+        goal = str(value.get("search_goal") or "career-growth").strip().lower()
+        if goal not in {"career-growth", "career-focus", "broad", "income", "custom"}:
+            goal = "career-growth"
+        scope = build_search_scope(
+            platform=platform,
+            search_market=value.get("search_market") or "netherlands",
+            location=value.get("location"),
+            radius_km=value.get(
+                "radius_km",
+                25 if platform == "indeed" else 40,
+            ),
+            employment=value.get(
+                "employment",
+                "any" if platform == "indeed" else "full-time-preferred",
+            ),
+            search_goal=goal,
+            search_groups=value.get("search_groups", []),
+            experience_levels=value.get("experience_levels"),
+        )
+        return {
+            "id": self._text(value.get("id") or f"custom-{index + 1}", 80),
+            "name": name,
+            "platform": scope["platform"],
+            "search_market": scope["search_market"],
+            "location": scope["location"],
+            "radius_km": scope["radius_km"],
+            "search_goal": goal,
+            "search_groups": [
+                group
+                for group in value.get("search_groups", [])
+                if group in {"primary", "bridge", "fallback"}
+            ],
+            "employment": scope["employment"],
+            "experience_levels": scope["experience_levels"],
+        }
+
+    def save_market(self, payload: dict[str, Any]) -> dict[str, Any]:
+        market_id = str(payload.get("id") or "").strip().lower().replace("_", "-")
+        if not market_id:
+            raise ValueError("Market ID is required")
+            
+        profile = payload.get("profile")
+        if not isinstance(profile, dict):
+            raise ValueError("Market profile details must be an object")
+            
+        # Validate required fields
+        required_fields = ["label", "country", "default_location", "locations"]
+        for field in required_fields:
+            if not profile.get(field):
+                raise ValueError(f"Market profile '{field}' is required")
+                
+        # Seed defaults for optional fields
+        profile.setdefault("availability", "stable")
+        profile.setdefault("country_codes", [])
+        profile.setdefault("authorized_without_sponsorship", True)
+        profile.setdefault("sponsorship_policy", "not_required")
+        profile.setdefault("language_policy", "english_friendly")
+        profile.setdefault("compatible_languages", ["English"])
+        
+        # Load current custom markets
+        path = self.workspace.path / "custom_markets.json"
+        import json
+        custom = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    custom = json.load(f) or {}
+            except Exception:
+                pass
+                
+        custom[market_id] = profile
+        
+        # Save atomically
+        from agent.safe_file_io import atomic_write_json
+        atomic_write_json(path, custom)
+        
+        # Reload search_scope profiles in memory
+        from agent.search_scope import reload_market_profiles
+        reload_market_profiles()
+        
+        return self.payload()
+
+    def delete_market(self, payload: dict[str, Any]) -> dict[str, Any]:
+        market_id = str(payload.get("id") or "").strip().lower().replace("_", "-")
+        if not market_id:
+            raise ValueError("Market ID is required")
+            
+        path = self.workspace.path / "custom_markets.json"
+        if path.exists():
+            import json
+            custom = {}
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    custom = json.load(f) or {}
+            except Exception:
+                pass
+                
+            if market_id in custom:
+                custom.pop(market_id)
+                from agent.safe_file_io import atomic_write_json
+                atomic_write_json(path, custom)
+                
+                # Reload search_scope profiles in memory
+                from agent.search_scope import reload_market_profiles
+                reload_market_profiles()
+                
+        return self.payload()
+

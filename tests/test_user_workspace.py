@@ -39,7 +39,10 @@ class UserWorkspaceTests(unittest.TestCase):
             self.assertEqual(profile["cv_path"], "data/user_workspace/cv/test.pdf")
             self.assertTrue((workspace.cv_dir / "test.pdf").exists())
             self.assertEqual(workspace.strategy_path.read_text(encoding="utf-8"), "Strategy")
-            self.assertEqual(workspace.search_queries_path.read_text(encoding="utf-8"), "junior designer\n")
+            queries = workspace.search_queries_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(queries[0], "junior designer")
+            self.assertIn("customer support", queries)
+            self.assertTrue(workspace.search_query_groups_path.exists())
 
     def test_saving_profile_creates_backup_and_preserves_defaults(self):
         with TemporaryDirectory() as directory:

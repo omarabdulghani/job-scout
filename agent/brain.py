@@ -13,7 +13,7 @@ import anthropic
 from dotenv import load_dotenv
 from pypdf import PdfReader
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class LMStudioRetryableScoringError(RuntimeError):
@@ -97,8 +97,8 @@ class JobBrain:
         Path("data/user_workspace/portfolio_notes.txt"),
         Path("data/portfolio_site_notes.txt"),
     )
-    LMSTUDIO_SCORING_BASE_MAX_TOKENS = 350
-    LMSTUDIO_SCORING_REASONING_MAX_TOKENS = 900
+    LMSTUDIO_SCORING_BASE_MAX_TOKENS = 512
+    LMSTUDIO_SCORING_REASONING_MAX_TOKENS = 2500
     LMSTUDIO_SCORING_INITIAL_RETRY_DELAY_SECONDS = 5
     LMSTUDIO_SCORING_MAX_RETRY_DELAY_SECONDS = 60
     GEMINI_SCORING_MAX_OUTPUT_TOKENS = 512
@@ -508,6 +508,7 @@ class JobBrain:
     }
 
     def __init__(self, profile: dict, preferences: dict):
+        load_dotenv(override=True)
         self.profile = profile
         self.preferences = preferences
         self.client = None
@@ -640,6 +641,48 @@ class JobBrain:
             or os.getenv("OPENAI_COMPAT_API_KEY")
             or ""
         ).strip()
+        self.deepseek_api_key = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
+        self.deepseek_base_url = (
+            os.getenv("DEEPSEEK_BASE_URL")
+            or preferences.get("deepseek_base_url")
+            or "https://api.deepseek.com/v1"
+        ).strip()
+        self.deepseek_model = (
+            os.getenv("DEEPSEEK_MODEL")
+            or preferences.get("deepseek_model")
+            or "deepseek-chat"
+        ).strip()
+        self.deepseek_max_output_tokens = self._env_int(
+            "DEEPSEEK_MAX_OUTPUT_TOKENS",
+            preferences.get("deepseek_max_output_tokens", self.HOSTED_SCORING_MAX_OUTPUT_TOKENS),
+            minimum=64,
+        )
+        self.deepseek_max_attempts = self._env_int(
+            "DEEPSEEK_MAX_ATTEMPTS",
+            preferences.get("deepseek_max_attempts", self.HOSTED_SCORING_MAX_ATTEMPTS),
+            minimum=1,
+        )
+        self.openrouter_api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+        self.openrouter_base_url = (
+            os.getenv("OPENROUTER_BASE_URL")
+            or preferences.get("openrouter_base_url")
+            or "https://openrouter.ai/api/v1"
+        ).strip()
+        self.openrouter_model = (
+            os.getenv("OPENROUTER_MODEL")
+            or preferences.get("openrouter_model")
+            or "deepseek/deepseek-v4-flash:free"
+        ).strip()
+        self.openrouter_max_output_tokens = self._env_int(
+            "OPENROUTER_MAX_OUTPUT_TOKENS",
+            preferences.get("openrouter_max_output_tokens", self.HOSTED_SCORING_MAX_OUTPUT_TOKENS),
+            minimum=64,
+        )
+        self.openrouter_max_attempts = self._env_int(
+            "OPENROUTER_MAX_ATTEMPTS",
+            preferences.get("openrouter_max_attempts", self.HOSTED_SCORING_MAX_ATTEMPTS),
+            minimum=1,
+        )
         self.openai_compatible_base_url = (
             os.getenv("OPENAI_COMPATIBLE_BASE_URL")
             or os.getenv("OPENAI_COMPAT_BASE_URL")
@@ -686,6 +729,8 @@ class JobBrain:
             "openai": "openai_compatible",
             "openai_compat": "openai_compatible",
             "compatible": "openai_compatible",
+            "openrouter": "openrouter",
+            "open_router": "openrouter",
         }
         return aliases.get(normalized, normalized or "auto")
 
@@ -715,6 +760,8 @@ class JobBrain:
             return self._hosted_model_label("ollama_cloud")
         if self.scoring_backend == "openai_compatible":
             return self._hosted_model_label("openai_compatible")
+        if self.scoring_backend == "deepseek":
+            return self._hosted_model_label("deepseek")
         if self.scoring_backend == "auto":
             backend = self._first_configured_auto_backend()
             return self._hosted_model_label(backend) if backend else "auto:<no configured providers>"
@@ -895,6 +942,15 @@ class JobBrain:
         skill_levels = self.profile.get("skill_levels", {})
         strategy = self.profile.get("career_strategy", {})
         personal = self.profile.get("personal", {})
+        search_scope = dict(self.preferences.get("_runtime_search_scope") or {})
+        market = str(
+            search_scope.get("market_label")
+            or search_scope.get("country")
+            or "Netherlands"
+        )
+        sponsorship_policy = str(
+            search_scope.get("sponsorship_policy") or "not_required"
+        )
 
         return {
             "search_query": search_query,
@@ -915,8 +971,17 @@ class JobBrain:
                 "arabic": "native",
                 "dutch": "B1/intermediate; never claim fluent Dutch",
             },
-            "work_authorization": "Authorized to work in the Netherlands/EU without sponsorship",
-            "commute_base": "Amstelveen; Amsterdam/Amstelveen/Hoofddorp/Schiphol/Haarlem/Weesp are practical; Utrecht/Hilversum/Leiden/The Hague/Rotterdam/Almere need office-day review",
+            "work_authorization": (
+                "Authorized to work in the Netherlands/Germany/EU without sponsorship"
+                if sponsorship_policy == "not_required"
+                else f"Requires employer-sponsored work authorization for {market}"
+            ),
+            "search_scope": search_scope,
+            "commute_base": (
+                "Amstelveen; assess commute and office days for Netherlands roles"
+                if search_scope.get("search_market", "netherlands") == "netherlands"
+                else f"Conditional relocation to {market}; weigh role quality, salary, location, and working arrangement"
+            ),
             "portfolio_url": personal.get("portfolio_url", "https://www.omarabdulghani.com"),
             "client_project_experience": self.profile.get("client_project_experience", ""),
             "pphe_internship_detail": self._compact_scoring_text(
@@ -937,6 +1002,7 @@ class JobBrain:
         }
 
     def _build_opportunity_scope_summary(self) -> dict:
+        search_scope = dict(self.preferences.get("_runtime_search_scope") or {})
         return {
             "primary_goal": "Find realistic opportunities that are good for Omar's future, financially and career-wise.",
             "not_perfect_match_required": True,
@@ -998,6 +1064,13 @@ class JobBrain:
                 "financial/stability value",
                 "learning curve feasibility",
                 "clear hard blockers only",
+            ],
+            "international_scope": search_scope,
+            "international_rules": [
+                "Germany requires an English-friendly working environment; mandatory German is a blocker",
+                "Gulf roles require confirmed or likely employer sponsorship",
+                "unknown Gulf sponsorship requires human review and cannot be Apply First",
+                "consider relocation, housing, insurance, flights, salary, and contract stability",
             ],
         }
 
@@ -1356,7 +1429,7 @@ class JobBrain:
         if simplified:
             contract_lines = [
                 "Return ONLY this JSON:",
-                '{"interview_probability_score": <integer 0-100>, "reason": "<one short sentence>"}',
+                '{"interview_probability_score": <integer 0-100>, "reason": "<one short sentence>", "career_lane": "<primary|bridge|fallback|other>", "employment_types": ["<full-time|part-time|internship|contract|temporary>"], "weekly_hours": "<short text or empty>", "flexible_hours": <true|false>, "sponsorship_status": "<not_required|confirmed|likely|unknown|unavailable>", "relocation_support": "<not_required|confirmed|unavailable|unknown>", "housing_support": "<not_required|confirmed|unavailable|unknown>", "health_insurance": "<not_required|confirmed|unavailable|unknown>", "annual_flight_support": "<not_required|confirmed|unavailable|unknown>", "compensation_text": "<short stated compensation or empty>", "contract_type": "<permanent|fixed-term|temporary|contract|internship|unknown>", "market_concerns": ["<short concern>"]}',
                 "Rules:",
                 "- No text before JSON",
                 "- No text after JSON",
@@ -1371,7 +1444,7 @@ class JobBrain:
             contract_lines = [
                 "You are a scoring API.",
                 "You MUST return ONLY one valid JSON object.",
-                'Output EXACTLY this shape: {"interview_probability_score": <integer 0-100>, "reason": "<one short sentence>"}',
+                'Output EXACTLY this shape: {"interview_probability_score": <integer 0-100>, "reason": "<one short sentence>", "career_lane": "<primary|bridge|fallback|other>", "employment_types": ["<full-time|part-time|internship|contract|temporary>"], "weekly_hours": "<short text or empty>", "flexible_hours": <true|false>, "sponsorship_status": "<not_required|confirmed|likely|unknown|unavailable>", "relocation_support": "<not_required|confirmed|unavailable|unknown>", "housing_support": "<not_required|confirmed|unavailable|unknown>", "health_insurance": "<not_required|confirmed|unavailable|unknown>", "annual_flight_support": "<not_required|confirmed|unavailable|unknown>", "compensation_text": "<short stated compensation or empty>", "contract_type": "<permanent|fixed-term|temporary|contract|internship|unknown>", "market_concerns": ["<short concern>"]}',
                 "The response is invalid unless the first character is { and the last character is }.",
                 "No text before JSON.",
                 "No text after JSON.",
@@ -1510,12 +1583,43 @@ class JobBrain:
                 "max_attempts": self.openai_compatible_max_attempts,
                 "openai_compatible": True,
             }
+        if normalized == "deepseek":
+            return {
+                "backend": "deepseek",
+                "label": "DeepSeek",
+                "api_key": self.deepseek_api_key,
+                "base_url": self.deepseek_base_url,
+                "model": self.deepseek_model,
+                "max_output_tokens": self.deepseek_max_output_tokens,
+                "max_attempts": self.deepseek_max_attempts,
+                "openai_compatible": True,
+            }
+        if normalized == "openrouter":
+            return {
+                "backend": "openrouter",
+                "label": "OpenRouter",
+                "api_key": self.openrouter_api_key,
+                "base_url": self.openrouter_base_url,
+                "model": self.openrouter_model,
+                "max_output_tokens": self.openrouter_max_output_tokens,
+                "max_attempts": self.openrouter_max_attempts,
+                "openai_compatible": True,
+            }
         raise RuntimeError(f"Unsupported hosted AI backend '{backend}'.")
 
     def _hosted_model_label(self, backend: str) -> str:
         if backend == "gemini":
             model_name = self.gemini_model or "<unset>"
             return f"gemini:{model_name}"
+        if backend == "claude":
+            model_name = self.model or "<unset>"
+            return f"claude:{model_name}"
+        if backend == "lmstudio":
+            model_name = self.lmstudio_model or "<unset>"
+            return f"lmstudio:{model_name}"
+        if backend == "deepseek":
+            model_name = self.deepseek_model or "<unset>"
+            return f"deepseek:{model_name}"
         config = self._hosted_provider_config(backend)
         model_name = config.get("model") or "<unset>"
         return f"{config['backend']}:{model_name}"
@@ -1544,7 +1648,7 @@ class JobBrain:
             return bool(os.getenv("ANTHROPIC_API_KEY") and self.model)
         if backend == "lmstudio":
             return bool(self.lmstudio_base_url and self.lmstudio_model)
-        if backend in {"cerebras", "ollama_cloud", "openai_compatible"}:
+        if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
             try:
                 config = self._hosted_provider_config(backend)
             except RuntimeError:
@@ -1564,24 +1668,85 @@ class JobBrain:
         configured = self._configured_auto_backends()
         return configured[0] if configured else ""
 
-    def _hosted_scoring_response_format(self) -> dict:
+    def _hosted_scoring_response_format(self, *, backend: str = "") -> dict:
+        # Some providers (e.g. Groq llama-3.1-8b-instant) reject json_schema
+        # and only accept json_object.  Track per-backend so the fallback is
+        # remembered for subsequent calls within the same session.
+        if not hasattr(self, "_json_schema_unsupported_backends"):
+            self._json_schema_unsupported_backends: set[str] = set()
+        if backend and backend in self._json_schema_unsupported_backends:
+            return {"type": "json_object"}
         return self._lmstudio_scoring_response_format()
 
     def _plain_scoring_json_schema(self) -> dict:
+        properties = self._scoring_schema_properties()
         return {
             "type": "object",
-            "properties": {
-                "interview_probability_score": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100,
-                },
-                "reason": {
-                    "type": "string",
-                },
-            },
-            "required": ["interview_probability_score", "reason"],
+            "properties": properties,
+            "required": list(properties),
             "additionalProperties": False,
+        }
+
+    def _scoring_schema_properties(self) -> dict:
+        return {
+            "interview_probability_score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+            },
+            "reason": {"type": "string"},
+            "career_lane": {
+                "type": "string",
+                "enum": ["primary", "bridge", "fallback", "other"],
+            },
+            "employment_types": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "weekly_hours": {"type": "string"},
+            "flexible_hours": {"type": "boolean"},
+            "sponsorship_status": {
+                "type": "string",
+                "enum": [
+                    "not_required",
+                    "confirmed",
+                    "likely",
+                    "unknown",
+                    "unavailable",
+                ],
+            },
+            "relocation_support": {
+                "type": "string",
+                "enum": ["not_required", "confirmed", "unavailable", "unknown"],
+            },
+            "housing_support": {
+                "type": "string",
+                "enum": ["not_required", "confirmed", "unavailable", "unknown"],
+            },
+            "health_insurance": {
+                "type": "string",
+                "enum": ["not_required", "confirmed", "unavailable", "unknown"],
+            },
+            "annual_flight_support": {
+                "type": "string",
+                "enum": ["not_required", "confirmed", "unavailable", "unknown"],
+            },
+            "compensation_text": {"type": "string"},
+            "contract_type": {
+                "type": "string",
+                "enum": [
+                    "permanent",
+                    "fixed-term",
+                    "temporary",
+                    "contract",
+                    "internship",
+                    "unknown",
+                ],
+            },
+            "market_concerns": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
         }
 
     def _normalize_hosted_base_url(self, base_url: str, *, openai_compatible: bool) -> str:
@@ -1598,6 +1763,10 @@ class JobBrain:
             return "auth_or_permission"
         if any(marker in message for marker in ("429", "quota", "rate", "resource_exhausted", "too many requests", "limit exceeded")):
             return "rate_limit"
+        if any(marker in message for marker in ("402", "payment required", "insufficient balance", "billing", "insufficient_quota")):
+            return "billing_error"
+        if any(marker in message for marker in ("404", "not found", "model_not_found", "does not exist")):
+            return "model_not_found"
         if any(marker in message for marker in ("invalid_request", "invalid request", "bad request", "400")):
             return "invalid_request"
         if any(marker in message for marker in ("500", "502", "503", "504", "deadline", "timeout", "unavailable", "temporarily")):
@@ -1684,15 +1853,19 @@ class JobBrain:
         )
         self._hosted_request_settings_logged.add(backend)
 
-    def _hosted_request_headers(self, api_key: str) -> dict:
+    def _hosted_request_headers(self, api_key: str, backend: str = "") -> dict:
         # Some hosted APIs sit behind WAF rules that reject Python's default urllib
         # user-agent before the request reaches the provider API.
-        return {
+        headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "job-agent/1.0",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
+        if backend == "openrouter":
+            headers["HTTP-Referer"] = "https://github.com/omarabdulghani/job-hunt"
+            headers["X-Title"] = "Job Hunt Agent"
+        return headers
 
     def _openai_compatible_chat_completion(
         self,
@@ -1707,18 +1880,18 @@ class JobBrain:
             openai_compatible=True,
         )
         self._log_hosted_request_settings_once(config["backend"], max_tokens=max_tokens)
+        response_format = self._hosted_scoring_response_format(backend=config["backend"])
         payload = {
             "model": config["model"],
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "temperature": 0,
             "stream": False,
-            "response_format": self._hosted_scoring_response_format(),
         }
         request = Request(
             f"{base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
-            headers=self._hosted_request_headers(config["api_key"]),
+            headers=self._hosted_request_headers(config["api_key"], backend=config["backend"]),
             method="POST",
         )
         try:
@@ -1731,13 +1904,58 @@ class JobBrain:
                 f"{body.strip() or exc.reason}"
             )
             kind = self._classify_hosted_exception(RuntimeError(message))
-            if kind in {"rate_limit", "transient_api_error", "api_error"}:
+            # If provider rejected json_schema (400), fall back to json_object
+            # and retry immediately instead of burning an attempt.
+            if kind == "invalid_request" and response_format.get("type") == "json_schema":
+                if not hasattr(self, "_json_schema_unsupported_backends"):
+                    self._json_schema_unsupported_backends = set()
+                self._json_schema_unsupported_backends.add(config["backend"])
+                self._log_scoring_event(
+                    "fallback",
+                    f"{config['label']} does not support json_schema; retrying with json_object",
+                )
+                # Retry with json_object format
+                payload["response_format"] = {"type": "json_object"}
+                request = Request(
+                    f"{base_url}/chat/completions",
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers=self._hosted_request_headers(config["api_key"], backend=config["backend"]),
+                    method="POST",
+                )
+                try:
+                    with urlopen(request, timeout=120) as response:
+                        body = response.read().decode("utf-8", errors="replace")
+                except HTTPError as fallback_exc:
+                    fb_body = fallback_exc.read().decode("utf-8", errors="replace")
+                    fb_message = (
+                        f"{config['label']} chat completion failed with HTTP {fallback_exc.code}: "
+                        f"{fb_body.strip() or fallback_exc.reason}"
+                    )
+                    fb_kind = self._classify_hosted_exception(RuntimeError(fb_message))
+                    if fb_kind in {"rate_limit", "transient_api_error", "api_error"}:
+                        raise HostedProviderRetryableScoringError(
+                            fb_kind,
+                            fb_message,
+                            retry_after_seconds=self._retry_after_seconds_from_headers(fallback_exc.headers),
+                        ) from fallback_exc
+                    raise RuntimeError(fb_message) from fallback_exc
+                except URLError as fallback_exc:
+                    raise HostedProviderRetryableScoringError(
+                        "unreachable",
+                        f"{config['label']} is not reachable at {base_url}: {fallback_exc.reason}",
+                    ) from fallback_exc
+                # Fall through to the normal JSON parsing below
+            elif kind in {"rate_limit", "transient_api_error", "api_error"}:
                 raise HostedProviderRetryableScoringError(
                     kind,
                     message,
                     retry_after_seconds=self._retry_after_seconds_from_headers(exc.headers),
                 ) from exc
-            raise RuntimeError(message) from exc
+            elif kind in {"billing_error", "model_not_found"}:
+                # Don't waste retries on permanent errors
+                raise RuntimeError(message) from exc
+            else:
+                raise RuntimeError(message) from exc
         except URLError as exc:
             raise HostedProviderRetryableScoringError(
                 "unreachable",
@@ -1773,6 +1991,17 @@ class JobBrain:
         content = self._normalize_lmstudio_message_part(message.get("content", ""))
         if content:
             return content
+        # Some models put useful text in 'thinking' even when think=False.
+        # Try to extract JSON from thinking content as a fallback.
+        thinking = self._normalize_lmstudio_message_part(message.get("thinking", ""))
+        if thinking:
+            # Try to find JSON in the thinking text
+            try:
+                parsed = self._parse_json_object(thinking, required_keys=("interview_probability_score", "reason"))
+                if isinstance(parsed, dict):
+                    return json.dumps(parsed, ensure_ascii=False)
+            except (json.JSONDecodeError, Exception):
+                pass
         raise HostedProviderRetryableScoringError(
             "empty_assistant_message",
             "Ollama Cloud returned an empty assistant message.",
@@ -1807,7 +2036,7 @@ class JobBrain:
         request = Request(
             f"{base_url}/chat",
             data=json.dumps(payload).encode("utf-8"),
-            headers=self._hosted_request_headers(config["api_key"]),
+            headers=self._hosted_request_headers(config["api_key"], backend="ollama_cloud"),
             method="POST",
         )
         try:
@@ -1905,7 +2134,8 @@ class JobBrain:
                     "retry",
                     (
                         f"{config['label']} retry {next_attempt} | waiting {delay_seconds}s | "
-                        f"cause={exc.kind} | backend={config['backend']} model={config['model']}"
+                        f"cause={exc.kind} | backend={config['backend']} model={config['model']} | "
+                        f"detail={str(exc)[:200]}"
                     ),
                 )
                 time.sleep(delay_seconds)
@@ -1924,7 +2154,7 @@ class JobBrain:
                 prompt=prompt,
                 max_tokens=self.gemini_max_output_tokens,
             )
-        if backend in {"cerebras", "ollama_cloud", "openai_compatible"}:
+        if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
             return self._request_hosted_scoring_response_with_retries(
                 backend=backend,
                 prompt=prompt,
@@ -2048,19 +2278,11 @@ class JobBrain:
 
     def _gemini_scoring_response_schema(self) -> dict:
         # Gemini structured output uses a plain JSON schema for the scorer contract.
+        properties = self._scoring_schema_properties()
         return {
             "type": "object",
-            "properties": {
-                "interview_probability_score": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100,
-                },
-                "reason": {
-                    "type": "string",
-                },
-            },
-            "required": ["interview_probability_score", "reason"],
+            "properties": properties,
+            "required": list(properties),
         }
 
     def _gemini_request_config(self, *, max_tokens: int) -> dict:
@@ -2398,6 +2620,7 @@ class JobBrain:
         self._lmstudio_request_settings_logged = True
 
     def _lmstudio_scoring_response_format(self) -> dict:
+        properties = self._scoring_schema_properties()
         return {
             "type": "json_schema",
             "json_schema": {
@@ -2405,17 +2628,8 @@ class JobBrain:
                 "strict": True,
                 "schema": {
                     "type": "object",
-                    "properties": {
-                        "interview_probability_score": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 100,
-                        },
-                        "reason": {
-                            "type": "string",
-                        },
-                    },
-                    "required": ["interview_probability_score", "reason"],
+                    "properties": properties,
+                    "required": list(properties),
                     "additionalProperties": False,
                 },
             },
@@ -2431,8 +2645,20 @@ class JobBrain:
         reasoning_config = self._lmstudio_resolved_reasoning_config()
         payload = {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a JSON-only response API. "
+                        "You MUST respond with valid JSON and nothing else. "
+                        "No markdown, no code blocks, no explanations, no thinking out loud. "
+                        "Output ONLY the raw JSON object starting with { and ending with }."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
             "max_tokens": max_tokens,
+            "temperature": 0,
             "stream": False,
             "response_format": self._lmstudio_scoring_response_format(),
         }
@@ -2489,7 +2715,7 @@ class JobBrain:
 
     def _parse_scoring_payload(self, raw: str, *, backend: str) -> dict:
         backend = self._normalize_scoring_backend(backend)
-        structured_backends = {"lmstudio", "gemini", "cerebras", "ollama_cloud", "openai_compatible"}
+        structured_backends = {"lmstudio", "gemini", "cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}
         try:
             parsed = self._parse_json_object(
                 raw,
@@ -2506,7 +2732,7 @@ class JobBrain:
                     "json_parse_failure",
                     "Gemini returned a completion that could not be parsed as JSON.",
                 ) from exc
-            if backend in {"cerebras", "ollama_cloud", "openai_compatible"}:
+            if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
                 label = self._hosted_provider_config(backend)["label"]
                 raise HostedProviderRetryableScoringError(
                     "json_parse_failure",
@@ -2605,14 +2831,14 @@ class JobBrain:
             return self._lmstudio_chat_completion(prompt=prompt, max_tokens=max_tokens)
         if backend == "gemini":
             return self._gemini_generate_content(prompt=prompt, max_tokens=max_tokens)
-        if backend in {"cerebras", "ollama_cloud", "openai_compatible"}:
+        if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
             parsed, model_label = self._request_hosted_scoring_response_with_retries(
                 backend=backend,
                 prompt=prompt,
             )
             return json.dumps(parsed, ensure_ascii=False), model_label
         raise RuntimeError(
-            f"Unsupported AI_BACKEND '{self.scoring_backend}'. Use 'auto', 'cerebras', 'ollama_cloud', 'openai_compatible', 'gemini', 'claude', or 'lmstudio'."
+            f"Unsupported AI_BACKEND '{self.scoring_backend}'. Use 'auto', 'cerebras', 'ollama_cloud', 'openai_compatible', 'deepseek', 'gemini', 'claude', 'openrouter', or 'lmstudio'."
         )
 
     def _get_client(self):
@@ -3543,7 +3769,7 @@ Instructions:
                 prompt=rich_prompt_text,
                 max_tokens=scoring_max_tokens,
             )
-        elif self.scoring_backend in {"auto", "cerebras", "ollama_cloud", "openai_compatible"}:
+        elif self.scoring_backend in {"auto", "cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
             if self.scoring_backend == "auto":
                 configured_backends = self._configured_auto_backends()
                 request_config = {
@@ -3551,7 +3777,7 @@ Instructions:
                     "max_output_tokens_by_backend": {
                         backend: (
                             self._hosted_provider_config(backend).get("max_output_tokens")
-                            if backend in {"cerebras", "ollama_cloud", "openai_compatible"}
+                            if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}
                             else self.gemini_max_output_tokens
                         )
                         for backend in configured_backends
@@ -3631,12 +3857,73 @@ Instructions:
             "reason": reason[:320],
             "model": model_label,
             "used_cv": include_cv,
+            "career_lane": str(parsed.get("career_lane") or "").strip().lower(),
+            "employment_types": [
+                str(value or "").strip().lower()
+                for value in (
+                    parsed.get("employment_types")
+                    if isinstance(parsed.get("employment_types"), list)
+                    else []
+                )
+                if str(value or "").strip()
+            ],
+            "weekly_hours": re.sub(
+                r"\s+",
+                " ",
+                str(parsed.get("weekly_hours") or "").strip(),
+            )[:80],
+            "flexible_hours": bool(parsed.get("flexible_hours")),
+            "sponsorship_status": str(
+                parsed.get("sponsorship_status") or ""
+            ).strip().lower(),
+            "relocation_support": str(
+                parsed.get("relocation_support") or "unknown"
+            ).strip().lower(),
+            "housing_support": str(
+                parsed.get("housing_support") or "unknown"
+            ).strip().lower(),
+            "health_insurance": str(
+                parsed.get("health_insurance") or "unknown"
+            ).strip().lower(),
+            "annual_flight_support": str(
+                parsed.get("annual_flight_support") or "unknown"
+            ).strip().lower(),
+            "compensation_text": re.sub(
+                r"\s+",
+                " ",
+                str(parsed.get("compensation_text") or "").strip(),
+            )[:160],
+            "contract_type": str(
+                parsed.get("contract_type") or "unknown"
+            ).strip().lower(),
+            "market_concerns": [
+                re.sub(r"\s+", " ", str(value or "").strip())[:140]
+                for value in (
+                    parsed.get("market_concerns")
+                    if isinstance(parsed.get("market_concerns"), list)
+                    else []
+                )
+                if str(value or "").strip()
+            ][:5],
         }
 
     def _parse_json_object(self, raw: str, required_keys: tuple[str, ...] = ()) -> dict:
         cleaned = (raw or "").strip()
-        cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.I).strip()
-        cleaned = re.sub(r"```$", "", cleaned).strip()
+        # Strip <think>...</think> reasoning blocks (Gemma 4 thinking mode)
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+        # Strip markdown code fences anywhere in the text (```json ... ```)
+        cleaned = re.sub(r"```(?:json)?\s*", "", cleaned, flags=re.I).strip()
+        cleaned = re.sub(r"```\s*$", "", cleaned).strip()
+        # Also strip leading/trailing prose around JSON
+        # Find the first { and last } to isolate the JSON object
+        first_brace = cleaned.find("{")
+        last_brace = cleaned.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            json_candidate = cleaned[first_brace:last_brace + 1]
+            try:
+                return json.loads(json_candidate)
+            except json.JSONDecodeError:
+                pass
 
         try:
             return json.loads(cleaned)

@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.panel import Panel
 from agent.user_workspace import load_user_config
 
-load_dotenv()
+load_dotenv(override=True)
 console = Console()
 
 DEFAULT_CV_PATH = Path("cv/Omar Abdulghani - CV Resume (English).pdf")

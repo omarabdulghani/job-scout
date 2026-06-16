@@ -16,10 +16,11 @@ from agent.dashboard_user_state import (
     normalize_status,
 )
 from agent.job_metadata import normalize_apply_method_fields
+from agent.job_scope_metadata import enrich_job_scope_metadata
 
 
-SCHEMA_VERSION = 3
-SYNC_VERSION = 2
+SCHEMA_VERSION = 7
+SYNC_VERSION = 7
 
 
 class OperationalStore:
@@ -42,6 +43,11 @@ class OperationalStore:
         active_job_keys: list[str] = []
         active_run_ids: list[str] = []
         active_application_keys: list[str] = []
+        run_scopes = {
+            str(run.get("run_id") or ""): dict(run.get("search_scope") or {})
+            for run in runs
+            if isinstance(run, dict) and run.get("run_id")
+        }
         with self._connect() as connection:
             connection.execute("BEGIN")
             for job in jobs:
@@ -54,6 +60,15 @@ class OperationalStore:
                 saved = saved_jobs.get(job_key, {})
                 saved = saved if isinstance(saved, dict) else {}
                 merged_job = normalize_apply_method_fields(job)
+                scope_metadata = enrich_job_scope_metadata(
+                    merged_job,
+                    merged_job.get("search_scope")
+                    or run_scopes.get(str(merged_job.get("run_id") or ""), {}),
+                    ai_result=merged_job,
+                )
+                for key, value in scope_metadata.items():
+                    if merged_job.get(key) in (None, "", [], {}):
+                        merged_job[key] = value
                 merged_job["job_key"] = job_key
                 merged_job["manual_status"] = normalize_status(saved.get("status"))
                 merged_job["manual_status_label"] = str(saved.get("status_label") or "")
@@ -72,14 +87,24 @@ class OperationalStore:
                     for flag in merged_job.get("flags", [])
                     if str(flag).strip()
                 ]
+                search_groups = []
+                for group in [
+                    merged_job.get("search_group"),
+                    *merged_job.get("matched_search_groups", []),
+                ]:
+                    cleaned_group = str(group or "").strip()
+                    if cleaned_group and cleaned_group not in search_groups:
+                        search_groups.append(cleaned_group)
                 connection.execute(
                     """
                     INSERT INTO jobs (
                         job_key, board, job_id, title, company, location, url,
                         decision_category, score, run_id, processed_at,
-                        domain_category, flags_text, apply_method, manual_status,
+                        domain_category, search_group, search_groups_text, flags_text,
+                        apply_method, manual_status, career_lane, search_market, country,
+                        employment_types_text, flexible_hours, sponsorship_status,
                         payload_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(job_key) DO UPDATE SET
                         board=excluded.board,
                         job_id=excluded.job_id,
@@ -92,9 +117,17 @@ class OperationalStore:
                         run_id=excluded.run_id,
                         processed_at=excluded.processed_at,
                         domain_category=excluded.domain_category,
+                        search_group=excluded.search_group,
+                        search_groups_text=excluded.search_groups_text,
                         flags_text=excluded.flags_text,
                         apply_method=excluded.apply_method,
                         manual_status=excluded.manual_status,
+                        career_lane=excluded.career_lane,
+                        search_market=excluded.search_market,
+                        country=excluded.country,
+                        employment_types_text=excluded.employment_types_text,
+                        flexible_hours=excluded.flexible_hours,
+                        sponsorship_status=excluded.sponsorship_status,
                         payload_json=excluded.payload_json
                     """,
                     (
@@ -110,9 +143,21 @@ class OperationalStore:
                         str(merged_job.get("run_id") or ""),
                         str(merged_job.get("processed_at") or ""),
                         str(merged_job.get("domain_category") or ""),
+                        str(merged_job.get("search_group") or ""),
+                        "\n".join(search_groups),
                         "\n".join(flags),
                         str(merged_job["apply_method"]),
                         str(merged_job.get("manual_status") or "unreviewed"),
+                        str(merged_job.get("career_lane") or "other"),
+                        str(merged_job.get("search_market") or "netherlands"),
+                        str(merged_job.get("country") or ""),
+                        "\n".join(
+                            str(value).strip()
+                            for value in merged_job.get("employment_types", [])
+                            if str(value).strip()
+                        ),
+                        1 if merged_job.get("flexible_hours") else 0,
+                        str(merged_job.get("sponsorship_status") or "not_required"),
                         json.dumps(merged_job, ensure_ascii=False),
                     ),
                 )
@@ -143,8 +188,6 @@ class OperationalStore:
                         json.dumps(run, ensure_ascii=False),
                     ),
                 )
-            self._delete_missing(connection, "jobs", "job_key", active_job_keys)
-            self._delete_missing(connection, "runs", "run_id", active_run_ids)
             for job_key, record in saved_jobs.items():
                 if not isinstance(record, dict):
                     continue
@@ -196,7 +239,84 @@ class OperationalStore:
                 "runs": connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0],
                 "applications": connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0],
             }
+            try:
+                counts["collected_jobs"] = connection.execute("SELECT COUNT(*) FROM collected_jobs").fetchone()[0]
+            except sqlite3.OperationalError:
+                pass
         return counts
+
+    def sync_collected_jobs(self, jobs: list[dict[str, Any]]) -> int:
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            for job in jobs:
+                if not isinstance(job, dict):
+                    continue
+                identity_keys = job.get("identity_keys", [])
+                if not identity_keys:
+                    continue
+                primary_key = str(identity_keys[0])
+                identity_keys_text = "\n".join(str(k) for k in identity_keys)
+                
+                connection.execute(
+                    """
+                    INSERT INTO collected_jobs (
+                        primary_identity_key, identity_keys_text, job_id, query,
+                        title, company, location, url, apply_method,
+                        collected_at, analyzed_at, analysis_status, payload_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(primary_identity_key) DO UPDATE SET
+                        identity_keys_text=excluded.identity_keys_text,
+                        job_id=excluded.job_id,
+                        query=excluded.query,
+                        title=excluded.title,
+                        company=excluded.company,
+                        location=excluded.location,
+                        url=excluded.url,
+                        apply_method=excluded.apply_method,
+                        collected_at=excluded.collected_at,
+                        analyzed_at=excluded.analyzed_at,
+                        analysis_status=excluded.analysis_status,
+                        payload_json=excluded.payload_json
+                    """,
+                    (
+                        primary_key,
+                        identity_keys_text,
+                        str(job.get("job_id") or ""),
+                        str(job.get("query") or ""),
+                        str(job.get("title") or ""),
+                        str(job.get("company") or ""),
+                        str(job.get("location") or ""),
+                        str(job.get("url") or ""),
+                        str(job.get("apply_method") or ""),
+                        str(job.get("collected_at") or ""),
+                        str(job.get("analyzed_at") or ""),
+                        str(job.get("analysis_status") or ""),
+                        json.dumps(job, ensure_ascii=False)
+                    )
+                )
+            connection.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', ?)",
+                (str(SCHEMA_VERSION),),
+            )
+            connection.commit()
+            return int(connection.execute("SELECT COUNT(*) FROM collected_jobs").fetchone()[0])
+
+    def get_collected_job(self, identity_keys: list[str]) -> dict[str, Any] | None:
+        if not identity_keys:
+            return None
+        placeholders = " OR ".join("instr(char(10) || identity_keys_text || char(10), char(10) || ? || char(10)) > 0" for _ in identity_keys)
+        query = f"SELECT payload_json FROM collected_jobs WHERE {placeholders} LIMIT 1"
+        with self._connect() as connection:
+            row = connection.execute(query, identity_keys).fetchone()
+            if row:
+                return self._json_object(row[0])
+        return None
+
+    def is_collected_job_analyzed(self, identity_keys: list[str]) -> bool:
+        job = self.get_collected_job(identity_keys)
+        if not job:
+            return False
+        return bool((job.get("analyzed_at") or "").strip() or (job.get("analysis_status") or "").strip())
 
     def sync_if_changed(
         self,
@@ -230,6 +350,14 @@ class OperationalStore:
         decision: str = "",
         run: str = "",
         domain: str = "",
+        search_group: str = "",
+        career_lane: str = "",
+        search_market: str = "",
+        country: str = "",
+        employment_type: str = "",
+        flexible_hours: str = "",
+        sponsorship_status: str = "",
+        platform: str = "",
         flag: str = "",
         apply_method: str = "",
         status: str = "",
@@ -243,6 +371,14 @@ class OperationalStore:
             decision=decision,
             run=run,
             domain=domain,
+            search_group=search_group,
+            career_lane=career_lane,
+            search_market=search_market,
+            country=country,
+            employment_type=employment_type,
+            flexible_hours=flexible_hours,
+            sponsorship_status=sponsorship_status,
+            platform=platform,
             flag=flag,
             apply_method=apply_method,
             status=status,
@@ -340,11 +476,16 @@ class OperationalStore:
 
     def counts(self) -> dict[str, int]:
         with self._connect() as connection:
-            return {
+            counts = {
                 "jobs": connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],
                 "runs": connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0],
                 "applications": connection.execute("SELECT COUNT(*) FROM applications").fetchone()[0],
             }
+            try:
+                counts["collected_jobs"] = connection.execute("SELECT COUNT(*) FROM collected_jobs").fetchone()[0]
+            except sqlite3.OperationalError:
+                pass
+            return counts
 
     def stage_counts(self) -> dict[str, int]:
         with self._connect() as connection:
@@ -376,9 +517,17 @@ class OperationalStore:
                     run_id TEXT,
                     processed_at TEXT,
                     domain_category TEXT,
+                    search_group TEXT,
+                    search_groups_text TEXT,
                     flags_text TEXT,
                     apply_method TEXT,
                     manual_status TEXT,
+                    career_lane TEXT,
+                    search_market TEXT,
+                    country TEXT,
+                    employment_types_text TEXT,
+                    flexible_hours INTEGER,
+                    sponsorship_status TEXT,
                     payload_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_decision_score
@@ -405,12 +554,37 @@ class OperationalStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_applications_stage_updated
                     ON applications(stage, updated_at DESC);
+                CREATE TABLE IF NOT EXISTS collected_jobs (
+                    primary_identity_key TEXT PRIMARY KEY,
+                    identity_keys_text TEXT,
+                    job_id TEXT,
+                    query TEXT,
+                    title TEXT,
+                    company TEXT,
+                    location TEXT,
+                    url TEXT,
+                    apply_method TEXT,
+                    collected_at TEXT,
+                    analyzed_at TEXT,
+                    analysis_status TEXT,
+                    payload_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_collected_jobs_analyzed
+                    ON collected_jobs(analyzed_at);
                 """
             )
             self._ensure_column(connection, "jobs", "domain_category", "TEXT")
+            self._ensure_column(connection, "jobs", "search_group", "TEXT")
+            self._ensure_column(connection, "jobs", "search_groups_text", "TEXT")
             self._ensure_column(connection, "jobs", "flags_text", "TEXT")
             self._ensure_column(connection, "jobs", "apply_method", "TEXT")
             self._ensure_column(connection, "jobs", "manual_status", "TEXT")
+            self._ensure_column(connection, "jobs", "career_lane", "TEXT")
+            self._ensure_column(connection, "jobs", "search_market", "TEXT")
+            self._ensure_column(connection, "jobs", "country", "TEXT")
+            self._ensure_column(connection, "jobs", "employment_types_text", "TEXT")
+            self._ensure_column(connection, "jobs", "flexible_hours", "INTEGER")
+            self._ensure_column(connection, "jobs", "sponsorship_status", "TEXT")
             connection.executescript(
                 """
                 CREATE INDEX IF NOT EXISTS idx_jobs_run_processed
@@ -419,8 +593,16 @@ class OperationalStore:
                     ON jobs(domain_category);
                 CREATE INDEX IF NOT EXISTS idx_jobs_apply_method
                     ON jobs(apply_method);
+                CREATE INDEX IF NOT EXISTS idx_jobs_search_group
+                    ON jobs(search_group);
                 CREATE INDEX IF NOT EXISTS idx_jobs_manual_status
                     ON jobs(manual_status);
+                CREATE INDEX IF NOT EXISTS idx_jobs_career_lane
+                    ON jobs(career_lane);
+                CREATE INDEX IF NOT EXISTS idx_jobs_search_market
+                    ON jobs(search_market);
+                CREATE INDEX IF NOT EXISTS idx_jobs_sponsorship
+                    ON jobs(sponsorship_status);
                 """
             )
 
@@ -488,6 +670,14 @@ class OperationalStore:
         decision: str,
         run: str,
         domain: str,
+        search_group: str,
+        career_lane: str,
+        search_market: str,
+        country: str,
+        employment_type: str,
+        flexible_hours: str,
+        sponsorship_status: str,
+        platform: str,
         flag: str,
         apply_method: str,
         status: str,
@@ -514,6 +704,36 @@ class OperationalStore:
         if domain:
             clauses.append("domain_category = ?")
             parameters.append(domain)
+        if search_group:
+            clauses.append(
+                "instr(char(10) || coalesce(search_groups_text,'') || char(10), "
+                "char(10) || ? || char(10)) > 0"
+            )
+            parameters.append(search_group)
+        if career_lane:
+            clauses.append("career_lane = ?")
+            parameters.append(career_lane)
+        if search_market:
+            clauses.append("search_market = ?")
+            parameters.append(search_market)
+        if country:
+            clauses.append("country = ?")
+            parameters.append(country)
+        if employment_type:
+            clauses.append(
+                "instr(char(10) || coalesce(employment_types_text,'') || char(10), "
+                "char(10) || ? || char(10)) > 0"
+            )
+            parameters.append(employment_type)
+        if flexible_hours:
+            clauses.append("flexible_hours = ?")
+            parameters.append(1 if flexible_hours.lower() in {"1", "true", "yes"} else 0)
+        if sponsorship_status:
+            clauses.append("sponsorship_status = ?")
+            parameters.append(sponsorship_status)
+        if platform:
+            clauses.append("board = ?")
+            parameters.append(platform)
         if flag:
             clauses.append("lower(coalesce(flags_text,'')) LIKE ?")
             parameters.append(f"%{flag.lower()}%")

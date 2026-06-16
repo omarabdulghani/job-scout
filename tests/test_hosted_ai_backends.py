@@ -163,7 +163,10 @@ class HostedAIBackendTests(unittest.TestCase):
                 max_tokens=256,
             )
 
-        self.assertEqual(captured["body"]["format"]["required"], ["interview_probability_score", "reason"])
+        self.assertEqual(
+            set(captured["body"]["format"]["required"]),
+            set(brain._scoring_schema_properties()),
+        )
 
     def test_auto_backend_falls_back_to_gemini_when_primary_fails(self):
         with patch.dict(

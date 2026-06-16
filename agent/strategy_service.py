@@ -7,6 +7,12 @@ import re
 from typing import Any
 
 from agent.query_learning import order_queries_with_learning
+from agent.search_query_plan import (
+    flatten_query_groups,
+    merge_legacy_queries,
+    normalize_query_groups,
+    query_groups_payload,
+)
 from agent.user_workspace import UserWorkspace
 
 
@@ -20,6 +26,7 @@ class StrategyService:
     def payload(self) -> dict[str, Any]:
         profile, preferences = self.workspace.load_config()
         queries = self._load_queries()
+        query_groups = self._load_query_groups()
         _, query_learning = order_queries_with_learning(
             queries,
             preferences=preferences,
@@ -32,6 +39,7 @@ class StrategyService:
             "strategy_text": self.workspace.strategy_path.read_text(encoding="utf-8"),
             "portfolio_notes": self.workspace.portfolio_notes_path.read_text(encoding="utf-8"),
             "queries": queries,
+            "query_groups": query_groups,
             "query_learning": query_learning,
         }
 
@@ -53,7 +61,12 @@ class StrategyService:
             raise ValueError("Preferences must be an object")
         self._merge_public_preferences(preferences, incoming_preferences)
 
-        queries = self._string_list(payload.get("queries", []))
+        if "query_groups" in payload:
+            query_groups = normalize_query_groups(payload.get("query_groups"))
+            queries = flatten_query_groups(query_groups)
+        else:
+            queries = self._string_list(payload.get("queries", []))
+            query_groups = merge_legacy_queries(queries, self._load_query_groups())
         if not queries:
             raise ValueError("At least one search query is required")
 
@@ -67,6 +80,10 @@ class StrategyService:
         self.workspace.save_text(
             self.workspace.portfolio_notes_path,
             str(payload.get("portfolio_notes") or "").strip() + "\n",
+        )
+        self.workspace.save_json(
+            self.workspace.search_query_groups_path,
+            query_groups_payload(query_groups),
         )
         self.workspace.save_text(
             self.workspace.search_queries_path,
@@ -156,6 +173,14 @@ class StrategyService:
             line
             for line in self.workspace.search_queries_path.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
+        )
+
+    def _load_query_groups(self) -> dict[str, list[str]]:
+        return normalize_query_groups(
+            self.workspace._required_json(
+                self.workspace.search_query_groups_path,
+                "Search query groups",
+            )
         )
 
     def _string_list(self, values) -> list[str]:

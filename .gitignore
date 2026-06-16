@@ -44,3 +44,9 @@ scout_collected_jobs.json.*.tmp
 .recommended_jobs_dashboard_user_state.json.tmp
 .recommended_jobs_dashboard_user_state.json.*.tmp
 ..env.*.tmp
+
+# Agent / Scratch files
+scratch/
+description_logs/
+project_state_report.md
+

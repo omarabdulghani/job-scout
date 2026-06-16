@@ -21,7 +21,9 @@ SUPPORTED_BACKENDS = (
     "gemini",
     "claude",
     "openai_compatible",
+    "deepseek",
     "lmstudio",
+    "openrouter",
 )
 
 PROVIDERS: dict[str, dict[str, Any]] = {
@@ -41,7 +43,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "key_env": "OLLAMA_API_KEY",
         "model_env": "OLLAMA_MODEL",
         "base_url_env": "OLLAMA_BASE_URL",
-        "default_model": "gpt-oss:120b",
+        "default_model": "gpt-oss:20b",
         "default_base_url": "https://ollama.com/api",
         "hosted": True,
     },
@@ -75,6 +77,16 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "default_base_url": "",
         "hosted": True,
     },
+    "deepseek": {
+        "label": "DeepSeek",
+        "description": "DeepSeek API for highly capable and cost-effective hosted scoring.",
+        "key_env": "DEEPSEEK_API_KEY",
+        "model_env": "DEEPSEEK_MODEL",
+        "base_url_env": "DEEPSEEK_BASE_URL",
+        "default_model": "deepseek-chat",
+        "default_base_url": "https://api.deepseek.com/v1",
+        "hosted": True,
+    },
     "lmstudio": {
         "label": "LM Studio",
         "description": "Local model server. No API key is stored or required.",
@@ -84,6 +96,16 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "default_model": "google/gemma-4-e4b",
         "default_base_url": "http://127.0.0.1:1234/v1",
         "hosted": False,
+    },
+    "openrouter": {
+        "label": "OpenRouter",
+        "description": "Hosted multi-model access API. Compatible with OpenAI format.",
+        "key_env": "OPENROUTER_API_KEY",
+        "model_env": "OPENROUTER_MODEL",
+        "base_url_env": "OPENROUTER_BASE_URL",
+        "default_model": "deepseek/deepseek-v4-flash:free",
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "hosted": True,
     },
 }
 
@@ -112,9 +134,17 @@ PROVIDER_EXTRA_FIELDS = {
         "max_output_tokens": "OPENAI_COMPATIBLE_MAX_OUTPUT_TOKENS",
         "max_attempts": "OPENAI_COMPATIBLE_MAX_ATTEMPTS",
     },
+    "deepseek": {
+        "max_output_tokens": "DEEPSEEK_MAX_OUTPUT_TOKENS",
+        "max_attempts": "DEEPSEEK_MAX_ATTEMPTS",
+    },
     "lmstudio": {
         "reasoning_enabled": "LMSTUDIO_REASONING_ENABLED",
         "reasoning_effort": "LMSTUDIO_REASONING_EFFORT",
+    },
+    "openrouter": {
+        "max_output_tokens": "OPENROUTER_MAX_OUTPUT_TOKENS",
+        "max_attempts": "OPENROUTER_MAX_ATTEMPTS",
     },
 }
 
@@ -237,11 +267,37 @@ class AISettingsService:
         self._write_env(updates, removals)
         return self.payload()
 
-    def test_connection(self, provider_id: str) -> dict[str, Any]:
+    def test_connection(self, provider_id: str, provider_payload: dict[str, Any] = None) -> dict[str, Any]:
         provider_id = self._normalize_backend(provider_id, allow_auto=False)
         if provider_id not in PROVIDERS:
             raise ValueError("Unsupported AI provider")
         values = self._read_env()
+        if isinstance(provider_payload, dict):
+            definition = PROVIDERS[provider_id]
+            if definition.get("key_env"):
+                new_key = str(provider_payload.get("api_key") or "").strip()
+                if new_key:
+                    values[definition["key_env"]] = new_key
+            if definition.get("model_env"):
+                model = str(provider_payload.get("model") or "").strip()
+                if model:
+                    values[definition["model_env"]] = model
+            if definition.get("base_url_env"):
+                base_url = str(provider_payload.get("base_url") or "").strip()
+                if base_url:
+                    try:
+                        base_url = self._clean_url(base_url, required=False)
+                        if base_url:
+                            values[definition["base_url_env"]] = base_url
+                    except ValueError:
+                        pass
+            extras = provider_payload.get("extra") if isinstance(provider_payload.get("extra"), dict) else {}
+            for field_name, env_name in PROVIDER_EXTRA_FIELDS.get(provider_id, {}).items():
+                if field_name in extras:
+                    try:
+                        values[env_name] = self._normalize_extra(field_name, extras[field_name])
+                    except ValueError:
+                        pass
         definition = PROVIDERS[provider_id]
         started_at = now_iso()
         try:
@@ -264,6 +320,7 @@ class AISettingsService:
         self._write_statuses(statuses)
         return result
 
+
     def _request_provider_models(
         self,
         provider_id: str,
@@ -275,7 +332,7 @@ class AISettingsService:
         if key_env and not self._secret_is_configured(api_key):
             raise ValueError(f"{definition['label']} API key is not configured")
 
-        headers = {"Accept": "application/json", "User-Agent": "JobScoutDashboard/1.0"}
+        headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         if provider_id == "gemini":
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/models"

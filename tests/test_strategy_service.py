@@ -50,7 +50,14 @@ class StrategyServiceTests(unittest.TestCase):
 
             self.assertEqual(payload["career_strategy"]["core_goal"], "Find growth")
             self.assertEqual(payload["preferences"]["locations"], ["Amsterdam"])
-            self.assertEqual(payload["queries"], ["junior designer", "project coordinator"])
+            self.assertEqual(
+                payload["queries"][:2],
+                ["junior designer", "project coordinator"],
+            )
+            self.assertIn("customer support", payload["queries"])
+            self.assertEqual(payload["query_groups"]["primary"], ["junior designer"])
+            self.assertEqual(payload["query_groups"]["bridge"], ["project coordinator"])
+            self.assertIn("customer support", payload["query_groups"]["fallback"])
             self.assertEqual(payload["strategy_text"], "Full strategy")
 
     def test_save_updates_private_workspace_without_touching_defaults(self):
@@ -58,6 +65,7 @@ class StrategyServiceTests(unittest.TestCase):
             root = Path(directory)
             service = self._service(root)
             payload = service.payload()
+            payload.pop("query_groups")
             payload["queries"] = ["product designer"]
             payload["preferences"]["locations"] = ["Utrecht"]
             payload["career_strategy"]["core_goal"] = "Updated goal"
@@ -75,9 +83,53 @@ class StrategyServiceTests(unittest.TestCase):
             service = self._service(Path(directory))
             payload = service.payload()
             payload["queries"] = []
+            payload.pop("query_groups", None)
 
             with self.assertRaisesRegex(ValueError, "At least one"):
                 service.save(payload)
+
+    def test_grouped_query_save_updates_union_without_losing_punctuation(self):
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+            payload = service.payload()
+            payload["query_groups"] = {
+                "primary": ["UX/UI designer", "Brand, content & web"],
+                "bridge": ["Customer success coordinator"],
+                "fallback": ["Back-office support"],
+            }
+
+            saved = service.save(payload)
+
+            self.assertEqual(
+                saved["queries"],
+                [
+                    "UX/UI designer",
+                    "Brand, content & web",
+                    "Customer success coordinator",
+                    "Back-office support",
+                ],
+            )
+            self.assertEqual(
+                saved["query_groups"]["fallback"],
+                ["Back-office support"],
+            )
+
+    def test_legacy_query_save_preserves_known_membership_and_defaults_unknown_to_primary(self):
+        with TemporaryDirectory() as directory:
+            service = self._service(Path(directory))
+            payload = service.payload()
+            payload.pop("query_groups")
+            payload["queries"] = [
+                "project coordinator",
+                "new experimental query",
+                "customer support",
+            ]
+
+            saved = service.save(payload)
+
+            self.assertEqual(saved["query_groups"]["bridge"], ["project coordinator"])
+            self.assertEqual(saved["query_groups"]["primary"], ["new experimental query"])
+            self.assertEqual(saved["query_groups"]["fallback"], ["customer support"])
 
     def test_string_lists_preserve_internal_punctuation(self):
         with TemporaryDirectory() as directory:

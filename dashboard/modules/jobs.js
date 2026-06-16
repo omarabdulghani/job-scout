@@ -70,6 +70,13 @@ export function buildJobsQuery(filters, offset, now = Date.now()) {
       : (filters.actionScope === "needs_action" ? "APPLY_FIRST,GOOD_OPTIONS" : ""),
     run: filters.run === "all" ? "" : filters.run,
     domain: filters.domain === "all" ? "" : filters.domain,
+    search_group: filters.searchGroup === "all" ? "" : filters.searchGroup,
+    career_lane: filters.careerLane === "all" ? "" : filters.careerLane,
+    search_market: filters.searchMarket === "all" ? "" : filters.searchMarket,
+    employment_type: filters.employmentType === "all" ? "" : filters.employmentType,
+    flexible_hours: filters.flexibleHours === "all" ? "" : filters.flexibleHours,
+    sponsorship_status: filters.sponsorshipStatus === "all" ? "" : filters.sponsorshipStatus,
+    platform: filters.platform === "all" ? "" : filters.platform,
     flag: filters.flag === "all" ? "" : filters.flag,
     apply_method: filters.applyMethod === "all" ? "" : filters.applyMethod,
     status: filters.actionScope === "needs_action"
