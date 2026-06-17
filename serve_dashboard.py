@@ -971,6 +971,20 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=500)
             return
+        if self._path_without_query() == "/api/maintenance/export-session":
+            try:
+                service = self._maintenance_service()
+                zip_path = service.create_session_backup_zip()
+                self._send_binary(
+                    zip_path.read_bytes(),
+                    content_type="application/zip",
+                    filename=zip_path.name,
+                )
+                if zip_path.exists():
+                    zip_path.unlink()
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
         if self._path_without_query() == "/api/profile/cv/file":
             cv_path = self._profile_service().active_cv_path()
             if not cv_path:
@@ -985,6 +999,26 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
         if not self._local_origin_allowed():
             self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
+            return
+
+        if self._path_without_query() == "/api/maintenance/import-session":
+            try:
+                payload = self._read_json_body(max_bytes=100 * 1024 * 1024)
+                content_base64 = str(payload.get("content_base64") or "")
+                if not content_base64:
+                    raise ValueError("No file content received")
+                import base64
+                import time
+                file_bytes = base64.b64decode(content_base64)
+                service = self._maintenance_service()
+                temp_path = service.root / "backups" / f"temp_import_{int(time.time())}.zip"
+                temp_path.write_bytes(file_bytes)
+                service.import_session_backup_zip(temp_path)
+                if temp_path.exists():
+                    temp_path.unlink()
+                self._send_json({"ok": True, "data": {"status": "imported"}})
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
             return
 
         if self._path_without_query() in {

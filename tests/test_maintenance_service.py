@@ -255,6 +255,43 @@ class MaintenanceServiceTests(unittest.TestCase):
             self.assertEqual(incident["log"], log_path.name)
             self.assertTrue(incident["resume_available"])
 
+    def test_session_backup_and_import(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            
+            # Create session profiles
+            bp = root / "data" / "browser_profile"
+            ibp = root / "data" / "indeed_browser_profile"
+            bp.mkdir(parents=True)
+            ibp.mkdir(parents=True)
+            
+            cookie1 = bp / "Cookies"
+            cookie1.write_text("linkedin_cookie_data", encoding="utf-8")
+            cookie2 = ibp / "Cookies"
+            cookie2.write_text("indeed_cookie_data", encoding="utf-8")
+            
+            # 1. Test Backup
+            zip_path = service.create_session_backup_zip()
+            self.assertTrue(zip_path.exists())
+            
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                names = archive.namelist()
+            self.assertIn("data/browser_profile/Cookies", names)
+            self.assertIn("data/indeed_browser_profile/Cookies", names)
+            
+            # Create a junk file in the profiles to verify it gets cleared on import
+            junk_file = bp / "junk.txt"
+            junk_file.write_text("should be removed", encoding="utf-8")
+            self.assertTrue(junk_file.exists())
+            
+            # 2. Test Import
+            service.import_session_backup_zip(zip_path)
+            self.assertFalse(junk_file.exists())
+            self.assertEqual(cookie1.read_text(encoding="utf-8"), "linkedin_cookie_data")
+            self.assertEqual(cookie2.read_text(encoding="utf-8"), "indeed_cookie_data")
+
 
 if __name__ == "__main__":
     unittest.main()
+

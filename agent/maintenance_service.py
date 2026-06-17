@@ -318,6 +318,37 @@ class MaintenanceService:
                     archive.write(path, path.name)
         return destination
 
+    def create_session_backup_zip(self) -> Path:
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        destination = self.backups_dir / f"job_scout_sessions_{timestamp}.zip"
+        dirs_to_backup = []
+        for name in ("browser_profile", "indeed_browser_profile"):
+            p = self.root / "data" / name
+            if p.exists() and p.is_dir():
+                dirs_to_backup.append(p)
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for dir_path in dirs_to_backup:
+                for path in dir_path.rglob("*"):
+                    if not path.is_file():
+                        continue
+                    relative = path.relative_to(self.root)
+                    archive.write(path, relative.as_posix())
+        return destination
+
+    def import_session_backup_zip(self, zip_path: Path) -> None:
+        for name in ("browser_profile", "indeed_browser_profile"):
+            p = self.root / "data" / name
+            if p.exists():
+                if p.is_dir():
+                    shutil.rmtree(p)
+                else:
+                    p.unlink()
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            for member in archive.namelist():
+                normalized_member = Path(member).as_posix()
+                if normalized_member.startswith(("data/browser_profile/", "data/indeed_browser_profile/")):
+                    archive.extract(member, self.root)
+
     def backup_records(self) -> list[dict[str, Any]]:
         records = [
             self._backup_record(path)

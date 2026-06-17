@@ -291,6 +291,9 @@ const DEFAULT_THEME = initialTheme();
       maintenanceLogList: document.getElementById("maintenanceLogList"),
       createBackupButton: document.getElementById("createBackupButton"),
       exportMigrationBackupButton: document.getElementById("exportMigrationBackupButton"),
+      exportSessionButton: document.getElementById("exportSessionButton"),
+      importSessionButton: document.getElementById("importSessionButton"),
+      sessionUploadInput: document.getElementById("sessionUploadInput"),
       pruneLogsButton: document.getElementById("pruneLogsButton"),
       maintenanceBackupList: document.getElementById("maintenanceBackupList"),
       selectedLogTitle: document.getElementById("selectedLogTitle"),
@@ -1865,6 +1868,58 @@ const DEFAULT_THEME = initialTheme();
       if (!state.selectedLogText) return;
       await navigator.clipboard.writeText(state.selectedLogText);
       setMaintenanceStatus("Log copied to clipboard.", "success");
+    }
+
+    async function exportSession() {
+      els.exportSessionButton.disabled = true;
+      setMaintenanceStatus("Compiling browser session backup...");
+      try {
+        window.location.href = "/api/maintenance/export-session";
+        setMaintenanceStatus("Session backup download initiated.", "success");
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Session backup could not be exported.", "error");
+      } finally {
+        setTimeout(() => {
+          els.exportSessionButton.disabled = false;
+        }, 3000);
+      }
+    }
+
+    async function triggerImportSession() {
+      els.sessionUploadInput.click();
+    }
+
+    async function importSession() {
+      const file = els.sessionUploadInput.files && els.sessionUploadInput.files[0];
+      if (!file) return;
+
+      if (file.size > 100 * 1024 * 1024) {
+        setMaintenanceStatus("Session backup must be 100 MB or smaller.", "error");
+        return;
+      }
+
+      els.importSessionButton.disabled = true;
+      setMaintenanceStatus("Uploading browser session backup (this might take a moment due to base64 encoding)...");
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await fetch("/api/maintenance/import-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content_base64: dataUrl.split(",", 2)[1] || ""
+          })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Session import failed");
+
+        await loadMaintenance();
+        setMaintenanceStatus("Browser session successfully imported. The cloud browser will now inherit your login state.", "success");
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Session import failed.", "error");
+      } finally {
+        els.sessionUploadInput.value = "";
+        els.importSessionButton.disabled = false;
+      }
     }
 
     function setMaintenanceStatus(message, kind = "") {
@@ -4737,6 +4792,9 @@ const DEFAULT_THEME = initialTheme();
       els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
       els.createBackupButton.addEventListener("click", createMaintenanceBackup);
       els.exportMigrationBackupButton.addEventListener("click", exportMigrationBackup);
+      els.exportSessionButton.addEventListener("click", exportSession);
+      els.importSessionButton.addEventListener("click", triggerImportSession);
+      els.sessionUploadInput.addEventListener("change", importSession);
       els.pruneLogsButton.addEventListener("click", pruneMaintenanceLogs);
       els.copyLogButton.addEventListener("click", copyMaintenanceLog);
       els.themeToggle.addEventListener("click", toggleTheme);

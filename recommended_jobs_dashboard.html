@@ -754,6 +754,9 @@
             <button id="createBackupButton" class="button secondary" type="button">Create backup</button>
             <button id="pruneLogsButton" class="button secondary" type="button">Delete logs older than 90 days</button>
             <button id="exportMigrationBackupButton" class="button secondary" type="button">Export migration backup</button>
+            <button id="exportSessionButton" class="button secondary" type="button">Export login session</button>
+            <button id="importSessionButton" class="button secondary" type="button">Import login session</button>
+            <input id="sessionUploadInput" type="file" accept="application/zip,.zip" style="display:none;" />
           </div>
           <div class="security-note" style="margin-top:12px;"><svg class="icon icon-sm"><use href="#icon-check-circle"></use></svg>Backups exclude API keys, cookies, browser profiles, and session data.</div>
           <div id="maintenanceBackupList" class="backup-list" style="margin-top:12px;"></div>
