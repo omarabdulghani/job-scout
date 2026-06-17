@@ -318,7 +318,42 @@ class MaintenanceService:
                     archive.write(path, path.name)
         return destination
 
+    def import_migration_zip(self, zip_path: Path) -> None:
+        root_files = {
+            "recommended_jobs_dashboard_data.json",
+            "recommended_jobs_dashboard_user_state.json",
+            "scout_run_history.json",
+            "scored_jobs_cache.json",
+            "scout_collected_jobs.json",
+            "scout_progress.json",
+            "job_tracking_status.json",
+        }
+        # 1. Clean existing workspace files (except backup dir itself)
+        if self.workspace.path.exists():
+            for path in self.workspace.path.glob("*"):
+                if path == self.workspace.backup_dir:
+                    continue
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+
+        # 2. Extract files from zip
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            for member in archive.namelist():
+                normalized_member = Path(member).as_posix()
+                try:
+                    member_path = self.root / normalized_member
+                    is_workspace_file = self.workspace.path in member_path.parents
+                except Exception:
+                    is_workspace_file = False
+                
+                is_root_file = normalized_member in root_files
+                if is_workspace_file or is_root_file:
+                    archive.extract(member, self.root)
+
     def create_session_backup_zip(self) -> Path:
+
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         destination = self.backups_dir / f"job_scout_sessions_{timestamp}.zip"
         dirs_to_backup = []

@@ -291,7 +291,44 @@ class MaintenanceServiceTests(unittest.TestCase):
             self.assertEqual(cookie1.read_text(encoding="utf-8"), "linkedin_cookie_data")
             self.assertEqual(cookie2.read_text(encoding="utf-8"), "indeed_cookie_data")
 
+    def test_migration_backup_and_import(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            service = self._service(root)
+            
+            # Create root data files and workspace files
+            scored_cache = root / "scored_jobs_cache.json"
+            scored_cache.write_text('{"scored": []}', encoding="utf-8")
+            
+            ws_db = service.workspace.path / "job_scout.db"
+            ws_db.parent.mkdir(parents=True, exist_ok=True)
+            ws_db.write_text("sqlite database data", encoding="utf-8")
+            
+            # 1. Test Backup Creation
+            zip_path = service.create_migration_zip()
+            self.assertTrue(zip_path.exists())
+            
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                names = archive.namelist()
+            self.assertIn("scored_jobs_cache.json", names)
+            
+            relative_db_path = ws_db.relative_to(root).as_posix()
+            self.assertIn(relative_db_path, names)
+            
+            # Write a junk file inside workspace that should be deleted on import
+            junk_file = service.workspace.path / "junk.txt"
+            junk_file.write_text("to be deleted", encoding="utf-8")
+            self.assertTrue(junk_file.exists())
+            
+            # 2. Test Import
+            service.import_migration_zip(zip_path)
+            self.assertFalse(junk_file.exists())
+            self.assertEqual(scored_cache.read_text(encoding="utf-8"), '{"scored": []}')
+            self.assertEqual(ws_db.read_text(encoding="utf-8"), "sqlite database data")
+
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

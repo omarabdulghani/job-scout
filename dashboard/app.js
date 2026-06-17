@@ -291,6 +291,8 @@ const DEFAULT_THEME = initialTheme();
       maintenanceLogList: document.getElementById("maintenanceLogList"),
       createBackupButton: document.getElementById("createBackupButton"),
       exportMigrationBackupButton: document.getElementById("exportMigrationBackupButton"),
+      importMigrationBackupButton: document.getElementById("importMigrationBackupButton"),
+      migrationBackupUploadInput: document.getElementById("migrationBackupUploadInput"),
       exportSessionButton: document.getElementById("exportSessionButton"),
       importSessionButton: document.getElementById("importSessionButton"),
       sessionUploadInput: document.getElementById("sessionUploadInput"),
@@ -1842,6 +1844,43 @@ const DEFAULT_THEME = initialTheme();
         }, 3000);
       }
     }
+
+    async function triggerImportMigrationBackup() {
+      els.migrationBackupUploadInput.click();
+    }
+
+    async function importMigrationBackup() {
+      const file = els.migrationBackupUploadInput.files && els.migrationBackupUploadInput.files[0];
+      if (!file) return;
+      if (file.size > 250 * 1024 * 1024) {
+        setMaintenanceStatus("Migration backup must be 250 MB or smaller.", "error");
+        return;
+      }
+      els.importMigrationBackupButton.disabled = true;
+      setMaintenanceStatus("Uploading migration backup (this might take a moment due to database size)...");
+      try {
+        const base64Data = await readAsBase64(file);
+        const response = await fetch("/api/maintenance/import-backup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content_base64: base64Data })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Backup import failed");
+        
+        await loadMaintenance();
+        setMaintenanceStatus("Migration backup successfully imported! Reloading to apply...", "success");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Backup import failed.", "error");
+      } finally {
+        els.migrationBackupUploadInput.value = "";
+        els.importMigrationBackupButton.disabled = false;
+      }
+    }
+
 
     async function pruneMaintenanceLogs() {
       if (!window.confirm("Delete log files older than 90 days while keeping at least the 10 newest logs?")) return;
@@ -4792,6 +4831,8 @@ const DEFAULT_THEME = initialTheme();
       els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
       els.createBackupButton.addEventListener("click", createMaintenanceBackup);
       els.exportMigrationBackupButton.addEventListener("click", exportMigrationBackup);
+      els.importMigrationBackupButton.addEventListener("click", triggerImportMigrationBackup);
+      els.migrationBackupUploadInput.addEventListener("change", importMigrationBackup);
       els.exportSessionButton.addEventListener("click", exportSession);
       els.importSessionButton.addEventListener("click", triggerImportSession);
       els.sessionUploadInput.addEventListener("change", importSession);
