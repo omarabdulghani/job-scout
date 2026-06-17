@@ -45,8 +45,8 @@ from agent.strategy_service import StrategyService
 from agent.user_workspace import UserWorkspace
 
 
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
+DEFAULT_HOST = os.environ.get("HOST", "0.0.0.0") if "PORT" in os.environ else "127.0.0.1"
+DEFAULT_PORT = int(os.environ.get("PORT", 8000))
 DEFAULT_DASHBOARD_DATA_PATH = Path("recommended_jobs_dashboard_data.json")
 DEFAULT_USER_STATE_PATH = Path("recommended_jobs_dashboard_user_state.json")
 DEFAULT_PROGRESS_PATH = Path("scout_progress.json")
