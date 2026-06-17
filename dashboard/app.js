@@ -106,8 +106,8 @@ const DEFAULT_THEME = initialTheme();
       currentPage: localStorage.getItem("jobScoutCurrentPage") || "jobs",
       filters: {
         search: "",
-        actionScope: "all",
-        careerLane: "primary",
+        actionScope: "needs_action",
+        careerLane: "all",
         run: "all",
         decision: "all",
         domain: "all",
@@ -120,9 +120,9 @@ const DEFAULT_THEME = initialTheme();
         flag: "all",
         applyMethod: "all",
         manualStatus: "all",
-        sort: "newest",
+        sort: "score",
         viewMode: "board",
-        quickPreset: ""
+        quickPreset: "needs_action"
       }
     };
 
