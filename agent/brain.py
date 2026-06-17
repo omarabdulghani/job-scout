@@ -508,7 +508,10 @@ class JobBrain:
     }
 
     def __init__(self, profile: dict, preferences: dict):
-        load_dotenv(override=True)
+        import sys
+        # Avoid reloading .env in unit tests as it overrides mock patch.dict environments
+        if not (any(m in sys.modules for m in ("pytest", "unittest")) or os.getenv("PYTEST_CURRENT_TEST")):
+            load_dotenv(override=True)
         self.profile = profile
         self.preferences = preferences
         self.client = None
@@ -1888,6 +1891,8 @@ class JobBrain:
             "temperature": 0,
             "stream": False,
         }
+        if response_format:
+            payload["response_format"] = response_format
         request = Request(
             f"{base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),

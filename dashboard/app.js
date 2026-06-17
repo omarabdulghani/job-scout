@@ -290,6 +290,7 @@ const DEFAULT_THEME = initialTheme();
       latestPersistenceWarning: document.getElementById("latestPersistenceWarning"),
       maintenanceLogList: document.getElementById("maintenanceLogList"),
       createBackupButton: document.getElementById("createBackupButton"),
+      exportMigrationBackupButton: document.getElementById("exportMigrationBackupButton"),
       pruneLogsButton: document.getElementById("pruneLogsButton"),
       maintenanceBackupList: document.getElementById("maintenanceBackupList"),
       selectedLogTitle: document.getElementById("selectedLogTitle"),
@@ -1821,6 +1822,21 @@ const DEFAULT_THEME = initialTheme();
         setMaintenanceStatus(safe(error.message) || "Backup could not be created.", "error");
       } finally {
         els.createBackupButton.disabled = false;
+      }
+    }
+
+    async function exportMigrationBackup() {
+      els.exportMigrationBackupButton.disabled = true;
+      setMaintenanceStatus("Compiling full migration backup (including database and SQLite index)...");
+      try {
+        window.location.href = "/api/maintenance/export-backup";
+        setMaintenanceStatus("Migration backup download initiated.", "success");
+      } catch (error) {
+        setMaintenanceStatus(safe(error.message) || "Backup could not be exported.", "error");
+      } finally {
+        setTimeout(() => {
+          els.exportMigrationBackupButton.disabled = false;
+        }, 3000);
       }
     }
 
@@ -4720,6 +4736,7 @@ const DEFAULT_THEME = initialTheme();
 
       els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
       els.createBackupButton.addEventListener("click", createMaintenanceBackup);
+      els.exportMigrationBackupButton.addEventListener("click", exportMigrationBackup);
       els.pruneLogsButton.addEventListener("click", pruneMaintenanceLogs);
       els.copyLogButton.addEventListener("click", copyMaintenanceLog);
       els.themeToggle.addEventListener("click", toggleTheme);

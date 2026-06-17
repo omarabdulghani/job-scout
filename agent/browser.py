@@ -68,6 +68,18 @@ class BrowserController:
                 "Chrome/124.0.0.0 Safari/537.36"
             )
 
+        import os
+        proxy_server = os.environ.get("SCRAPING_PROXY_SERVER")
+        proxy_username = os.environ.get("SCRAPING_PROXY_USERNAME")
+        proxy_password = os.environ.get("SCRAPING_PROXY_PASSWORD")
+        proxy_options = None
+        if proxy_server:
+            proxy_options = {"server": proxy_server}
+            if proxy_username:
+                proxy_options["username"] = proxy_username
+            if proxy_password:
+                proxy_options["password"] = proxy_password
+
         launch_options = {"headless": self.headless}
         if browser_args:
             launch_options["args"] = browser_args
@@ -75,10 +87,16 @@ class BrowserController:
             launch_options["executable_path"] = self.executable_path
 
         if self.profile_dir is None:
+            if proxy_options:
+                launch_options["proxy"] = proxy_options
             self.browser = await browser_launcher.launch(**launch_options)
+            if proxy_options:
+                context_options["proxy"] = proxy_options
             self.context = await self.browser.new_context(**context_options)
         else:
             Path(self.profile_dir).mkdir(parents=True, exist_ok=True)
+            if proxy_options:
+                context_options["proxy"] = proxy_options
             self.context = await browser_launcher.launch_persistent_context(
                 user_data_dir=self.profile_dir,
                 **context_options,

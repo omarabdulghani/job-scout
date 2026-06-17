@@ -190,7 +190,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertIn("Actionable jobs", self.html)
         self.assertIn("Actionable jobs are unreviewed Apply First and Good Options", self.html)
         self.assertIn('value="needs_action"', self.html)
-        self.assertIn('actionScope: "all"', self.html)
+        self.assertIn('actionScope: "needs_action"', self.html)
         self.assertIn('state.filters.actionScope = "needs_action"', self.html)
         self.assertIn("needsAction", self.html)
         self.assertIn("Open job", self.html)

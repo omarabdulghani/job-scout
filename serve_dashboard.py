@@ -799,7 +799,34 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         return
 
+    def _authenticate(self) -> bool:
+        username = os.environ.get("DASHBOARD_USERNAME")
+        password = os.environ.get("DASHBOARD_PASSWORD")
+        if not username or not password:
+            return True  # If no auth is configured, pass-through
+
+        auth_header = self.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Basic "):
+            import base64
+            try:
+                encoded = auth_header.split(" ", 1)[1]
+                decoded = base64.b64decode(encoded).decode("utf-8")
+                req_username, req_password = decoded.split(":", 1)
+                if req_username == username and req_password == password:
+                    return True
+            except Exception:
+                pass
+
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Job Scout Dashboard"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Unauthorized")
+        return False
+
     def do_GET(self) -> None:
+        if not self._authenticate():
+            return
         if self.path in {"", "/"}:
             self.send_response(302)
             self.send_header("Location", "/recommended_jobs_dashboard.html")
@@ -930,6 +957,20 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             except (ValueError, FileNotFoundError) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=404)
             return
+        if self._path_without_query() == "/api/maintenance/export-backup":
+            try:
+                service = self._maintenance_service()
+                zip_path = service.create_migration_zip()
+                self._send_binary(
+                    zip_path.read_bytes(),
+                    content_type="application/zip",
+                    filename=zip_path.name,
+                )
+                if zip_path.exists():
+                    zip_path.unlink()
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
         if self._path_without_query() == "/api/profile/cv/file":
             cv_path = self._profile_service().active_cv_path()
             if not cv_path:
@@ -940,6 +981,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:
+        if not self._authenticate():
+            return
         if not self._local_origin_allowed():
             self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
             return

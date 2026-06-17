@@ -293,6 +293,31 @@ class MaintenanceService:
             )
         return self._backup_record(destination)
 
+    def create_migration_zip(self) -> Path:
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        destination = self.backups_dir / f"job_scout_migration_{timestamp}.zip"
+        root_files = (
+            "recommended_jobs_dashboard_data.json",
+            "recommended_jobs_dashboard_user_state.json",
+            "scout_run_history.json",
+            "scored_jobs_cache.json",
+            "scout_collected_jobs.json",
+            "scout_progress.json",
+            "job_tracking_status.json",
+        )
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            if self.workspace.path.exists():
+                for path in self.workspace.path.rglob("*"):
+                    if not path.is_file() or self.workspace.backup_dir in path.parents:
+                        continue
+                    relative = path.relative_to(self.root)
+                    archive.write(path, relative.as_posix())
+            for name in root_files:
+                path = self.root / name
+                if path.exists() and path.is_file():
+                    archive.write(path, path.name)
+        return destination
+
     def backup_records(self) -> list[dict[str, Any]]:
         records = [
             self._backup_record(path)
