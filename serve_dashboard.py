@@ -1003,7 +1003,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
         if self._path_without_query() == "/api/maintenance/import-session":
             try:
-                payload = self._read_json_body(max_bytes=100 * 1024 * 1024)
+                payload = self._read_json_body(max_bytes=250 * 1024 * 1024)
                 content_base64 = str(payload.get("content_base64") or "")
                 if not content_base64:
                     raise ValueError("No file content received")

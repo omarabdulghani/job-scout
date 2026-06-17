@@ -331,6 +331,21 @@ class MaintenanceService:
                 for path in dir_path.rglob("*"):
                     if not path.is_file():
                         continue
+                    # Skip heavy browser cache, temporary, and GPU cache files to keep the ZIP tiny
+                    parts = [part.lower() for part in path.parts]
+                    if any(
+                        term in parts
+                        for term in (
+                            "cache",
+                            "code cache",
+                            "gpucache",
+                            "crashpad",
+                            "logs",
+                            "cachestorage",
+                            "scriptcache",
+                        )
+                    ) or path.name.lower() in ("lock", "lockfile", "lockfile.lock", "lockfile_lock"):
+                        continue
                     relative = path.relative_to(self.root)
                     archive.write(path, relative.as_posix())
         return destination

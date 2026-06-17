@@ -1893,8 +1893,8 @@ const DEFAULT_THEME = initialTheme();
       const file = els.sessionUploadInput.files && els.sessionUploadInput.files[0];
       if (!file) return;
 
-      if (file.size > 100 * 1024 * 1024) {
-        setMaintenanceStatus("Session backup must be 100 MB or smaller.", "error");
+      if (file.size > 250 * 1024 * 1024) {
+        setMaintenanceStatus("Session backup must be 250 MB or smaller.", "error");
         return;
       }
 
