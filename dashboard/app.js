@@ -1859,11 +1859,13 @@ const DEFAULT_THEME = initialTheme();
       els.importMigrationBackupButton.disabled = true;
       setMaintenanceStatus("Uploading migration backup (this might take a moment due to database size)...");
       try {
-        const base64Data = await readAsBase64(file);
+        const dataUrl = await readFileAsDataUrl(file);
         const response = await fetch("/api/maintenance/import-backup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content_base64: base64Data })
+          body: JSON.stringify({
+            content_base64: dataUrl.split(",", 2)[1] || ""
+          })
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok || result.ok === false) throw new Error(result.error || "Backup import failed");
