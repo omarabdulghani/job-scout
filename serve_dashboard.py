@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import requests
 import threading
 import time
 from typing import Any
@@ -51,6 +52,25 @@ DEFAULT_DASHBOARD_DATA_PATH = Path("recommended_jobs_dashboard_data.json")
 DEFAULT_USER_STATE_PATH = Path("recommended_jobs_dashboard_user_state.json")
 DEFAULT_PROGRESS_PATH = Path("scout_progress.json")
 DEFAULT_RUN_STATE_PATH = Path("data/user_workspace/dashboard_run_state.json")
+
+def _test_proxy_preflight() -> tuple[bool, str]:
+    proxy_server = os.environ.get("SCRAPING_PROXY_SERVER")
+    proxy_username = os.environ.get("SCRAPING_PROXY_USERNAME")
+    proxy_password = os.environ.get("SCRAPING_PROXY_PASSWORD")
+    
+    if not proxy_server:
+        return True, ""
+        
+    server_clean = proxy_server.replace("http://", "").replace("https://", "")
+    proxy_url = f"http://{proxy_username}:{proxy_password}@{server_clean}" if proxy_username else proxy_server
+    proxies = {"http": proxy_url, "https": proxy_url}
+    
+    try:
+        response = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=10)
+        return True, response.json().get("ip", "unknown")
+    except Exception as e:
+        return False, str(e)
+
 
 
 class DashboardRunController:
@@ -180,6 +200,35 @@ class DashboardRunController:
             env["PYTHONUNBUFFERED"] = "1"
             env["DASHBOARD_STARTED_SCOUT"] = "1"
             self.log_handle = log_path.open("w", encoding="utf-8")
+            
+            success, ip_or_error = _test_proxy_preflight()
+            if not success:
+                self.log_handle.write(f"[Proxy Pre-flight Check] Failed! Proxy connection refused.\nError details: {ip_or_error}\n\nPlease check your proxy credentials in the Railway variables (or .env file) and try resuming the run.\n")
+                self.log_handle.flush()
+                self.log_handle.close()
+                self.state = {
+                    "status": "interrupted",
+                    "active": False,
+                    "workflow": workflow,
+                    "workflow_label": workflow_label,
+                    "started_at": datetime.now().astimezone().isoformat(),
+                    "completed_at": "",
+                    "return_code": 1,
+                    "log_path": str(log_path),
+                    "log_tail": "",
+                    "command": self._display_command(command),
+                    "interrupted_at": datetime.now().astimezone().isoformat(),
+                    "interruption_reason": "Proxy Pre-flight Check Failed",
+                    "failure_reason": "Proxy connection refused",
+                    "detached": False,
+                }
+                self._save_state_locked()
+                return self.status()
+                
+            if ip_or_error:
+                self.log_handle.write(f"[Proxy Pre-flight Check] Passed! Connecting from IP: {ip_or_error}\n\n")
+                self.log_handle.flush()
+                
             self.process = subprocess.Popen(
                 command,
                 cwd=str(self.root),
