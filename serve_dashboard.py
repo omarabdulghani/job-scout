@@ -131,7 +131,15 @@ class DashboardRunController:
         if migrated_legacy_state:
             self._save_state_locked()
 
+    def reload_state(self) -> None:
+        with self.lock:
+            disk_state = self._load_state()
+            if disk_state:
+                self.state = disk_state
+            self._reconstruct_state()
+
     def status(self) -> dict[str, Any]:
+
         with self.lock:
             self._refresh_process_locked()
             payload = dict(self.state)
@@ -1034,6 +1042,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 temp_path = service.root / "backups" / f"temp_import_backup_{int(time.time())}.zip"
                 temp_path.write_bytes(file_bytes)
                 service.import_migration_zip(temp_path)
+                if self.run_controller:
+                    self.run_controller.reload_state()
                 if temp_path.exists():
                     temp_path.unlink()
                 self._send_json({"ok": True, "data": {"status": "imported"}})
