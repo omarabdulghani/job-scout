@@ -32,7 +32,7 @@ class QueryLearningTests(unittest.TestCase):
     def test_order_prioritizes_queries_with_apply_and_good_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             multi_output = Path(tmp) / "high_success_probability_jobs_multi.json"
-            history = Path(tmp) / "scout_run_history.json"
+            history = Path(tmp) / "data/scout_run_history.json"
             multi_output.write_text(
                 json.dumps(
                     {
@@ -69,6 +69,7 @@ class QueryLearningTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            history.parent.mkdir(parents=True, exist_ok=True)
             history.write_text(json.dumps({"runs": []}), encoding="utf-8")
 
             ordered, metadata = order_queries_with_learning(

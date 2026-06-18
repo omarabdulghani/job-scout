@@ -10,9 +10,9 @@ from agent.user_workspace import SCHEMA_VERSION, UserWorkspace
 
 class UserWorkspaceTests(unittest.TestCase):
     def _seed_project(self, root: Path) -> None:
-        (root / "config").mkdir(parents=True)
-        (root / "data").mkdir(parents=True)
-        (root / "cv").mkdir(parents=True)
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "cv").mkdir(parents=True, exist_ok=True)
         (root / "config" / "profile.json").write_text(
             json.dumps({"personal": {"first_name": "Test"}, "cv_path": "cv/test.pdf"}),
             encoding="utf-8",

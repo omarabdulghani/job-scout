@@ -51,7 +51,7 @@ console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 
 DEFAULT_QUERY_FILE = Path("search_queries.txt")
-OUTPUT_PATH = Path("high_success_probability_jobs_multi.json")
+OUTPUT_PATH = Path("data/high_success_probability_jobs_multi.json")
 PROGRESS_MODE = "multi_query_scout"
 FRESH_COUNT_KEYS = ("apply_first", "good_or_better", "new_jobs_seen", "ai_calls")
 FINAL_PERSISTENCE_RETRY_DELAYS = (0.1, 0.2, 0.4, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0)
@@ -756,7 +756,7 @@ def _write_output(output: dict) -> None:
 def _recover_reports_from_live_dashboard(
     progress: dict,
     *,
-    data_path: Path = Path("recommended_jobs_dashboard_data.json"),
+    data_path: Path = Path("data/recommended_jobs_dashboard_data.json"),
 ) -> tuple[list[dict], dict]:
     """Rebuild final merge inputs when every query finished before finalization failed."""
     if not data_path.exists():

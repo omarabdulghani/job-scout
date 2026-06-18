@@ -27,7 +27,7 @@ class LegacyToolsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             database_path = root / "data" / "applications.db"
-            database_path.parent.mkdir(parents=True)
+            database_path.parent.mkdir(parents=True, exist_ok=True)
             with closing(sqlite3.connect(database_path)) as connection:
                 connection.executescript(
                     """
@@ -74,7 +74,7 @@ class LegacyToolsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             database_path = root / "data" / "applications.db"
-            database_path.parent.mkdir(parents=True)
+            database_path.parent.mkdir(parents=True, exist_ok=True)
             with closing(sqlite3.connect(database_path)) as connection:
                 connection.executescript(
                     """

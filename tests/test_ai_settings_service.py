@@ -12,9 +12,9 @@ class AISettingsServiceTests(unittest.TestCase):
         config_dir = root / "config"
         data_dir = root / "data"
         cv_dir = root / "cv"
-        config_dir.mkdir(parents=True)
-        data_dir.mkdir(parents=True)
-        cv_dir.mkdir(parents=True)
+        config_dir.mkdir(parents=True, exist_ok=True)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        cv_dir.mkdir(parents=True, exist_ok=True)
         (config_dir / "profile.json").write_text('{"cv_path": ""}', encoding="utf-8")
         (config_dir / "preferences.json").write_text("{}", encoding="utf-8")
         (root / "search_queries.txt").write_text("ux designer\n", encoding="utf-8")

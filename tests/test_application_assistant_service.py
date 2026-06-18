@@ -8,8 +8,8 @@ from agent.user_workspace import UserWorkspace
 
 class ApplicationAssistantServiceTests(unittest.TestCase):
     def _service(self, root: Path) -> ApplicationAssistantService:
-        (root / "config").mkdir(parents=True)
-        (root / "data").mkdir(parents=True)
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        (root / "data").mkdir(parents=True, exist_ok=True)
         (root / "config" / "profile.json").write_text(
             """{
               "cv_path": "",

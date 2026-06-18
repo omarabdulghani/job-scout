@@ -1,5 +1,5 @@
 export const URLS = Object.freeze({
-  dataFile: "recommended_jobs_dashboard_data.json",
+  dataFile: "data/recommended_jobs_dashboard_data.json",
   dashboardData: "/api/dashboard-data",
   jobs: "/api/jobs",
   jobStatus: "/api/job-status",

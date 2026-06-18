@@ -9,8 +9,8 @@ from agent.user_workspace import UserWorkspace
 
 class BoardSettingsServiceTests(unittest.TestCase):
     def _service(self, root: Path) -> BoardSettingsService:
-        (root / "config").mkdir(parents=True)
-        (root / "data").mkdir(parents=True)
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        (root / "data").mkdir(parents=True, exist_ok=True)
         (root / "config" / "profile.json").write_text('{"cv_path": ""}', encoding="utf-8")
         (root / "config" / "preferences.json").write_text(
             '{"job_boards":{"linkedin":{"enabled":true}},"application_behavior":{}}',

@@ -41,14 +41,14 @@ class LinkedInJobScout:
     - AI scoring only after non-AI survival
     """
 
-    OUTPUT_PATH = Path("high_success_probability_jobs.json")
-    REJECTED_DEBUG_PATH = Path("rejected_jobs_debug.json")
-    AI_DEBUG_PATH = Path("scout_ai_debug.json")
-    SCORE_CACHE_PATH = Path("scored_jobs_cache.json")
-    COLLECTED_JOBS_PATH = Path("scout_collected_jobs.json")
-    DESCRIPTION_LOG_DIR = Path("description_logs")
-    TRACKING_STATUS_PATH = Path("job_tracking_status.json")
-    RUN_HISTORY_PATH = Path("scout_run_history.json")
+    OUTPUT_PATH = Path("data/high_success_probability_jobs.json")
+    REJECTED_DEBUG_PATH = Path("data/rejected_jobs_debug.json")
+    AI_DEBUG_PATH = Path("data/scout_ai_debug.json")
+    SCORE_CACHE_PATH = Path("data/scored_jobs_cache.json")
+    COLLECTED_JOBS_PATH = Path("data/scout_collected_jobs.json")
+    DESCRIPTION_LOG_DIR = Path("data/description_logs")
+    TRACKING_STATUS_PATH = Path("data/job_tracking_status.json")
+    RUN_HISTORY_PATH = Path("data/scout_run_history.json")
     AI_PAYLOAD_AUDIT_FILE_TEMPLATE = "ai_payload_audit_{timestamp}.json"
     AI_SCORING_VERSION = "2026-05-26-opportunity-first-v1"
     AI_THRESHOLD = 50

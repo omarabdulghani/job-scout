@@ -17,12 +17,12 @@ class MaintenanceService:
 
     LOG_SUFFIXES = {".txt", ".log"}
     BACKUP_SOURCE_FILES = (
-        "recommended_jobs_dashboard_user_state.json",
-        "recommended_jobs_dashboard_data.json",
-        "scout_run_history.json",
-        "scored_jobs_cache.json",
-        "scout_collected_jobs.json",
-        "job_tracking_status.json",
+        "data/recommended_jobs_dashboard_data.json",
+        "data/recommended_jobs_dashboard_user_state.json",
+        "data/scout_run_history.json",
+        "data/scored_jobs_cache.json",
+        "data/scout_collected_jobs.json",
+        "data/job_tracking_status.json",
     )
 
     def __init__(self, workspace: UserWorkspace) -> None:
@@ -81,7 +81,7 @@ class MaintenanceService:
         }
 
     def run_history(self) -> list[dict[str, Any]]:
-        path = self.root / "scout_run_history.json"
+        path = self.root / "data" / "scout_run_history.json"
         try:
             payload = json.loads(path.read_text(encoding="utf-8-sig"))
         except (FileNotFoundError, OSError, json.JSONDecodeError):
@@ -102,7 +102,7 @@ class MaintenanceService:
         )[:200]
 
     def dashboard_run_history(self) -> list[dict[str, Any]]:
-        payload = self._read_json(self.root / "recommended_jobs_dashboard_data.json")
+        payload = self._read_json(self.root / "data" / "recommended_jobs_dashboard_data.json")
         runs = payload.get("runs", []) if isinstance(payload, dict) else []
         output = [dict(item) for item in runs if isinstance(item, dict)]
         return sorted(
@@ -123,7 +123,7 @@ class MaintenanceService:
         lifecycle_runs = (
             lifecycle_runs if lifecycle_runs is not None else self.dashboard_run_history()
         )
-        progress = self._read_json(self.root / "scout_progress.json")
+        progress = self._read_json(self.root / "data" / "scout_progress.json")
         controller_state = self._read_json(
             self.root / "data" / "user_workspace" / "dashboard_run_state.json"
         )
@@ -141,8 +141,8 @@ class MaintenanceService:
             "preferences": self.workspace.preferences_path,
             "strategy": self.workspace.strategy_path,
             "queries": self.workspace.search_queries_path,
-            "dashboard_data": self.root / "recommended_jobs_dashboard_data.json",
-            "dashboard_state": self.root / "recommended_jobs_dashboard_user_state.json",
+            "dashboard_data": self.root / "data" / "recommended_jobs_dashboard_data.json",
+            "dashboard_state": self.root / "data" / "recommended_jobs_dashboard_user_state.json",
             "operational_database": self.workspace.path / "job_scout.db",
         }
         files = {
@@ -221,7 +221,7 @@ class MaintenanceService:
             "run_label": str(related.get("run_label") or ""),
             "log": log_path.name if log_path.name else "",
             "resume_available": bool(
-                self._read_json(self.root / "scout_progress.json").get("status")
+                self._read_json(self.root / "data" / "scout_progress.json").get("status")
                 not in {"", "completed"}
             ),
         }
@@ -232,8 +232,8 @@ class MaintenanceService:
         from agent.live_recommended_jobs_dashboard import LiveRecommendedJobsDashboard
         from agent.scout_collected_jobs import ScoutCollectedJobsStore
 
-        dashboard_data_path = self.root / "recommended_jobs_dashboard_data.json"
-        user_state_path = self.root / "recommended_jobs_dashboard_user_state.json"
+        dashboard_data_path = self.root / "data" / "recommended_jobs_dashboard_data.json"
+        user_state_path = self.root / "data" / "recommended_jobs_dashboard_user_state.json"
         db_path = self.workspace.path / "job_scout.db"
 
         # 1. Initialize DB and sync dashboard/user state
@@ -242,7 +242,7 @@ class MaintenanceService:
 
         # 2. Sync collected jobs
         collected_jobs_store = ScoutCollectedJobsStore(
-            path=self.root / "scout_collected_jobs.json",
+            path=self.root / "data" / "scout_collected_jobs.json",
             operational_store=store,
         )
         collected_jobs_synced = store.sync_collected_jobs(collected_jobs_store.jobs)
@@ -285,8 +285,8 @@ class MaintenanceService:
             for name in self.BACKUP_SOURCE_FILES:
                 path = self.root / name
                 if path.exists() and path.is_file():
-                    archive.write(path, path.name)
-                    manifest["files"].append(path.name)
+                    archive.write(path, name)
+                    manifest["files"].append(name)
             archive.writestr(
                 "backup_manifest.json",
                 json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
@@ -313,9 +313,9 @@ class MaintenanceService:
                     relative = path.relative_to(self.root)
                     archive.write(path, relative.as_posix())
             for name in root_files:
-                path = self.root / name
+                path = self.root / "data" / name
                 if path.exists() and path.is_file():
-                    archive.write(path, path.name)
+                    archive.write(path, f"data/{path.name}")
         return destination
 
     def import_migration_zip(self, zip_path: Path) -> None:
@@ -349,8 +349,14 @@ class MaintenanceService:
                     is_workspace_file = False
                 
                 is_root_file = normalized_member in root_files
-                if is_workspace_file or is_root_file:
+                is_data_file = normalized_member in [f"data/{f}" for f in root_files]
+                if is_workspace_file or is_data_file:
                     archive.extract(member, self.root)
+                elif is_root_file:
+                    # Backward compatibility for old ZIPs: redirect to data/
+                    data_file_path = self.root / "data" / Path(member).name
+                    data_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    data_file_path.write_bytes(archive.read(member))
 
     def create_session_backup_zip(self) -> Path:
 

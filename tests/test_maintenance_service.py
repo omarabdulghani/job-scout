@@ -12,8 +12,8 @@ from agent.user_workspace import UserWorkspace
 
 class MaintenanceServiceTests(unittest.TestCase):
     def _service(self, root: Path) -> MaintenanceService:
-        (root / "config").mkdir(parents=True)
-        (root / "data").mkdir(parents=True)
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        (root / "data").mkdir(parents=True, exist_ok=True)
         (root / "config" / "profile.json").write_text('{"cv_path": ""}', encoding="utf-8")
         (root / "config" / "preferences.json").write_text("{}", encoding="utf-8")
         (root / "search_queries.txt").write_text("ux designer\n", encoding="utf-8")
@@ -26,16 +26,17 @@ class MaintenanceServiceTests(unittest.TestCase):
             root = Path(temporary)
             service = self._service(root)
             (root / ".env").write_text("SECRET=value", encoding="utf-8")
-            (root / "data" / "browser_profile").mkdir()
+            (root / "data" / "browser_profile").mkdir(exist_ok=True)
             (root / "data" / "browser_profile" / "Cookies").write_text("secret", encoding="utf-8")
-            (root / "recommended_jobs_dashboard_user_state.json").write_text("{}", encoding="utf-8")
+            (root / "data/recommended_jobs_dashboard_user_state.json").parent.mkdir(parents=True, exist_ok=True)
+            (root / "data/recommended_jobs_dashboard_user_state.json").write_text("{}", encoding="utf-8")
 
             record = service.create_backup()
 
             with zipfile.ZipFile(root / "backups" / record["name"]) as archive:
                 names = archive.namelist()
             self.assertIn("backup_manifest.json", names)
-            self.assertIn("recommended_jobs_dashboard_user_state.json", names)
+            self.assertIn("data/recommended_jobs_dashboard_user_state.json", names)
             self.assertNotIn(".env", names)
             self.assertFalse(any("browser_profile" in name for name in names))
 
@@ -49,7 +50,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             old_time = (datetime.now() - timedelta(days=120)).timestamp()
             for index in range(7):
                 path = service.logs_dir / f"scout_log_{index}.txt"
@@ -65,7 +66,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             log_path = service.logs_dir / "dashboard_run_2026-06-08_10-00-00.txt"
             log_path.write_text("Fatal error: example failure\n", encoding="utf-8")
             error_time = datetime.now().astimezone() - timedelta(minutes=10)
@@ -81,7 +82,8 @@ class MaintenanceServiceTests(unittest.TestCase):
                     }
                 ]
             }
-            (root / "recommended_jobs_dashboard_data.json").write_text(
+            (root / "data/recommended_jobs_dashboard_data.json").parent.mkdir(parents=True, exist_ok=True)
+            (root / "data/recommended_jobs_dashboard_data.json").write_text(
                 json.dumps(dashboard),
                 encoding="utf-8",
             )
@@ -98,7 +100,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             log_path = service.logs_dir / "dashboard_run_failed.txt"
             log_path.write_text("Traceback: example failure\n", encoding="utf-8")
 
@@ -111,7 +113,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             (service.logs_dir / "dashboard_server_stderr.log").write_text(
                 "Traceback (most recent call last):\n"
                 "ConnectionAbortedError: [WinError 10053] connection aborted\n",
@@ -126,7 +128,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             log_path = service.logs_dir / "dashboard_run_persistence.txt"
             log_path.write_text(
                 "[PERSISTENCE WARNING] Live dashboard job update: Access is denied\n",
@@ -134,7 +136,8 @@ class MaintenanceServiceTests(unittest.TestCase):
             )
             warning_time = datetime.now().astimezone() - timedelta(minutes=5)
             os.utime(log_path, (warning_time.timestamp(), warning_time.timestamp()))
-            (root / "recommended_jobs_dashboard_data.json").write_text(
+            (root / "data/recommended_jobs_dashboard_data.json").parent.mkdir(parents=True, exist_ok=True)
+            (root / "data/recommended_jobs_dashboard_data.json").write_text(
                 json.dumps(
                     {
                         "runs": [
@@ -169,7 +172,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             (service.logs_dir / "dashboard_run_persistence.txt").write_text(
                 "[PERSISTENCE WARNING] Scout progress checkpoint: Access is denied\n",
                 encoding="utf-8",
@@ -184,12 +187,12 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.recovery_dir.mkdir(parents=True)
+            service.recovery_dir.mkdir(parents=True, exist_ok=True)
             (service.recovery_dir / "recovery_example.json").write_text(
                 json.dumps(
                     {
                         "recorded_at": "2026-06-12T10:00:00+02:00",
-                        "target": "scout_progress.json",
+                        "target": "data/scout_progress.json",
                         "candidate": ".scout_progress.json.example.tmp",
                         "action": "promoted",
                     }
@@ -202,14 +205,14 @@ class MaintenanceServiceTests(unittest.TestCase):
             self.assertEqual(diagnostics["recovered_temporary_files"], 1)
             self.assertEqual(
                 diagnostics["recovery_records"][0]["target"],
-                "scout_progress.json",
+                "data/scout_progress.json",
             )
 
     def test_interrupted_controller_is_exposed_as_latest_run_incident(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            service.logs_dir.mkdir()
+            service.logs_dir.mkdir(exist_ok=True)
             log_path = service.logs_dir / "dashboard_run_interrupted.txt"
             log_path.write_text("last useful line\n", encoding="utf-8")
             controller_path = root / "data" / "user_workspace" / "dashboard_run_state.json"
@@ -226,11 +229,12 @@ class MaintenanceServiceTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            (root / "scout_progress.json").write_text(
+            (root / "data/scout_progress.json").write_text(
                 '{"status":"in_progress"}',
                 encoding="utf-8",
             )
-            (root / "recommended_jobs_dashboard_data.json").write_text(
+            (root / "data/recommended_jobs_dashboard_data.json").parent.mkdir(parents=True, exist_ok=True)
+            (root / "data/recommended_jobs_dashboard_data.json").write_text(
                 json.dumps(
                     {
                         "runs": [
@@ -263,8 +267,8 @@ class MaintenanceServiceTests(unittest.TestCase):
             # Create session profiles
             bp = root / "data" / "browser_profile"
             ibp = root / "data" / "indeed_browser_profile"
-            bp.mkdir(parents=True)
-            ibp.mkdir(parents=True)
+            bp.mkdir(parents=True, exist_ok=True)
+            ibp.mkdir(parents=True, exist_ok=True)
             
             cookie1 = bp / "Cookies"
             cookie1.write_text("linkedin_cookie_data", encoding="utf-8")
@@ -297,7 +301,7 @@ class MaintenanceServiceTests(unittest.TestCase):
             service = self._service(root)
             
             # Create root data files and workspace files
-            scored_cache = root / "scored_jobs_cache.json"
+            scored_cache = root / "data/scored_jobs_cache.json"
             scored_cache.write_text('{"scored": []}', encoding="utf-8")
             
             ws_db = service.workspace.path / "job_scout.db"
@@ -310,7 +314,7 @@ class MaintenanceServiceTests(unittest.TestCase):
             
             with zipfile.ZipFile(zip_path, "r") as archive:
                 names = archive.namelist()
-            self.assertIn("scored_jobs_cache.json", names)
+            self.assertIn("data/scored_jobs_cache.json", names)
             
             relative_db_path = ws_db.relative_to(root).as_posix()
             self.assertIn(relative_db_path, names)

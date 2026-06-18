@@ -22,7 +22,7 @@ class FixedClock:
 class LiveDashboardWriterTests(unittest.TestCase):
     def test_historical_lane_backfill_is_conservative_versioned_and_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
-            data_path = Path(tmp) / "recommended_jobs_dashboard_data.json"
+            data_path = Path(tmp) / "data/recommended_jobs_dashboard_data.json"
             original = {
                 "schema_version": "live_dashboard.v1",
                 "active_run_id": "",
@@ -54,6 +54,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
                 "summary": {},
                 "filter_options": {},
             }
+            data_path.parent.mkdir(parents=True, exist_ok=True)
             data_path.write_text(json.dumps(original), encoding="utf-8")
 
             first = LiveRecommendedJobsDashboard(
@@ -84,7 +85,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
 
     def test_start_run_writes_contract_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
-            data_path = Path(tmp) / "recommended_jobs_dashboard_data.json"
+            data_path = Path(tmp) / "data/recommended_jobs_dashboard_data.json"
             writer = LiveRecommendedJobsDashboard(data_path, now_provider=FixedClock())
 
             run = writer.start_run(
@@ -105,7 +106,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_record_job_maps_apply_first_and_domain(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -141,7 +142,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(job["decision_label"], "APPLY FIRST")
             self.assertEqual(job["domain_category"], "UX_UI_PRODUCT_DESIGN")
             payload = json.loads(
-                (Path(tmp) / "recommended_jobs_dashboard_data.json").read_text(
+                (Path(tmp) / "data/recommended_jobs_dashboard_data.json").read_text(
                     encoding="utf-8"
                 )
             )
@@ -164,7 +165,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_record_job_persists_international_scope_details(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -210,7 +211,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
             self.assertEqual(job["annual_flight_support"], "confirmed")
             self.assertEqual(job["contract_type"], "permanent")
             payload = json.loads(
-                (Path(tmp) / "recommended_jobs_dashboard_data.json").read_text(
+                (Path(tmp) / "data/recommended_jobs_dashboard_data.json").read_text(
                     encoding="utf-8"
                 )
             )
@@ -219,7 +220,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_fresh_run_progress_tracks_goals_and_page_quality(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -285,7 +286,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_record_job_maps_rejected_and_good_options(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -333,7 +334,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_duplicate_job_in_same_run_merges_queries_and_pages(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -388,7 +389,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_complete_run_updates_status_and_stats(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json",
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json",
                 now_provider=FixedClock(),
             )
             run = writer.start_run(
@@ -422,7 +423,7 @@ class LiveDashboardWriterTests(unittest.TestCase):
     def test_interrupted_run_clears_active_id_and_preserves_resume_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
             writer = LiveRecommendedJobsDashboard(
-                Path(tmp) / "recommended_jobs_dashboard_data.json"
+                Path(tmp) / "data/recommended_jobs_dashboard_data.json"
             )
             run = writer.start_run(
                 mode="linkedin_multi_query_scout",

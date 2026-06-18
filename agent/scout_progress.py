@@ -10,7 +10,7 @@ from agent.safe_file_io import (
 
 
 class ScoutProgressStore:
-    PROGRESS_PATH = Path("scout_progress.json")
+    PROGRESS_PATH = Path("data/scout_progress.json")
 
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else self.PROGRESS_PATH

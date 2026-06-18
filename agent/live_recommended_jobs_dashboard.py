@@ -27,7 +27,7 @@ from agent.safe_file_io import (
 SCHEMA_VERSION = "live_dashboard.v1"
 CAREER_LANE_BACKFILL_VERSION = 1
 SCOPE_METADATA_BACKFILL_VERSION = 1
-DEFAULT_DATA_PATH = Path("recommended_jobs_dashboard_data.json")
+DEFAULT_DATA_PATH = Path("data/recommended_jobs_dashboard_data.json")
 
 DECISION_LABELS = {
     "APPLY_FIRST": "APPLY FIRST",

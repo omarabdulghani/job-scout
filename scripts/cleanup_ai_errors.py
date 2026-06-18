@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 def cleanup_ai_errors():
-    dashboard_json_path = Path("recommended_jobs_dashboard_data.json")
+    dashboard_json_path = Path("data/recommended_jobs_dashboard_data.json")
     db_path = Path("data/user_workspace/job_scout.db")
 
     if not dashboard_json_path.exists():

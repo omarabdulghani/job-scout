@@ -24,7 +24,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         self.assertTrue(self.html_path.exists())
 
     def test_dashboard_polls_stable_json_file(self):
-        self.assertIn('dataFile: "recommended_jobs_dashboard_data.json"', self.html)
+        self.assertIn('dataFile: "data/recommended_jobs_dashboard_data.json"', self.html)
         self.assertIn('dashboardData: "/api/dashboard-data"', self.html)
         self.assertIn('jobStatus: "/api/job-status"', self.html)
         self.assertIn("window.setInterval(loadData, POLL_MS)", self.html)

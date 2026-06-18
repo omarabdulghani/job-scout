@@ -10,9 +10,9 @@ from agent.user_workspace import UserWorkspace
 
 class ProfileServiceTests(unittest.TestCase):
     def _service(self, root: Path) -> ProfileService:
-        (root / "config").mkdir(parents=True)
-        (root / "data").mkdir(parents=True)
-        (root / "cv").mkdir(parents=True)
+        (root / "config").mkdir(parents=True, exist_ok=True)
+        (root / "data").mkdir(parents=True, exist_ok=True)
+        (root / "cv").mkdir(parents=True, exist_ok=True)
         profile = {
             "personal": {
                 "first_name": "Test",

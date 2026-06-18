@@ -17,7 +17,7 @@ from serve_dashboard import make_handler
 class DashboardUserStateTests(unittest.TestCase):
     def test_manual_status_persists_across_runs_for_same_job_id(self):
         with tempfile.TemporaryDirectory() as tmp:
-            state_path = Path(tmp) / "recommended_jobs_dashboard_user_state.json"
+            state_path = Path(tmp) / "data/recommended_jobs_dashboard_user_state.json"
             store = DashboardUserStateStore(state_path)
             original_job = {
                 "board": "linkedin",
@@ -50,7 +50,7 @@ class DashboardUserStateTests(unittest.TestCase):
 
     def test_unreviewed_clears_saved_status(self):
         with tempfile.TemporaryDirectory() as tmp:
-            state_path = Path(tmp) / "recommended_jobs_dashboard_user_state.json"
+            state_path = Path(tmp) / "data/recommended_jobs_dashboard_user_state.json"
             store = DashboardUserStateStore(state_path)
             job = {
                 "board": "linkedin",
@@ -66,7 +66,7 @@ class DashboardUserStateTests(unittest.TestCase):
 
     def test_application_stage_persists_and_enriches_live_job(self):
         with tempfile.TemporaryDirectory() as tmp:
-            state_path = Path(tmp) / "recommended_jobs_dashboard_user_state.json"
+            state_path = Path(tmp) / "data/recommended_jobs_dashboard_user_state.json"
             store = DashboardUserStateStore(state_path)
             job = {
                 "board": "linkedin",
@@ -99,8 +99,8 @@ class DashboardUserStateTests(unittest.TestCase):
     def test_api_saves_status_and_returns_merged_dashboard_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            data_path = root / "recommended_jobs_dashboard_data.json"
-            state_path = root / "recommended_jobs_dashboard_user_state.json"
+            data_path = root / "data/recommended_jobs_dashboard_data.json"
+            state_path = root / "data/recommended_jobs_dashboard_user_state.json"
             job = {
                 "board": "linkedin",
                 "run_id": "run_1",
@@ -111,6 +111,7 @@ class DashboardUserStateTests(unittest.TestCase):
                 "company": "Canonical",
                 "decision_category": "APPLY_FIRST",
             }
+            data_path.parent.mkdir(parents=True, exist_ok=True)
             data_path.write_text(
                 json.dumps(
                     {
@@ -156,8 +157,8 @@ class DashboardUserStateTests(unittest.TestCase):
     def test_paginated_jobs_and_applications_api(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            data_path = root / "recommended_jobs_dashboard_data.json"
-            state_path = root / "recommended_jobs_dashboard_user_state.json"
+            data_path = root / "data/recommended_jobs_dashboard_data.json"
+            state_path = root / "data/recommended_jobs_dashboard_user_state.json"
             jobs = [
                 {
                     "board": "linkedin",
@@ -183,6 +184,7 @@ class DashboardUserStateTests(unittest.TestCase):
                 },
                 "filter_options": {},
             }
+            data_path.parent.mkdir(parents=True, exist_ok=True)
             data_path.write_text(json.dumps(dashboard), encoding="utf-8")
             state_store = DashboardUserStateStore(state_path)
             state_store.update_application(
@@ -246,13 +248,14 @@ class DashboardUserStateTests(unittest.TestCase):
     def test_compact_status_api_omits_full_dashboard_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            data_path = root / "recommended_jobs_dashboard_data.json"
-            state_path = root / "recommended_jobs_dashboard_user_state.json"
+            data_path = root / "data/recommended_jobs_dashboard_data.json"
+            state_path = root / "data/recommended_jobs_dashboard_user_state.json"
             job = {
                 "board": "linkedin",
                 "job_id": "compact",
                 "title": "Compact response role",
             }
+            data_path.parent.mkdir(parents=True, exist_ok=True)
             data_path.write_text(
                 json.dumps({
                     "schema_version": "live_dashboard.v1",
