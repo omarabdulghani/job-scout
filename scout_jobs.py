@@ -119,6 +119,13 @@ async def main():
         help="Employment preference for discovery and scoring.",
     )
     parser.add_argument(
+        "--workplace-types",
+        nargs="+",
+        choices=["remote", "hybrid", "onsite"],
+        default=[],
+        help="Specific workplace types to search (e.g. remote hybrid)",
+    )
+    parser.add_argument(
         "--sponsorship-policy",
         choices=["required", "not_required"],
         default=None,
@@ -275,6 +282,7 @@ async def main():
             ),
             experience_levels=exp_levels,
             sponsorship_policy=getattr(args, "sponsorship_policy", None),
+            workplace_types=args.workplace_types,
         )
     args.location = search_scope["location"]
     preferences["_runtime_search_scope"] = dict(search_scope)

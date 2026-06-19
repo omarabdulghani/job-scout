@@ -261,6 +261,7 @@ def build_search_scope(
     legacy_distance_miles: int | None = None,
     experience_levels: list[str] | tuple[str, ...] | None = None,
     sponsorship_policy: str | None = None,
+    workplace_types: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     platform_key = str(platform or "linkedin").strip().lower()
     if platform_key not in PLATFORM_CAPABILITIES:
@@ -319,6 +320,7 @@ def build_search_scope(
         "authorized_without_sponsorship": auth_without_sponsorship,
         "legacy_mode": bool(legacy_mode),
         "experience_levels": list(experience_levels or ["entry", "associate"]),
+        "workplace_types": list(workplace_types or []),
     }
 
 
@@ -351,6 +353,7 @@ def normalize_search_scope(
         legacy_distance_miles=payload.get("radius_miles", legacy_distance_miles),
         experience_levels=payload.get("experience_levels"),
         sponsorship_policy=payload.get("sponsorship_policy"),
+        workplace_types=payload.get("workplace_types", []),
     )
 
 
@@ -363,6 +366,21 @@ def linkedin_employment_codes(scope: dict[str, Any]) -> list[str]:
             (),
         )
     )
+
+
+def linkedin_workplace_type_codes(scope: dict[str, Any]) -> list[str]:
+    types = scope.get("workplace_types") or []
+    codes = []
+    mapping = {
+        "onsite": "1",
+        "remote": "2",
+        "hybrid": "3"
+    }
+    for wt in types:
+        code = mapping.get(str(wt).lower().strip())
+        if code:
+            codes.append(code)
+    return codes
 
 
 def search_scope_summary(scope: dict[str, Any]) -> str:

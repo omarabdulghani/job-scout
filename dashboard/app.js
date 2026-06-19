@@ -401,6 +401,9 @@ const DEFAULT_THEME = initialTheme();
       runSearchMarket: document.getElementById("runSearchMarket"),
       runRadius: document.getElementById("runRadius"),
       runEmployment: document.getElementById("runEmployment"),
+      runWorkplaceRemote: document.getElementById("runWorkplaceRemote"),
+      runWorkplaceHybrid: document.getElementById("runWorkplaceHybrid"),
+      runWorkplaceOnsite: document.getElementById("runWorkplaceOnsite"),
       runLocationOptions: document.getElementById("runLocationOptions"),
       runSearchGoalControl: document.getElementById("runSearchGoalControl"),
       runSearchGoal: document.getElementById("runSearchGoal"),
@@ -3915,6 +3918,9 @@ const DEFAULT_THEME = initialTheme();
         if (state.filters.manualStatus !== "all" && manualStatus(job) !== state.filters.manualStatus) return false;
         if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
         if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
+        if (state.filters.quickPreset === "remote_only" && !isRemoteOnly(job)) return false;
+        if (state.filters.quickPreset === "hybrid_only" && !isHybridOnly(job)) return false;
+        if (state.filters.quickPreset === "local_only" && (isRemoteOnly(job) || isHybridOnly(job))) return false;
         if (text && !searchBlob(job).includes(text)) return false;
         return true;
       });
@@ -3953,7 +3959,15 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function isRemoteOrHybrid(job) {
-      return /remote|hybrid|thuis|from home/i.test(searchBlob(job));
+      return /remote|hybrid|thuis|from home/i.test(searchBlob(job)) || (job.workplace_type || "").toLowerCase().includes("remote") || (job.workplace_type || "").toLowerCase().includes("hybrid");
+    }
+
+    function isRemoteOnly(job) {
+      return /remote|from home/i.test(searchBlob(job)) || (job.workplace_type || "").toLowerCase().includes("remote");
+    }
+
+    function isHybridOnly(job) {
+      return /hybrid|thuis/i.test(searchBlob(job)) || (job.workplace_type || "").toLowerCase().includes("hybrid");
     }
 
     function jobs() {
@@ -4587,6 +4601,7 @@ const DEFAULT_THEME = initialTheme();
         location: els.runLocation.value,
         radius_km: els.runRadius.value,
         employment: els.runEmployment.value,
+        workplace_types: selectedWorkplaceTypes(),
         experimental_confirmed: Boolean(els.runExperimentalConfirm?.checked),
         max_pages: els.runMaxPages.value,
         browser: els.runBrowser.value,
@@ -4634,6 +4649,14 @@ const DEFAULT_THEME = initialTheme();
           checked.push(lvl);
         }
       }
+      return checked;
+    }
+
+    function selectedWorkplaceTypes() {
+      const checked = [];
+      if (els.runWorkplaceRemote?.checked) checked.push("remote");
+      if (els.runWorkplaceHybrid?.checked) checked.push("hybrid");
+      if (els.runWorkplaceOnsite?.checked) checked.push("onsite");
       return checked;
     }
 

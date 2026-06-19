@@ -25,6 +25,8 @@ export const QUICK_PRESETS = [
   ["easy_apply", "Easy Apply"],
   ["dutch_risk", "Dutch Risk"],
   ["remote_hybrid", "Remote/Hybrid"],
+  ["remote_only", "Remote Only"],
+  ["hybrid_only", "Hybrid Only"],
   ["applied", "Applied"],
   ["irrelevant", "Irrelevant"],
 ];
@@ -37,6 +39,8 @@ export const QUICK_PRESET_ICONS = Object.freeze({
   easy_apply: "briefcase",
   dutch_risk: "filter",
   remote_hybrid: "activity",
+  remote_only: "activity",
+  hybrid_only: "activity",
   applied: "check",
   irrelevant: "archive",
 });

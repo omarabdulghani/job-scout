@@ -334,6 +334,12 @@ class DashboardRunController:
             self.EMPLOYMENT_CHOICES,
             "full-time-preferred",
         )
+        workplace_types = payload.get("workplace_types")
+        if isinstance(workplace_types, list):
+            valid_wt = {"remote", "hybrid", "onsite"}
+            workplace_types = [str(w).strip().lower() for w in workplace_types if str(w).strip().lower() in valid_wt]
+        else:
+            workplace_types = []
         market_profile = MARKET_PROFILES.get(search_market, {})
         market_availability = str(
             market_profile.get("availability") or "disabled"
@@ -393,6 +399,8 @@ class DashboardRunController:
                 "--employment",
                 employment,
             ]
+            if workplace_types:
+                command += ["--workplace-types"] + workplace_types
             sponsorship_policy = payload.get("sponsorship_policy")
             if sponsorship_policy in {"required", "not_required"}:
                 command += ["--sponsorship-policy", sponsorship_policy]

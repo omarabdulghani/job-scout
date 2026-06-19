@@ -4,6 +4,7 @@ import re
 import urllib.parse
 
 from agent.browser import BrowserController
+from agent.search_scope import linkedin_workplace_type_codes
 
 
 class LinkedInScraper:
@@ -267,7 +268,12 @@ class LinkedInScraper:
         if linkedin_prefs.get("easy_apply_only", False):
             params["f_AL"] = "true"
 
-        if not preferences.get("onsite_ok", True) and preferences.get("remote_ok"):
+        runtime_scope = preferences.get("_runtime_search_scope")
+        if runtime_scope and runtime_scope.get("workplace_types"):
+            wt_codes = linkedin_workplace_type_codes(runtime_scope)
+            if wt_codes:
+                params["f_WT"] = ",".join(wt_codes)
+        elif not preferences.get("onsite_ok", True) and preferences.get("remote_ok"):
             params["f_WT"] = "2"
         return f"{self.JOBS_URL}?{urllib.parse.urlencode(params)}"
 
