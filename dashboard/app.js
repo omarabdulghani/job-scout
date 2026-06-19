@@ -7,7 +7,7 @@ import {
   numeric,
   labelize,
   formatDateTime,
-} from "./modules/core.js";
+} from "./modules/core.js?v=20260619-limit";
 import {
   DECISIONS,
   MANUAL_STATUSES,
@@ -17,12 +17,12 @@ import {
   SUMMARY_ICONS,
   DECISION_ICONS,
   buildJobsQuery,
-} from "./modules/jobs.js";
+} from "./modules/jobs.js?v=20260619-limit";
 import {
   resolvePage,
   workspaceLabel,
   pageDocumentTitle,
-} from "./modules/navigation.js";
+} from "./modules/navigation.js?v=20260619-limit";
 import {
   PROFILE_EXPERIENCE_FIELDS,
   PROFILE_EDUCATION_FIELDS,

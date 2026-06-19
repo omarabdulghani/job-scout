@@ -86,7 +86,7 @@ export function buildJobsQuery(filters, offset, now = Date.now()) {
       ? filters.quickPreset
       : "",
     sort: filters.sort,
-    limit: "100",
+    limit: filters.viewMode === "board" && filters.decision === "all" ? "1500" : "100",
     offset: String(offset),
     t: String(now),
   });
