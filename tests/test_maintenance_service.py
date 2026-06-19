@@ -25,7 +25,7 @@ class MaintenanceServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text("SECRET=value", encoding="utf-8")
+            (root / "data" / ".env").write_text("SECRET=value", encoding="utf-8")
             (root / "data" / "browser_profile").mkdir(exist_ok=True)
             (root / "data" / "browser_profile" / "Cookies").write_text("secret", encoding="utf-8")
             (root / "data/recommended_jobs_dashboard_user_state.json").parent.mkdir(parents=True, exist_ok=True)

@@ -3215,35 +3215,52 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function applyQuickPreset(key) {
-      state.filters.quickPreset = key;
-      state.filters.search = "";
-      els.searchInput.value = "";
-      if (key === "needs_action") {
-        state.filters.actionScope = "needs_action";
-        state.filters.decision = "all";
-        state.filters.manualStatus = "all";
-      } else if (key === "current_run") {
-        state.filters.run = effectiveActiveRunId() || latestRunId() || "all";
-        state.filters.actionScope = "all";
-      } else if (key === "apply_first") {
-        state.filters.actionScope = "needs_action";
-        state.filters.decision = "APPLY_FIRST";
-        state.filters.manualStatus = "all";
-      } else if (key === "good_options") {
-        state.filters.actionScope = "needs_action";
-        state.filters.decision = "GOOD_OPTIONS";
-        state.filters.manualStatus = "all";
-      } else if (key === "easy_apply") {
-        state.filters.applyMethod = "easy_apply";
-        state.filters.actionScope = "needs_action";
-      } else if (key === "applied") {
-        state.filters.actionScope = "all";
-        state.filters.manualStatus = "applied";
-      } else if (key === "irrelevant") {
-        state.filters.actionScope = "all";
-        state.filters.manualStatus = "irrelevant";
+      if (isQuickPresetActive(key)) {
+        state.filters.quickPreset = "";
+        if (key === "needs_action") {
+          state.filters.actionScope = "all";
+        } else if (key === "current_run") {
+          state.filters.run = "all";
+        } else if (key === "apply_first" || key === "good_options") {
+          state.filters.decision = "all";
+          state.filters.actionScope = "all";
+        } else if (key === "easy_apply") {
+          state.filters.applyMethod = "all";
+          state.filters.actionScope = "all";
+        } else if (key === "applied" || key === "irrelevant") {
+          state.filters.manualStatus = "all";
+        }
       } else {
-        state.filters.actionScope = "all";
+        state.filters.quickPreset = key;
+        state.filters.search = "";
+        els.searchInput.value = "";
+        if (key === "needs_action") {
+          state.filters.actionScope = "needs_action";
+          state.filters.decision = "all";
+          state.filters.manualStatus = "all";
+        } else if (key === "current_run") {
+          state.filters.run = effectiveActiveRunId() || latestRunId() || "all";
+          state.filters.actionScope = "all";
+        } else if (key === "apply_first") {
+          state.filters.actionScope = "needs_action";
+          state.filters.decision = "APPLY_FIRST";
+          state.filters.manualStatus = "all";
+        } else if (key === "good_options") {
+          state.filters.actionScope = "needs_action";
+          state.filters.decision = "GOOD_OPTIONS";
+          state.filters.manualStatus = "all";
+        } else if (key === "easy_apply") {
+          state.filters.applyMethod = "easy_apply";
+          state.filters.actionScope = "needs_action";
+        } else if (key === "applied") {
+          state.filters.actionScope = "all";
+          state.filters.manualStatus = "applied";
+        } else if (key === "irrelevant") {
+          state.filters.actionScope = "all";
+          state.filters.manualStatus = "irrelevant";
+        } else {
+          state.filters.actionScope = "all";
+        }
       }
       syncFilterOptions();
       loadJobs();

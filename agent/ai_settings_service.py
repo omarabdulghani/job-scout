@@ -155,7 +155,7 @@ class AISettingsService:
     def __init__(self, workspace: UserWorkspace) -> None:
         self.workspace = workspace.ensure_initialized()
         self.root = workspace.root
-        self.env_path = self.root / ".env"
+        self.env_path = self.root / "data" / ".env"
         self.status_path = self.workspace.path / "ai_provider_status.json"
 
     def payload(self) -> dict[str, Any]:

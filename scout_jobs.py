@@ -4,8 +4,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import sys
-
-from dotenv import load_dotenv
+from agent.env_loader import load_workspace_env
 from rich.console import Console
 from rich.panel import Panel
 
@@ -36,7 +35,7 @@ from agent.search_scope import (
 )
 from agent.user_workspace import load_user_config
 
-load_dotenv(override=True)
+load_workspace_env()
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 

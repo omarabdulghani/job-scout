@@ -6,8 +6,7 @@ import os
 import re
 import sys
 from pathlib import Path
-
-from dotenv import load_dotenv
+from agent.env_loader import load_workspace_env
 from rich.console import Console
 from rich.panel import Panel
 
@@ -46,7 +45,7 @@ from agent.scout_run_logger import ScoutRunLogger
 from agent.scout_stop import clear_stop_request, stop_reason, stop_requested
 from agent.user_workspace import UserWorkspace, active_search_queries_path, load_user_config
 
-load_dotenv(override=True)
+load_workspace_env()
 console = Console()
 ACTIVE_RUN_LOGGER: ScoutRunLogger | None = None
 

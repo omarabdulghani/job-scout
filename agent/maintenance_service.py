@@ -17,6 +17,7 @@ class MaintenanceService:
 
     LOG_SUFFIXES = {".txt", ".log"}
     BACKUP_SOURCE_FILES = (
+        "data/.env",
         "data/recommended_jobs_dashboard_data.json",
         "data/recommended_jobs_dashboard_user_state.json",
         "data/scout_run_history.json",
@@ -297,6 +298,7 @@ class MaintenanceService:
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         destination = self.backups_dir / f"job_scout_migration_{timestamp}.zip"
         root_files = (
+            ".env",
             "recommended_jobs_dashboard_data.json",
             "recommended_jobs_dashboard_user_state.json",
             "scout_run_history.json",
@@ -320,6 +322,7 @@ class MaintenanceService:
 
     def import_migration_zip(self, zip_path: Path) -> None:
         root_files = {
+            ".env",
             "recommended_jobs_dashboard_data.json",
             "recommended_jobs_dashboard_user_state.json",
             "scout_run_history.json",

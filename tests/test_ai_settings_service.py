@@ -26,7 +26,7 @@ class AISettingsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text(
+            (root / "data" / ".env").write_text(
                 "AI_BACKEND=auto\nGEMINI_API_KEY=super-secret\nGEMINI_MODEL=gemini-2.5-flash\n",
                 encoding="utf-8",
             )
@@ -42,7 +42,7 @@ class AISettingsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text(
+            (root / "data" / ".env").write_text(
                 "AI_BACKEND=auto\nAI_BACKEND_ORDER=gemini\nGEMINI_API_KEY=keep-me\nGEMINI_MODEL=old-model\n",
                 encoding="utf-8",
             )
@@ -63,7 +63,7 @@ class AISettingsServiceTests(unittest.TestCase):
                 }
             )
 
-            env_text = (root / ".env").read_text(encoding="utf-8")
+            env_text = (root / "data" / ".env").read_text(encoding="utf-8")
             self.assertIn("GEMINI_API_KEY=keep-me", env_text)
             self.assertIn("GEMINI_MODEL=new-model", env_text)
 
@@ -71,7 +71,7 @@ class AISettingsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text(
+            (root / "data" / ".env").write_text(
                 "AI_BACKEND=gemini\nAI_BACKEND_ORDER=gemini\nGEMINI_API_KEY=remove-me\nGEMINI_MODEL=gemini-2.5-flash\n",
                 encoding="utf-8",
             )
@@ -91,13 +91,13 @@ class AISettingsServiceTests(unittest.TestCase):
                 }
             )
 
-            self.assertNotIn("GEMINI_API_KEY", (root / ".env").read_text(encoding="utf-8"))
+            self.assertNotIn("GEMINI_API_KEY", (root / "data" / ".env").read_text(encoding="utf-8"))
 
     def test_unused_openai_compatible_slot_may_remain_blank(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text(
+            (root / "data" / ".env").write_text(
                 "AI_BACKEND=auto\nAI_BACKEND_ORDER=gemini\nGEMINI_API_KEY=configured\nGEMINI_MODEL=gemini-2.5-flash\n",
                 encoding="utf-8",
             )
@@ -128,7 +128,7 @@ class AISettingsServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             service = self._service(root)
-            (root / ".env").write_text(
+            (root / "data" / ".env").write_text(
                 "AI_BACKEND=auto\nAI_BACKEND_ORDER=gemini\nGEMINI_API_KEY=configured\nGEMINI_MODEL=gemini-2.5-flash\n",
                 encoding="utf-8",
             )

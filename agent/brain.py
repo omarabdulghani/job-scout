@@ -10,10 +10,10 @@ from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
 import anthropic
-from dotenv import load_dotenv
+from agent.env_loader import load_workspace_env
 from pypdf import PdfReader
 
-load_dotenv(override=True)
+load_workspace_env()
 
 
 class LMStudioRetryableScoringError(RuntimeError):
@@ -511,7 +511,7 @@ class JobBrain:
         import sys
         # Avoid reloading .env in unit tests as it overrides mock patch.dict environments
         if not (any(m in sys.modules for m in ("pytest", "unittest")) or os.getenv("PYTEST_CURRENT_TEST")):
-            load_dotenv(override=True)
+            load_workspace_env()
         self.profile = profile
         self.preferences = preferences
         self.client = None
