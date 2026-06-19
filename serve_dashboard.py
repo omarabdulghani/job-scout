@@ -423,6 +423,8 @@ class DashboardRunController:
         if fresh and ai_budget_mode != "smart" and workflow in {"linkedin_multi_fresh", "linkedin_single"}:
             command += ["--ai-budget-mode", ai_budget_mode]
         command += ["--browser", browser]
+        if "PORT" in os.environ:
+            command.append("--headless")
         return command, workflow, self.WORKFLOW_LABELS[workflow]
 
     def _refresh_process_locked(self) -> None:

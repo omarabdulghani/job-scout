@@ -27,6 +27,7 @@ from agent.job_scope_metadata import (
 from agent.search_scope import (
     MARKET_PROFILES,
     linkedin_employment_codes,
+    linkedin_workplace_type_codes,
     normalize_search_scope,
 )
 from scrapers.linkedin import LinkedInScraper
@@ -3079,6 +3080,19 @@ class LinkedInJobScout:
         title = (job.get("title") or "").strip()
         company = (job.get("company") or "").strip()
 
+        workplace_types = self.search_scope.get("workplace_types") or []
+        if workplace_types:
+            inferred = self.brain._infer_workplace_type(job)
+            if inferred and inferred not in workplace_types:
+                return {
+                    "status": "rejected_excluded",
+                    "language": "unknown",
+                    "matched_terms": [],
+                    "reasons": [
+                        f"Workplace type '{inferred}' does not match run scope filters: {', '.join(workplace_types)}"
+                    ],
+                }
+
         if self._is_blacklisted_company(company):
             return {
                 "status": "rejected_excluded",
@@ -3351,6 +3365,11 @@ class LinkedInJobScout:
         employment_codes = linkedin_employment_codes(self.search_scope)
         if employment_codes:
             params["f_JT"] = ",".join(employment_codes)
+
+        wt_codes = linkedin_workplace_type_codes(self.search_scope)
+        if wt_codes:
+            params["f_WT"] = ",".join(wt_codes)
+
         location_key = self._normalize_text(location)
         geo_id = self.LINKEDIN_GEO_IDS.get(location_key)
         if geo_id:

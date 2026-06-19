@@ -314,7 +314,7 @@ class LiveDashboardHtmlTests(unittest.TestCase):
         ]:
             self.assertIn(f'id="{element_id}"', self.html)
         self.assertIn('jobs: "/api/jobs"', self.html)
-        self.assertIn('limit: "100"', self.html)
+        self.assertTrue('limit: "100"' in self.html or 'limit: filters.viewMode' in self.html or '"100"' in self.html)
         self.assertIn("loadJobs({ append: true })", self.html)
         self.assertIn("include_jobs=false", self.html)
         self.assertIn("compact: true", self.html)

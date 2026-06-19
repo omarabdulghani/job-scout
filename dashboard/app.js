@@ -4307,6 +4307,14 @@ const DEFAULT_THEME = initialTheme();
             cb.checked = levels.includes(lvl);
           }
         }
+
+        // Populate workplace type checkboxes on resume
+        const workplaceTypes = Array.isArray(resumeScope.workplace_types)
+          ? resumeScope.workplace_types
+          : ["remote", "hybrid", "onsite"];
+        if (els.runWorkplaceRemote) els.runWorkplaceRemote.checked = workplaceTypes.includes("remote");
+        if (els.runWorkplaceHybrid) els.runWorkplaceHybrid.checked = workplaceTypes.includes("hybrid");
+        if (els.runWorkplaceOnsite) els.runWorkplaceOnsite.checked = workplaceTypes.includes("onsite");
       } else {
         if (marketChanged || !els.runLocation.value) {
           els.runLocation.value = safe(profile.default_location) || "Amstelveen";
@@ -4377,6 +4385,18 @@ const DEFAULT_THEME = initialTheme();
         els.runPlatform.disabled = locked;
         els.runWorkflow.disabled = locked;
       }
+
+      // Disable experience, visa, and workplace checkboxes on resume
+      const checkboxes = [
+        "runExpInternship", "runExpEntry", "runExpAssociate",
+        "runExpMidSenior", "runExpDirector", "runExpExecutive",
+        "runScopeSponsorshipPolicy",
+        "runWorkplaceRemote", "runWorkplaceHybrid", "runWorkplaceOnsite"
+      ];
+      checkboxes.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = locked;
+      });
       renderRunScopeSummary(profile, radiusDisabled);
     }
 
