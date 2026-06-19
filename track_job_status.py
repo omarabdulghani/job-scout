@@ -5,8 +5,8 @@ from pathlib import Path
 from agent.job_tracking import JobTrackingStore
 
 
-OUTPUT_PATH = Path("high_success_probability_jobs.json")
-SCORE_CACHE_PATH = Path("scored_jobs_cache.json")
+OUTPUT_PATH = Path("data/high_success_probability_jobs.json")
+SCORE_CACHE_PATH = Path("data/scored_jobs_cache.json")
 
 
 def _iter_output_jobs(payload: dict) -> list[dict]:

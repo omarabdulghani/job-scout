@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 class ScoutRunHistoryStore:
-    HISTORY_PATH = Path("scout_run_history.json")
+    HISTORY_PATH = Path("data/scout_run_history.json")
 
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else self.HISTORY_PATH

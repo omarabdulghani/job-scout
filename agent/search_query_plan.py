@@ -199,8 +199,8 @@ def build_search_query_plan(
     selected_groups: list[str] | tuple[str, ...] | None = None,
     preferences: dict[str, Any] | None = None,
     learning_enabled: bool = True,
-    multi_output_path: Path | str = Path("high_success_probability_jobs_multi.json"),
-    run_history_path: Path | str = Path("scout_run_history.json"),
+    multi_output_path: Path | str = Path("data/high_success_probability_jobs_multi.json"),
+    run_history_path: Path | str = Path("data/scout_run_history.json"),
     learning_scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     groups = normalize_query_groups(query_groups)

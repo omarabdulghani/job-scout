@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class ScoutCollectedJobsStore:
-    COLLECTED_JOBS_PATH = Path("scout_collected_jobs.json")
+    COLLECTED_JOBS_PATH = Path("data/scout_collected_jobs.json")
 
     def __init__(
         self,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 class ScoutReviewLatestWriter:
-    REVIEW_PATH = Path("review_latest_jobs.json")
+    REVIEW_PATH = Path("data/review_latest_jobs.json")
     POSTOPEN_REJECTION_KEYS = (
         "rejected_outside_netherlands",
         "rejected_internship",

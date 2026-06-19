@@ -14,7 +14,7 @@ from agent.safe_file_io import atomic_write_json, load_json_with_recovery
 
 
 SCHEMA_VERSION = "dashboard_user_state.v1"
-DEFAULT_USER_STATE_PATH = Path("recommended_jobs_dashboard_user_state.json")
+DEFAULT_USER_STATE_PATH = Path("data/recommended_jobs_dashboard_user_state.json")
 
 STATUS_UNREVIEWED = "unreviewed"
 STATUS_APPLIED = "applied"

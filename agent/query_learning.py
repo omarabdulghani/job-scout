@@ -45,8 +45,8 @@ def order_queries_with_learning(
     *,
     preferences: dict[str, Any] | None = None,
     enabled: bool = True,
-    multi_output_path: Path | str = Path("high_success_probability_jobs_multi.json"),
-    run_history_path: Path | str = Path("scout_run_history.json"),
+    multi_output_path: Path | str = Path("data/high_success_probability_jobs_multi.json"),
+    run_history_path: Path | str = Path("data/scout_run_history.json"),
     learning_context: dict[str, Any] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     policy = QueryLearningPolicy.from_preferences(preferences, enabled=enabled)

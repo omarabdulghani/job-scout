@@ -1319,10 +1319,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
     def _read_dashboard_data(self) -> dict[str, Any]:
         try:
+            print("READING DASHBOARD DATA FROM:", self.dashboard_data_path)
             payload = json.loads(self.dashboard_data_path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
+            print("SUMMARY IN PAYLOAD:", payload.get("summary"))
+        except FileNotFoundError as e:
+            print("FILE NOT FOUND:", e)
             payload = {}
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print("JSON ERROR:", e)
             payload = {}
         if not isinstance(payload, dict):
             payload = {}
