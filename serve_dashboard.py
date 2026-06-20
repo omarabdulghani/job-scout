@@ -1069,6 +1069,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if self._path_without_query() == "/api/maintenance/import-session":
+            if self.run_controller and self.run_controller.state.get("active"):
+                self._send_json({"ok": False, "error": "Cannot import browser session while a scout run is active"}, status=400)
+                return
             try:
                 payload = self._read_json_body(max_bytes=250 * 1024 * 1024)
                 content_base64 = str(payload.get("content_base64") or "")
@@ -1089,6 +1092,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if self._path_without_query() == "/api/maintenance/import-backup":
+            if self.run_controller and self.run_controller.state.get("active"):
+                self._send_json({"ok": False, "error": "Cannot import configuration backup while a scout run is active"}, status=400)
+                return
             try:
                 payload = self._read_json_body(max_bytes=250 * 1024 * 1024)
                 content_base64 = str(payload.get("content_base64") or "")

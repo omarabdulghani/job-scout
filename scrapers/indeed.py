@@ -125,6 +125,22 @@ class IndeedScraper:
         self.browser = browser
         self._initial_manual_access_confirmed = False
 
+    async def _prompt_input(self, prompt: str) -> str:
+        import sys
+        if not sys.stdin.isatty():
+            print("Indeed: Interactive terminal stdin is unavailable (non-interactive mode).")
+            print(f"Indeed: Prompt would have been: {prompt}")
+            print("Indeed: Waiting 30 seconds for manual resolution or page change before continuing...")
+            await asyncio.sleep(30)
+            return ""
+        try:
+            return input(prompt)
+        except (EOFError, OSError):
+            print("Indeed: Interactive terminal stdin is closed/unavailable.")
+            print("Indeed: Waiting 30 seconds for manual resolution or page change before continuing...")
+            await asyncio.sleep(30)
+            return ""
+
     async def ensure_manual_access(self, preferences: dict | None = None) -> bool:
         """Open Indeed and let the user complete any manual login/setup."""
         await self.browser.goto(self.HOME_URL)
@@ -143,7 +159,7 @@ class IndeedScraper:
                 "Indeed: The browser is ready. Log in manually now if you want this "
                 "dedicated browser profile to remember your Indeed session."
             )
-            input("Indeed: Press Enter only after you are logged in, or ready to continue: ")
+            await self._prompt_input("Indeed: Press Enter only after you are logged in, or ready to continue: ")
             self._initial_manual_access_confirmed = True
             await self.browser.human_delay(1.0, 2.0)
         return True
@@ -489,7 +505,7 @@ class IndeedScraper:
                 "Do not try to bypass it. Go back to Indeed and continue as a guest, "
                 "or use a non-Google Indeed login method manually if Indeed offers one."
             )
-            input("Indeed: Press Enter here when you are back on Indeed or ready to continue as guest: ")
+            await self._prompt_input("Indeed: Press Enter here when you are back on Indeed or ready to continue as guest: ")
             await self.browser.human_delay(1.0, 2.0)
             return True
 
@@ -501,7 +517,7 @@ class IndeedScraper:
             f"{context}. If this is optional login, skip it and continue as a guest. "
             "If Indeed requires CAPTCHA or verification, complete it manually in the browser."
         )
-        input("Indeed: Press Enter here after you have completed the manual step: ")
+        await self._prompt_input("Indeed: Press Enter here after you have completed the manual step: ")
         await self.browser.human_delay(1.0, 2.0)
         return True
 

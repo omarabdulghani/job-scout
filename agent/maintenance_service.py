@@ -24,6 +24,7 @@ class MaintenanceService:
         "data/scored_jobs_cache.json",
         "data/scout_collected_jobs.json",
         "data/job_tracking_status.json",
+        "data/applications.db",
     )
 
     def __init__(self, workspace: UserWorkspace) -> None:
@@ -306,6 +307,7 @@ class MaintenanceService:
             "scout_collected_jobs.json",
             "scout_progress.json",
             "job_tracking_status.json",
+            "applications.db",
         )
         with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             if self.workspace.path.exists():
@@ -330,6 +332,7 @@ class MaintenanceService:
             "scout_collected_jobs.json",
             "scout_progress.json",
             "job_tracking_status.json",
+            "applications.db",
         }
         # 1. Clean existing workspace files (except backup dir itself)
         if self.workspace.path.exists():

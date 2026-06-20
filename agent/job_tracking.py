@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 class JobTrackingStore:
-    STATUS_PATH = Path("job_tracking_status.json")
+    STATUS_PATH = Path("data/job_tracking_status.json")
     ALLOWED_STATUSES = {
         "applied",
         "skipped",
