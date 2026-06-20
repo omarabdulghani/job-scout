@@ -3880,48 +3880,53 @@ const DEFAULT_THEME = initialTheme();
     function filteredJobs() {
       const text = state.filters.search.trim().toLowerCase();
       let output = jobs().filter((job) => {
-        if (
-          state.filters.careerLane !== "all"
-          && safe(job.career_lane || "other") !== state.filters.careerLane
-        ) return false;
-        if (state.filters.actionScope === "needs_action" && !needsAction(job)) return false;
-        if (state.filters.run !== "all" && job.run_id !== state.filters.run) return false;
-        if (state.filters.decision !== "all" && job.decision_category !== state.filters.decision) return false;
-        if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
-        if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
-        if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
-        if (
-          state.filters.searchGroup !== "all"
-          && !jobSearchGroups(job).includes(state.filters.searchGroup)
-        ) return false;
-        if (
-          state.filters.searchMarket !== "all"
-          && safe(job.search_market) !== state.filters.searchMarket
-        ) return false;
-        if (
-          state.filters.employmentType !== "all"
-          && !(Array.isArray(job.employment_types)
-            && job.employment_types.includes(state.filters.employmentType))
-        ) return false;
-        if (
-          state.filters.flexibleHours !== "all"
-          && Boolean(job.flexible_hours) !== (state.filters.flexibleHours === "true")
-        ) return false;
-        if (
-          state.filters.sponsorshipStatus !== "all"
-          && safe(job.sponsorship_status) !== state.filters.sponsorshipStatus
-        ) return false;
-        if (
-          state.filters.platform !== "all"
-          && safe(job.board) !== state.filters.platform
-        ) return false;
-        if (state.filters.manualStatus !== "all" && manualStatus(job) !== state.filters.manualStatus) return false;
-        if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
-        if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
+        if (!state.apiAvailable) {
+          if (
+            state.filters.careerLane !== "all"
+            && safe(job.career_lane || "other") !== state.filters.careerLane
+          ) return false;
+          if (state.filters.actionScope === "needs_action" && !needsAction(job)) return false;
+          if (state.filters.run !== "all" && job.run_id !== state.filters.run) return false;
+          if (state.filters.decision !== "all" && job.decision_category !== state.filters.decision) return false;
+          if (state.filters.domain !== "all" && job.domain_category !== state.filters.domain) return false;
+          if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
+          if (state.filters.applyMethod !== "all" && applyMethod(job) !== state.filters.applyMethod) return false;
+          if (
+            state.filters.searchGroup !== "all"
+            && !jobSearchGroups(job).includes(state.filters.searchGroup)
+          ) return false;
+          if (
+            state.filters.searchMarket !== "all"
+            && safe(job.search_market) !== state.filters.searchMarket
+          ) return false;
+          if (
+            state.filters.employmentType !== "all"
+            && !(Array.isArray(job.employment_types)
+              && job.employment_types.includes(state.filters.employmentType))
+          ) return false;
+          if (
+            state.filters.flexibleHours !== "all"
+            && Boolean(job.flexible_hours) !== (state.filters.flexibleHours === "true")
+          ) return false;
+          if (
+            state.filters.sponsorshipStatus !== "all"
+            && safe(job.sponsorship_status) !== state.filters.sponsorshipStatus
+          ) return false;
+          if (
+            state.filters.platform !== "all"
+            && safe(job.board) !== state.filters.platform
+          ) return false;
+          if (state.filters.manualStatus !== "all" && manualStatus(job) !== state.filters.manualStatus) return false;
+          if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
+          if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
+          if (text && !searchBlob(job).includes(text)) return false;
+        }
+
+        // Granular presets not processed by server must be evaluated client-side online and offline
         if (state.filters.quickPreset === "remote_only" && !isRemoteOnly(job)) return false;
         if (state.filters.quickPreset === "hybrid_only" && !isHybridOnly(job)) return false;
         if (state.filters.quickPreset === "local_only" && (isRemoteOnly(job) || isHybridOnly(job))) return false;
-        if (text && !searchBlob(job).includes(text)) return false;
+
         return true;
       });
 
@@ -3979,6 +3984,7 @@ const DEFAULT_THEME = initialTheme();
         job.title,
         job.company,
         job.location,
+        job.description_preview || job.description,
         job.query,
         job.reason,
         job.domain_label,
