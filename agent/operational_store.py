@@ -390,6 +390,7 @@ class OperationalStore:
             "company": "company COLLATE NOCASE, processed_at DESC",
             "location": "location COLLATE NOCASE, processed_at DESC",
             "newest": "processed_at DESC, score DESC",
+            "default": "rowid ASC",
         }.get(sort, "processed_at DESC, score DESC")
         safe_limit = max(1, min(500, int(limit)))
         safe_offset = max(0, int(offset))

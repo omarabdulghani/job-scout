@@ -3934,6 +3934,7 @@ const DEFAULT_THEME = initialTheme();
         if (state.filters.sort === "score") return numeric(b.score) - numeric(a.score);
         if (state.filters.sort === "company") return safe(a.company).localeCompare(safe(b.company));
         if (state.filters.sort === "location") return safe(a.location).localeCompare(safe(b.location));
+        if (state.filters.sort === "default") return 0;
         return safe(b.processed_at).localeCompare(safe(a.processed_at));
       });
       return output;
