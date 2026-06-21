@@ -120,7 +120,7 @@ const DEFAULT_THEME = initialTheme();
         flag: "all",
         applyMethod: "all",
         manualStatus: "all",
-        sort: "score",
+        sort: "default",
         viewMode: "board",
         quickPreset: "needs_action"
       }
