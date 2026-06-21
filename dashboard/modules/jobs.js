@@ -29,6 +29,7 @@ export const QUICK_PRESETS = [
   ["hybrid_only", "Hybrid Only"],
   ["applied", "Applied"],
   ["irrelevant", "Irrelevant"],
+  ["no_action", "No Action"],
 ];
 
 export const QUICK_PRESET_ICONS = Object.freeze({
@@ -43,6 +44,7 @@ export const QUICK_PRESET_ICONS = Object.freeze({
   hybrid_only: "activity",
   applied: "check",
   irrelevant: "archive",
+  no_action: "minus-circle",
 });
 
 export const SUMMARY_ICONS = Object.freeze({

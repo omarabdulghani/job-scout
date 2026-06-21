@@ -3230,7 +3230,7 @@ const DEFAULT_THEME = initialTheme();
         } else if (key === "easy_apply") {
           state.filters.applyMethod = "all";
           state.filters.actionScope = "all";
-        } else if (key === "applied" || key === "irrelevant") {
+        } else if (key === "applied" || key === "irrelevant" || key === "no_action") {
           state.filters.manualStatus = "all";
         }
       } else {
@@ -3261,6 +3261,9 @@ const DEFAULT_THEME = initialTheme();
         } else if (key === "irrelevant") {
           state.filters.actionScope = "all";
           state.filters.manualStatus = "irrelevant";
+        } else if (key === "no_action") {
+          state.filters.actionScope = "all";
+          state.filters.manualStatus = "unreviewed";
         } else {
           state.filters.actionScope = "all";
         }
@@ -3277,6 +3280,7 @@ const DEFAULT_THEME = initialTheme();
       if (key === "easy_apply") return state.filters.applyMethod === "easy_apply";
       if (key === "applied") return state.filters.manualStatus === "applied";
       if (key === "irrelevant") return state.filters.manualStatus === "irrelevant";
+      if (key === "no_action") return state.filters.manualStatus === "unreviewed" && state.filters.actionScope === "all";
       return state.filters.quickPreset === key;
     }
 
