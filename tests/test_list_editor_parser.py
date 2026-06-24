@@ -1,13 +1,16 @@
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_URL = (ROOT / "dashboard" / "modules" / "list-editor.js").as_uri()
+NODE_AVAILABLE = shutil.which("node") is not None
 
 
+@unittest.skipIf(not NODE_AVAILABLE, "Node.js is not installed; skipping JS module integration tests.")
 class ListEditorParserTests(unittest.TestCase):
     def _parse(self, value: str) -> list[str]:
         script = f"""

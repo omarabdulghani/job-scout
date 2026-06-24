@@ -175,7 +175,9 @@ class SafeFileIOTests(unittest.TestCase):
 
             atomic_write_text(target, content)
 
-            self.assertEqual(target.read_text(encoding="utf-8", newline=""), content)
+            with target.open("r", encoding="utf-8", newline="") as handle:
+                read_content = handle.read()
+            self.assertEqual(read_content, content)
 
 
 if __name__ == "__main__":

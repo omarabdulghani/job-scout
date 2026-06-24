@@ -111,6 +111,20 @@ class BoardSettingsServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not support"):
                 service.save(submitted)
 
+    def test_save_scraping_proxy_enabled(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            service = self._service(Path(temporary))
+            payload = service.payload()
+            self.assertTrue(payload["scraping_proxy_enabled"])
+
+            payload["scraping_proxy_enabled"] = False
+            result = service.save(payload)
+            self.assertFalse(result["scraping_proxy_enabled"])
+            
+            result["scraping_proxy_enabled"] = True
+            result = service.save(result)
+            self.assertTrue(result["scraping_proxy_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()

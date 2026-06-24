@@ -123,6 +123,30 @@ const DEFAULT_THEME = initialTheme();
         sort: "default",
         viewMode: "board",
         quickPreset: "needs_action"
+      },
+      limits: {
+        APPLY_FIRST: 50,
+        GOOD_OPTIONS: 50,
+        LOW_PROBABILITY: 50,
+        REJECTED: 50
+      },
+      offsets: {
+        APPLY_FIRST: 0,
+        GOOD_OPTIONS: 0,
+        LOW_PROBABILITY: 0,
+        REJECTED: 0
+      },
+      hasMore: {
+        APPLY_FIRST: false,
+        GOOD_OPTIONS: false,
+        LOW_PROBABILITY: false,
+        REJECTED: false
+      },
+      jobsByCategory: {
+        APPLY_FIRST: [],
+        GOOD_OPTIONS: [],
+        LOW_PROBABILITY: [],
+        REJECTED: []
       }
     };
 
@@ -225,6 +249,7 @@ const DEFAULT_THEME = initialTheme();
       boardDefaultAiBudget: document.getElementById("boardDefaultAiBudget"),
       boardDefaultHuman: document.getElementById("boardDefaultHuman"),
       boardDefaultFresh: document.getElementById("boardDefaultFresh"),
+      boardScrapingProxyEnabled: document.getElementById("boardScrapingProxyEnabled"),
       behaviorPauseSubmit: document.getElementById("behaviorPauseSubmit"),
       behaviorSkipApplied: document.getElementById("behaviorSkipApplied"),
       behaviorCoverLetter: document.getElementById("behaviorCoverLetter"),
@@ -1407,6 +1432,7 @@ const DEFAULT_THEME = initialTheme();
       els.boardDefaultAiBudget.value = defaults.ai_budget_mode || "smart";
       els.boardDefaultHuman.checked = defaults.human_mode !== false;
       els.boardDefaultFresh.checked = defaults.fresh_mode !== false;
+      els.boardScrapingProxyEnabled.checked = payload.scraping_proxy_enabled !== false;
       els.behaviorPauseSubmit.checked = true;
       els.behaviorSkipApplied.checked = behavior.skip_if_already_applied !== false;
       els.behaviorCoverLetter.checked = behavior.submit_cover_letter !== false;
@@ -1540,6 +1566,7 @@ const DEFAULT_THEME = initialTheme();
             max_jobs_to_collect: numeric(els.boardIndeedCollect.value)
           }
         },
+        scraping_proxy_enabled: els.boardScrapingProxyEnabled.checked,
         dashboard_defaults: {
           browser: els.boardDefaultBrowser.value,
           location: els.boardDefaultLocation.value,
@@ -2146,10 +2173,82 @@ const DEFAULT_THEME = initialTheme();
       return { payload: withDefaultManualStatus(await response.json()), apiAvailable: false };
     }
 
-    async function loadJobs({ append = false, renderAfter = true } = {}) {
+    async function loadJobs({ append = false, renderAfter = true, decisionKey = null } = {}) {
       if (!state.apiAvailable) {
         if (renderAfter) render();
         return;
+      }
+
+      // 1. Board View + All Decisions Mode (Independent columns)
+      if (state.filters.viewMode === "board" && state.filters.decision === "all") {
+        if (!append) {
+          state.limits = { APPLY_FIRST: 50, GOOD_OPTIONS: 50, LOW_PROBABILITY: 50, REJECTED: 50 };
+          state.offsets = { APPLY_FIRST: 0, GOOD_OPTIONS: 0, LOW_PROBABILITY: 0, REJECTED: 0 };
+          state.hasMore = { APPLY_FIRST: false, GOOD_OPTIONS: false, LOW_PROBABILITY: false, REJECTED: false };
+          state.jobsByCategory = { APPLY_FIRST: [], GOOD_OPTIONS: [], LOW_PROBABILITY: [], REJECTED: [] };
+        }
+
+        const requestId = ++state.jobsRequestId;
+        state.jobsLoading = true;
+
+        const categories = decisionKey ? [decisionKey] : ["APPLY_FIRST", "GOOD_OPTIONS", "LOW_PROBABILITY", "REJECTED"];
+        try {
+          const promises = categories.map(async (cat) => {
+            const currentOffset = state.offsets[cat] || 0;
+            const tempFilters = { ...state.filters, decision: cat };
+            const queryParams = buildJobsQuery(tempFilters, currentOffset);
+            queryParams.set("limit", "50");
+
+            const response = await fetch(API_JOBS_URL + "?" + queryParams, { cache: "no-store" });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const payload = await response.json();
+            return { category: cat, payload };
+          });
+
+          const results = await Promise.all(promises);
+          if (requestId !== state.jobsRequestId && !decisionKey) return;
+
+          for (const res of results) {
+            const incoming = normalizeJobs(res.payload.jobs || []);
+            if (append && decisionKey === res.category) {
+              state.jobsByCategory[res.category] = [...state.jobsByCategory[res.category], ...incoming];
+            } else {
+              state.jobsByCategory[res.category] = incoming;
+            }
+            state.hasMore[res.category] = Boolean(res.payload.has_more);
+            if (res.payload.by_decision) {
+              state.jobsByDecision = { ...state.jobsByDecision, ...res.payload.by_decision };
+            }
+          }
+
+          state.jobsTotal = Object.values(state.jobsByDecision).reduce((sum, val) => sum + numeric(val), 0);
+          state.data.jobs = [
+            ...state.jobsByCategory.APPLY_FIRST,
+            ...state.jobsByCategory.GOOD_OPTIONS,
+            ...state.jobsByCategory.LOW_PROBABILITY,
+            ...state.jobsByCategory.REJECTED
+          ];
+        } catch (error) {
+          if (requestId === state.jobsRequestId || decisionKey) {
+            setStatus("error", "Jobs could not be loaded");
+          }
+        } finally {
+          if (requestId === state.jobsRequestId || decisionKey) {
+            state.jobsLoading = false;
+            if (renderAfter) render();
+          }
+        }
+        return;
+      }
+
+      // 2. Standard Mode (List View or Single-Column Filtered View)
+      if (!append) {
+        state.limits = {
+          APPLY_FIRST: 50,
+          GOOD_OPTIONS: 50,
+          LOW_PROBABILITY: 50,
+          REJECTED: 50
+        };
       }
       const requestId = ++state.jobsRequestId;
       state.jobsLoading = true;
@@ -3342,7 +3441,62 @@ const DEFAULT_THEME = initialTheme();
         container.append(emptyColumnState(decisionKey));
         return;
       }
-      container.append(...items.map(jobCard));
+      
+      // If we are in Board View + All Decisions, we do true server-side pagination
+      if (state.apiAvailable && state.filters.viewMode === "board" && state.filters.decision === "all") {
+        container.append(...items.map(jobCard));
+        
+        if (state.hasMore[decisionKey]) {
+          const loadMore = document.createElement("div");
+          loadMore.className = "load-more-container";
+          loadMore.style.padding = "10px 0";
+          loadMore.style.textAlign = "center";
+          
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "button secondary";
+          btn.style.width = "100%";
+          const totalCategoryCount = numeric(state.jobsByDecision[decisionKey]) || 0;
+          const remaining = Math.max(0, totalCategoryCount - items.length);
+          btn.textContent = `Load More (${remaining} remaining)`;
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            btn.textContent = "Loading...";
+            state.offsets[decisionKey] = (state.offsets[decisionKey] || 0) + 50;
+            await loadJobs({ append: true, decisionKey: decisionKey });
+          });
+          
+          loadMore.append(btn);
+          container.append(loadMore);
+        }
+        return;
+      }
+
+      // Fallback for single-category filtered views, list views, or offline mode
+      const limit = state.limits[decisionKey] || 50;
+      const visible = items.slice(0, limit);
+      container.append(...visible.map(jobCard));
+      
+      if (items.length > visible.length) {
+        const loadMore = document.createElement("div");
+        loadMore.className = "load-more-container";
+        loadMore.style.padding = "10px 0";
+        loadMore.style.textAlign = "center";
+        
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "button secondary";
+        btn.style.width = "100%";
+        const remaining = items.length - visible.length;
+        btn.textContent = `Load More (${remaining} remaining)`;
+        btn.addEventListener("click", () => {
+          state.limits[decisionKey] = (state.limits[decisionKey] || 50) + 100;
+          renderJobs();
+        });
+        
+        loadMore.append(btn);
+        container.append(loadMore);
+      }
     }
 
     function filteredDescriptions() {

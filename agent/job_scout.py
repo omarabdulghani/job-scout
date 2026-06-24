@@ -182,19 +182,7 @@ class LinkedInJobScout:
         "web",
         "portfolio",
     }
-    SENIOR_TITLE_MARKERS = {
-        "senior",
-        "sr",
-        "lead",
-        "principal",
-        "staff",
-        "head",
-        "director",
-        "chief",
-        "mid senior",
-        "mid-senior",
-        "medior",
-    }
+
     SOFT_SENIORITY_SIGNAL_MARKERS = {
         "people management",
         "line management",
@@ -4698,10 +4686,10 @@ class LinkedInJobScout:
                     "reject": True,
                     "reason": f"Role requires {phrase}, which is above Omar's early-career range",
                 }
-            if lower >= 4:
+            if lower >= 4 and (strict_context or senior_or_domain_heavy_context):
                 return {
                     "reject": True,
-                    "reason": f"Role requires {phrase}, which is above entry-level range",
+                    "reason": f"Role requires {phrase} in a senior/specialist context, which is above entry-level range",
                 }
             if lower >= 3 and strict_context and (senior_or_domain_heavy_context or upper >= 6):
                 return {
@@ -5304,8 +5292,6 @@ class LinkedInJobScout:
             "head": r"\bhead\b",
             "director": r"\bdirector\b",
             "chief": r"\bchief\b",
-            "medior": r"\bmedior\b",
-            "mid senior": r"\bmid[- ]?senior\b",
         }
         for label, pattern in pattern_map.items():
             if re.search(pattern, normalized_title):

@@ -201,32 +201,47 @@ class DashboardRunController:
             env["DASHBOARD_STARTED_SCOUT"] = "1"
             self.log_handle = log_path.open("w", encoding="utf-8")
             
-            success, ip_or_error = _test_proxy_preflight()
-            if not success:
-                self.log_handle.write(f"[Proxy Pre-flight Check] Failed! Proxy connection refused.\nError details: {ip_or_error}\n\nPlease check your proxy credentials in the Railway variables (or .env file) and try resuming the run.\n")
-                self.log_handle.flush()
-                self.log_handle.close()
-                self.state = {
-                    "status": "interrupted",
-                    "active": False,
-                    "workflow": workflow,
-                    "workflow_label": workflow_label,
-                    "started_at": datetime.now().astimezone().isoformat(),
-                    "completed_at": "",
-                    "return_code": 1,
-                    "log_path": str(log_path),
-                    "log_tail": "",
-                    "command": self._display_command(command),
-                    "interrupted_at": datetime.now().astimezone().isoformat(),
-                    "interruption_reason": "Proxy Pre-flight Check Failed",
-                    "failure_reason": "Proxy connection refused",
-                    "detached": False,
-                }
-                self._save_state_locked()
-                return self.status()
-                
-            if ip_or_error:
-                self.log_handle.write(f"[Proxy Pre-flight Check] Passed! Connecting from IP: {ip_or_error}\n\n")
+            proxy_enabled = True
+            try:
+                import json
+                pref_path = self.root / "data" / "user_workspace" / "preferences.json"
+                if pref_path.exists():
+                    with pref_path.open("r", encoding="utf-8") as f:
+                        prefs = json.load(f)
+                        proxy_enabled = prefs.get("scraping_proxy_enabled", True)
+            except Exception:
+                pass
+
+            if proxy_enabled:
+                success, ip_or_error = _test_proxy_preflight()
+                if not success:
+                    self.log_handle.write(f"[Proxy Pre-flight Check] Failed! Proxy connection refused.\nError details: {ip_or_error}\n\nPlease check your proxy credentials in the Railway variables (or .env file) and try resuming the run.\n")
+                    self.log_handle.flush()
+                    self.log_handle.close()
+                    self.state = {
+                        "status": "interrupted",
+                        "active": False,
+                        "workflow": workflow,
+                        "workflow_label": workflow_label,
+                        "started_at": datetime.now().astimezone().isoformat(),
+                        "completed_at": "",
+                        "return_code": 1,
+                        "log_path": str(log_path),
+                        "log_tail": "",
+                        "command": self._display_command(command),
+                        "interrupted_at": datetime.now().astimezone().isoformat(),
+                        "interruption_reason": "Proxy Pre-flight Check Failed",
+                        "failure_reason": "Proxy connection refused",
+                        "detached": False,
+                    }
+                    self._save_state_locked()
+                    return self.status()
+                    
+                if ip_or_error:
+                    self.log_handle.write(f"[Proxy Pre-flight Check] Passed! Connecting from IP: {ip_or_error}\n\n")
+                    self.log_handle.flush()
+            else:
+                self.log_handle.write("[Proxy Check] Bypassed! (Proxy disabled in settings)\n\n")
                 self.log_handle.flush()
                 
             self.process = subprocess.Popen(

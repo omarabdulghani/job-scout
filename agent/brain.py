@@ -957,10 +957,9 @@ class JobBrain:
 
         return {
             "search_query": search_query,
-            "experience_level": "recent graduate; entry/junior/graduate/trainee roles; 0-2 years preferred; 3+ only if clearly realistic",
+            "experience_level": "recent graduate with merit honors; entry/junior/graduate/trainee/mid-level roles; 0-3 years experience fully acceptable; 4+ if realistic",
             "primary_creative_product_paths": strategy.get("primary_paths", [])[:12],
             "strong_bridge_roles": strategy.get("strong_bridge_roles", [])[:14],
-            "fallback_roles_for_income": strategy.get("fallback_roles_for_income", [])[:8],
             "weak_or_risky_roles": [
                 "heavy performance marketing / paid ads",
                 "pure SEO specialist",
@@ -1007,10 +1006,10 @@ class JobBrain:
     def _build_opportunity_scope_summary(self) -> dict:
         search_scope = dict(self.preferences.get("_runtime_search_scope") or {})
         return {
-            "primary_goal": "Find realistic opportunities that are good for Omar's future, financially and career-wise.",
+            "primary_goal": "Find professional starter opportunities that match Omar's academic merit, IT foundation, and creative skills.",
             "not_perfect_match_required": True,
             "do_not_limit_to_design_roles": True,
-            "favorite_domain_not_required": "The job does not need to be Omar's favorite domain if it is realistic, growth-friendly, and useful.",
+            "favorite_domain_not_required": "The job does not need to be Omar's favorite design domain if it is realistic, professional, and career-building.",
             "natural_strength_roles": [
                 "UX/UI/product/digital design",
                 "brand/creative strategy",
@@ -1018,13 +1017,14 @@ class JobBrain:
                 "product/web operations and project coordination",
             ],
             "broad_acceptable_domains": [
-                "customer success/support/operations as income or SaaS/business bridge",
+                "UX/UI and Product Design",
+                "brand activation and creative strategy",
+                "digital marketing, web content, and e-commerce coordination",
+                "product and web operations",
+                "project and operations coordination",
                 "implementation consulting and business analysis",
-                "junior/trainee data, reporting, insights, BI, and analytics",
-                "product, e-commerce, web/content, and digital operations",
-                "project/operations coordination",
+                "junior/trainee data, reporting, insights, and analytics",
                 "procurement/supply-chain trainee or graduate tracks",
-                "research assistant / clinical study assistant if no strict medical credential",
             ],
             "positive_signals": [
                 "entry/junior/graduate/trainee/associate",
@@ -1036,8 +1036,7 @@ class JobBrain:
             ],
             "hard_negative_signals": [
                 "current student enrollment or thesis internship requirement",
-                "5+ years or strict 4+ years required",
-                "3+ years when also senior/specialist/domain-heavy/no training path",
+                "5+ years required, or strict 4+ years under senior leadership context",
                 "strict senior/lead/head/director wording",
                 "true line management: direct reports/hiring/firing/performance reviews",
                 "full P&L ownership or strict prior management experience",
@@ -1057,7 +1056,7 @@ class JobBrain:
             "lower_score_but_not_auto_reject": [
                 "recruitment/BDR/outbound sales unless low-pressure, English-friendly, training-based, and stable",
                 "heavy performance marketing or pure SEO",
-                "fallback customer/admin/support roles unless strong income or bridge value",
+                "basic administrative, receptionist, retail sales assistant, front desk, or general customer support roles (score low, below 50, since they do not build on Omar's university degree)",
                 "low-paid internships",
             ],
             "junior_management_rule": "manager/ownership wording is OK unless clear senior evidence appears",
@@ -1458,13 +1457,13 @@ class JobBrain:
                 "No explanations outside the reason field.",
                 "Use an integer from 0 to 100.",
                 "The reason must be exactly one short sentence.",
-                "Score realistic opportunity quality for a recent graduate across interview chance, career-growth value, and financial/stability value.",
-                "Broader graduate-friendly business, operations, customer success, product/web operations, marketing, consulting, trainee data, and creative roles can be valid.",
-                "Customer success/support/operations can be valid as income or a SaaS/business bridge.",
-                "Recruitment/BDR/outbound sales should score lower unless clearly low-pressure, English-friendly, training-based, and stable.",
-                "Junior data analyst, data traineeship, BI trainee, analytics trainee, reporting analyst, and insights analyst roles should score fairly when junior or training-based.",
-                "Plain fluent Dutch is a risk flag, not a hard blocker, unless the role is Dutch-heavy communication, sales, recruitment, HR, legal, compliance, or phone support.",
-                "Do not reward jobs that clearly require seniority, hard credentials, licenses, or unrealistic prior experience.",
+                "Score realistic opportunity quality for a recent graduate with merit honors across interview chance, career-growth value, and financial/stability value.",
+                "Primary Paths (UX/UI, Product Design, Brand Activation, Digital Marketing/Web Operations, Project/Operations Coordinator, SaaS/Business Traineeships) are highly valued. Boost these roles with high scores (70-95) if they match the candidate's skills.",
+                "Basic administrative, receptionist, front desk host, retail sales assistant, passenger service, packing, or general customer support roles MUST be scored low (strictly below 50) as they do not build on a university degree.",
+                "Recruitment/BDR/outbound sales should score low (strictly below 50) unless they are highly stable, training-based corporate graduate programs.",
+                "Junior data analyst, data traineeship, BI trainee, analytics trainee, reporting analyst, and insights analyst roles should score fairly (60-78) when junior or training-based.",
+                "Dutch B1 fluency is fully compatible with Amsterdam-based UX/UI, design, digital marketing, and operations coordinator roles where the team working language is English. Do not score down for Dutch unless the role explicitly requires client-facing Dutch copywriting, legal counsel, or native-only sales/HR advisory.",
+                "Do not reward jobs that clearly require seniority (5+ years, Lead, Principal), hard credentials, licenses, or unrealistic prior experience.",
                 "Mention the main concern in the reason when relevant: Dutch, commute, seniority, low pay, freelance/contractor, current student requirement, domain mismatch, heavy technical requirement, sales/cold-calling pressure, or low career alignment.",
             ]
 

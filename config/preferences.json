@@ -313,5 +313,6 @@
   "salary_internship_policy": "Normally avoid low-paid internships unless recent graduates are accepted and the strategic value is strong; flag below EUR 800/month full-time for human review.",
   "human_review_score_min": 50,
   "max_active_applications_per_company_14_days": 2,
-  "avoid_multiple_unrelated_roles_same_company": true
+  "avoid_multiple_unrelated_roles_same_company": true,
+  "scraping_proxy_enabled": true
 }

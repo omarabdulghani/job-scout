@@ -69,16 +69,28 @@ class BrowserController:
             )
 
         import os
-        proxy_server = os.environ.get("SCRAPING_PROXY_SERVER")
-        proxy_username = os.environ.get("SCRAPING_PROXY_USERNAME")
-        proxy_password = os.environ.get("SCRAPING_PROXY_PASSWORD")
+        proxy_enabled = True
+        try:
+            import json
+            pref_path = Path("data/user_workspace/preferences.json")
+            if pref_path.exists():
+                with open(pref_path, "r", encoding="utf-8") as f:
+                    prefs = json.load(f)
+                    proxy_enabled = prefs.get("scraping_proxy_enabled", True)
+        except Exception:
+            pass
+
         proxy_options = None
-        if proxy_server:
-            proxy_options = {"server": proxy_server}
-            if proxy_username:
-                proxy_options["username"] = proxy_username
-            if proxy_password:
-                proxy_options["password"] = proxy_password
+        if proxy_enabled:
+            proxy_server = os.environ.get("SCRAPING_PROXY_SERVER")
+            proxy_username = os.environ.get("SCRAPING_PROXY_USERNAME")
+            proxy_password = os.environ.get("SCRAPING_PROXY_PASSWORD")
+            if proxy_server:
+                proxy_options = {"server": proxy_server}
+                if proxy_username:
+                    proxy_options["username"] = proxy_username
+                if proxy_password:
+                    proxy_options["password"] = proxy_password
 
         launch_options = {"headless": self.headless}
         if browser_args:

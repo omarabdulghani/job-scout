@@ -44,6 +44,7 @@ class BoardSettingsService:
         return {
             "job_boards": deepcopy(boards),
             "application_behavior": deepcopy(behavior),
+            "scraping_proxy_enabled": preferences.get("scraping_proxy_enabled", True),
             "limits": {
                 "max_applications_per_run": preferences.get("max_applications_per_run", 1),
                 "max_jobs_to_try_per_run": preferences.get("max_jobs_to_try_per_run", 5),
@@ -219,6 +220,8 @@ class BoardSettingsService:
                 seen_ids.add(mission_id)
                 seen_names.add(mission_name)
             preferences["search_missions"] = normalized_missions
+
+        preferences["scraping_proxy_enabled"] = self._bool(payload.get("scraping_proxy_enabled"), True)
 
         self.workspace.save_preferences(preferences)
         return self.payload()

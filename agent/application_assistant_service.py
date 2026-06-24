@@ -196,7 +196,7 @@ class ApplicationAssistantService:
         return cleaned
 
     def _anthropic_configured(self) -> bool:
-        env_path = self.workspace.root / ".env"
+        env_path = self.workspace.root / "data" / ".env"
         try:
             lines = env_path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
         except OSError:

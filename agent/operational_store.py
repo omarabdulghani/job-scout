@@ -604,6 +604,14 @@ class OperationalStore:
                     ON jobs(search_market);
                 CREATE INDEX IF NOT EXISTS idx_jobs_sponsorship
                     ON jobs(sponsorship_status);
+                CREATE INDEX IF NOT EXISTS idx_jobs_market_score_comp
+                    ON jobs(search_market, score DESC, processed_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_jobs_market_processed_comp
+                    ON jobs(search_market, processed_at DESC, score DESC);
+                CREATE INDEX IF NOT EXISTS idx_jobs_score_processed_comp
+                    ON jobs(score DESC, processed_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_jobs_processed_score_comp
+                    ON jobs(processed_at DESC, score DESC);
                 """
             )
 
