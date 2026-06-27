@@ -755,12 +755,28 @@ class OperationalStore:
         if preset == "dutch_risk":
             clauses.append(
                 "(lower(payload_json) LIKE '%dutch%' OR lower(payload_json) LIKE '%nederlands%' "
-                "OR lower(payload_json) LIKE '%taal%')"
+                "OR lower(payload_json) LIKE '%taal%' OR lower(payload_json) LIKE '%language%')"
             )
         elif preset == "remote_hybrid":
             clauses.append(
                 "(lower(location) LIKE '%remote%' OR lower(location) LIKE '%hybrid%' "
-                "OR lower(payload_json) LIKE '%remote%' OR lower(payload_json) LIKE '%hybrid%')"
+                "OR lower(payload_json) LIKE '%remote%' OR lower(payload_json) LIKE '%hybrid%' "
+                "OR lower(payload_json) LIKE '%thuis%' OR lower(payload_json) LIKE '%from home%')"
+            )
+        elif preset == "remote_only":
+            clauses.append(
+                "(lower(location) LIKE '%remote%' OR lower(payload_json) LIKE '%remote%' "
+                "OR lower(payload_json) LIKE '%from home%')"
+            )
+        elif preset == "hybrid_only":
+            clauses.append(
+                "(lower(location) LIKE '%hybrid%' OR lower(payload_json) LIKE '%hybrid%' "
+                "OR lower(payload_json) LIKE '%thuis%')"
+            )
+        elif preset == "local_only":
+            clauses.append(
+                "NOT (lower(location) LIKE '%remote%' OR lower(payload_json) LIKE '%remote%' OR lower(payload_json) LIKE '%from home%') "
+                "AND NOT (lower(location) LIKE '%hybrid%' OR lower(payload_json) LIKE '%hybrid%' OR lower(payload_json) LIKE '%thuis%')"
             )
         return clauses, parameters
 

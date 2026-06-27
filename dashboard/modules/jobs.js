@@ -88,7 +88,7 @@ export function buildJobsQuery(filters, offset, now = Date.now()) {
     status: filters.actionScope === "needs_action"
       ? "unreviewed"
       : (filters.manualStatus === "all" ? "" : filters.manualStatus),
-    preset: ["dutch_risk", "remote_hybrid"].includes(filters.quickPreset)
+    preset: ["dutch_risk", "remote_hybrid", "remote_only", "hybrid_only", "local_only"].includes(filters.quickPreset)
       ? filters.quickPreset
       : "",
     sort: filters.sort,

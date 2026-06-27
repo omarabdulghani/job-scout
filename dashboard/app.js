@@ -2179,6 +2179,10 @@ const DEFAULT_THEME = initialTheme();
         return;
       }
 
+      if (!append) {
+        state.jobsByDecision = { APPLY_FIRST: 0, GOOD_OPTIONS: 0, LOW_PROBABILITY: 0, REJECTED: 0 };
+      }
+
       // 1. Board View + All Decisions Mode (Independent columns)
       if (state.filters.viewMode === "board" && state.filters.decision === "all") {
         if (!append) {

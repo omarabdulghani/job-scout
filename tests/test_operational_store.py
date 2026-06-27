@@ -272,6 +272,63 @@ class OperationalStoreTests(unittest.TestCase):
             self.assertEqual(record["annual_flight_support"], "confirmed")
             self.assertEqual(record["contract_type"], "permanent")
 
+    def test_job_records_presets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = OperationalStore(Path(temporary) / "job_scout.db")
+            store.sync(
+                {
+                    "jobs": [
+                        {
+                            "board": "linkedin",
+                            "job_id": "job-remote-1",
+                            "title": "Remote Engineer",
+                            "location": "Remote",
+                        },
+                        {
+                            "board": "linkedin",
+                            "job_id": "job-remote-2",
+                            "title": "Work from Home dev",
+                            "location": "Amsterdam",
+                            "description": "from home developer",
+                        },
+                        {
+                            "board": "linkedin",
+                            "job_id": "job-hybrid-1",
+                            "title": "Hybrid Analyst",
+                            "location": "Hybrid",
+                        },
+                        {
+                            "board": "linkedin",
+                            "job_id": "job-hybrid-2",
+                            "title": "Thuis Analyst",
+                            "location": "Utrecht",
+                            "description": "thuis werken",
+                        },
+                        {
+                            "board": "linkedin",
+                            "job_id": "job-local-1",
+                            "title": "Onsite Specialist",
+                            "location": "Rotterdam",
+                            "description": "Must be in the office daily",
+                        },
+                    ],
+                    "runs": [],
+                },
+                {"jobs": {}},
+            )
+
+            remotes = store.job_records(preset="remote_only")
+            hybrids = store.job_records(preset="hybrid_only")
+            locals = store.job_records(preset="local_only")
+
+            remote_ids = {j["job_id"] for j in remotes["jobs"]}
+            hybrid_ids = {j["job_id"] for j in hybrids["jobs"]}
+            local_ids = {j["job_id"] for j in locals["jobs"]}
+
+            self.assertEqual(remote_ids, {"job-remote-1", "job-remote-2"})
+            self.assertEqual(hybrid_ids, {"job-hybrid-1", "job-hybrid-2"})
+            self.assertEqual(local_ids, {"job-local-1"})
+
 
 if __name__ == "__main__":
     unittest.main()
