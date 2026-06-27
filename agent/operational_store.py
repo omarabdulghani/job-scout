@@ -11,6 +11,7 @@ from typing import Any, Iterator
 from agent.dashboard_user_state import (
     APPLICATION_STAGE_APPLIED,
     APPLICATION_STAGE_LABELS,
+    STATUS_LABELS,
     build_job_key,
     normalize_application_stage,
     normalize_status,
@@ -799,6 +800,163 @@ class OperationalStore:
             needle = f"%{search.lower()}%"
             parameters.extend([needle, needle, needle, needle])
         return (" WHERE " + " AND ".join(clauses) if clauses else ""), parameters
+
+    def update_job_status(
+        self,
+        *,
+        job_key: str,
+        status: str,
+        record: dict[str, Any] | None,
+        dashboard_path: Path | str,
+        user_state_path: Path | str,
+    ) -> None:
+        dashboard_path = Path(dashboard_path)
+        user_state_path = Path(user_state_path)
+
+        # Safety/Fallback Check: Read previous signature from database
+        with self._connect() as connection:
+            previous = connection.execute(
+                "SELECT value FROM metadata WHERE key = 'source_signature'"
+            ).fetchone()
+        
+        # Calculate current dashboard_data.json signature on disk
+        dashboard_sig = ""
+        try:
+            stat = dashboard_path.stat()
+            dashboard_sig = f"{dashboard_path.resolve()}:{stat.st_mtime_ns}:{stat.st_size}"
+        except OSError:
+            dashboard_sig = f"{dashboard_path.resolve()}:missing"
+
+        # Check if dashboard file signature matches the database metadata
+        is_dashboard_in_sync = False
+        if previous and previous[0]:
+            parts = previous[0].split("|")
+            # Find the dashboard_data.json part in the signature
+            for part in parts:
+                if str(dashboard_path.resolve()) in part:
+                    if part == dashboard_sig:
+                        is_dashboard_in_sync = True
+                    break
+
+        if not is_dashboard_in_sync:
+            # Fallback path: dashboard_data.json has changed, run full sync
+            dashboard = self._read_json_file(dashboard_path)
+            user_state = self._read_json_file(user_state_path)
+            self.sync(dashboard, user_state)
+            
+            # Save the new full signature
+            signature = self._source_signature(dashboard_path, user_state_path)
+            with self._connect() as connection:
+                connection.execute(
+                    "INSERT OR REPLACE INTO metadata (key, value) VALUES ('source_signature', ?)",
+                    (signature,),
+                )
+                connection.commit()
+            return
+
+        # Fast path: targeted single-job update
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            
+            # 1. Fetch current job record and update payload_json
+            row = connection.execute(
+                "SELECT payload_json FROM jobs WHERE job_key = ?", (job_key,)
+            ).fetchone()
+            
+            if row:
+                job_payload = json.loads(row[0])
+                
+                # Update manual_status and manual_status_label
+                job_payload["manual_status"] = normalize_status(status)
+                job_payload["manual_status_label"] = STATUS_LABELS.get(
+                    normalize_status(status), "Unreviewed"
+                )
+                
+                # Update application stage/fields if record is present
+                if record:
+                    stage = normalize_application_stage(record.get("application_stage"))
+                    if not stage and normalize_status(status) == "applied":
+                        stage = APPLICATION_STAGE_APPLIED
+                    
+                    job_payload["application_stage"] = stage
+                    job_payload["application_stage_label"] = (
+                        APPLICATION_STAGE_LABELS.get(stage, "") if stage else ""
+                    )
+                    job_payload["application_updated_at"] = record.get("application_updated_at") or record.get("updated_at") or ""
+                    job_payload["applied_at"] = record.get("applied_at") or ""
+                    job_payload["follow_up_at"] = record.get("follow_up_at") or ""
+                    job_payload["application_notes"] = record.get("notes") or ""
+                else:
+                    # Clear application fields if status is not applied
+                    for field in [
+                        "application_stage", "application_stage_label",
+                        "application_updated_at", "applied_at", "follow_up_at",
+                        "application_notes"
+                    ]:
+                        job_payload.pop(field, None)
+                
+                # Update jobs table
+                connection.execute(
+                    """
+                    UPDATE jobs
+                    SET manual_status = ?,
+                        payload_json = ?
+                    WHERE job_key = ?
+                    """,
+                    (
+                        normalize_status(status),
+                        json.dumps(job_payload, ensure_ascii=False),
+                        job_key
+                    )
+                )
+            
+            # 2. Update/insert or delete from the applications table
+            stage = None
+            if record:
+                stage = normalize_application_stage(record.get("application_stage"))
+                if not stage and normalize_status(status) == "applied":
+                    stage = APPLICATION_STAGE_APPLIED
+            
+            if stage:
+                connection.execute(
+                    """
+                    INSERT INTO applications (
+                        job_key, stage, stage_label, notes, applied_at, follow_up_at,
+                        updated_at, payload_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(job_key) DO UPDATE SET
+                        stage=excluded.stage,
+                        stage_label=excluded.stage_label,
+                        notes=excluded.notes,
+                        applied_at=excluded.applied_at,
+                        follow_up_at=excluded.follow_up_at,
+                        updated_at=excluded.updated_at,
+                        payload_json=excluded.payload_json
+                    """,
+                    (
+                        str(job_key),
+                        stage,
+                        APPLICATION_STAGE_LABELS.get(stage, ""),
+                        str(record.get("notes") or ""),
+                        str(record.get("applied_at") or ""),
+                        str(record.get("follow_up_at") or ""),
+                        str(record.get("application_updated_at") or record.get("updated_at") or ""),
+                        json.dumps(record, ensure_ascii=False),
+                    )
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM applications WHERE job_key = ?", (job_key,)
+                )
+            
+            # 3. Update metadata signature
+            signature = self._source_signature(dashboard_path, user_state_path)
+            connection.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES ('source_signature', ?)",
+                (signature,),
+            )
+            
+            connection.commit()
 
     def _source_signature(self, *paths: Path) -> str:
         parts = [f"sync_version:{SYNC_VERSION}"]

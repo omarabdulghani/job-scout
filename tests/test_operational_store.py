@@ -329,6 +329,130 @@ class OperationalStoreTests(unittest.TestCase):
             self.assertEqual(hybrid_ids, {"job-hybrid-1", "job-hybrid-2"})
             self.assertEqual(local_ids, {"job-local-1"})
 
+    def test_update_job_status_targeted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db_path = root / "job_scout.db"
+            dashboard_path = root / "dashboard.json"
+            state_path = root / "state.json"
+            
+            store = OperationalStore(db_path)
+            
+            dashboard_data = {
+                "jobs": [
+                    {
+                        "board": "linkedin",
+                        "job_id": "job-1",
+                        "title": "Engineer",
+                        "company": "Company A",
+                        "location": "Amsterdam",
+                    },
+                    {
+                        "board": "linkedin",
+                        "job_id": "job-2",
+                        "title": "Designer",
+                        "company": "Company B",
+                        "location": "Rotterdam",
+                    }
+                ],
+                "runs": [],
+            }
+            user_state = {"jobs": {}}
+            
+            dashboard_path.write_text(json.dumps(dashboard_data), encoding="utf-8")
+            state_path.write_text(json.dumps(user_state), encoding="utf-8")
+            
+            # Initial sync
+            store.sync_if_changed(dashboard_path, state_path)
+            
+            # Verify initial state
+            records = store.job_records()
+            self.assertEqual(records["total"], 2)
+            self.assertEqual(records["jobs"][0]["manual_status"], "unreviewed")
+            self.assertEqual(store.counts()["applications"], 0)
+            
+            # 1. Test targeted fast-path update to "applied"
+            app_record = {
+                "job_key": "linkedin:job_id:job-1",
+                "status": "applied",
+                "application_stage": "applied",
+                "notes": "Applied today",
+                "updated_at": "2026-06-27T12:00:00Z",
+            }
+            # Update state file to match
+            user_state["jobs"]["linkedin:job_id:job-1"] = app_record
+            state_path.write_text(json.dumps(user_state), encoding="utf-8")
+            
+            store.update_job_status(
+                job_key="linkedin:job_id:job-1",
+                status="applied",
+                record=app_record,
+                dashboard_path=dashboard_path,
+                user_state_path=state_path,
+            )
+            
+            # Check database state
+            job1 = [j for j in store.job_records()["jobs"] if j["job_id"] == "job-1"][0]
+            self.assertEqual(job1["manual_status"], "applied")
+            self.assertEqual(store.counts()["applications"], 1)
+            self.assertEqual(store.application_records()[0]["notes"], "Applied today")
+            
+            # Check signature was updated
+            expected_sig = store._source_signature(dashboard_path, state_path)
+            with store._connect() as connection:
+                saved_sig = connection.execute(
+                    "SELECT value FROM metadata WHERE key = 'source_signature'"
+                ).fetchone()[0]
+            self.assertEqual(saved_sig, expected_sig)
+            
+            # 2. Test targeted fast-path update back to "unreviewed"
+            user_state["jobs"].pop("linkedin:job_id:job-1", None)
+            state_path.write_text(json.dumps(user_state), encoding="utf-8")
+            
+            store.update_job_status(
+                job_key="linkedin:job_id:job-1",
+                status="unreviewed",
+                record=None,
+                dashboard_path=dashboard_path,
+                user_state_path=state_path,
+            )
+            
+            # Verify status cleared and application record deleted
+            job1 = [j for j in store.job_records()["jobs"] if j["job_id"] == "job-1"][0]
+            self.assertEqual(job1["manual_status"], "unreviewed")
+            self.assertEqual(store.counts()["applications"], 0)
+            
+            # 3. Test fallback path (dashboard_data.json modified)
+            # Add a third job directly to the dashboard file on disk
+            dashboard_data["jobs"].append({
+                "board": "linkedin",
+                "job_id": "job-3",
+                "title": "Architect",
+                "company": "Company C",
+                "location": "Utrecht",
+            })
+            dashboard_path.write_text(json.dumps(dashboard_data), encoding="utf-8")
+            
+            # Trigger status update on job-2. Since dashboard_data.json has changed,
+            # this must trigger fallback full sync, importing the new job-3.
+            user_state["jobs"]["linkedin:job_id:job-2"] = {"status": "irrelevant"}
+            state_path.write_text(json.dumps(user_state), encoding="utf-8")
+
+            store.update_job_status(
+                job_key="linkedin:job_id:job-2",
+                status="irrelevant",
+                record={"status": "irrelevant"},
+                dashboard_path=dashboard_path,
+                user_state_path=state_path,
+            )
+            
+            # Verify full sync took place (total jobs = 3) and job-2 status updated
+            records = store.job_records()
+            self.assertEqual(records["total"], 3)
+            job2 = [j for j in records["jobs"] if j["job_id"] == "job-2"][0]
+            self.assertEqual(job2["manual_status"], "irrelevant")
+            self.assertTrue(any(j["job_id"] == "job-3" for j in records["jobs"]))
+
 
 if __name__ == "__main__":
     unittest.main()

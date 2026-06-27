@@ -1173,7 +1173,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         applied_at=str(payload.get("applied_at") or ""),
                         follow_up_at=str(payload.get("follow_up_at") or ""),
                     )
-                    self._sync_operational_store()
+                    if self.operational_store:
+                        self.operational_store.update_job_status(
+                            job_key=data.get("job_key") or build_job_key(job),
+                            status=data.get("status", "applied"),
+                            record=data,
+                            dashboard_path=self.dashboard_data_path,
+                            user_state_path=self.user_state_path,
+                        )
                 elif self._path_without_query() == "/api/application-assistant":
                     data = self._application_assistant_service().save_knowledge(payload)
                 elif self._path_without_query() == "/api/application-assistant/draft":
@@ -1273,7 +1280,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             status = payload.get("status", "")
             store = DashboardUserStateStore(self.user_state_path)
             record = store.set_status(job, status)
-            self._sync_operational_store(store=store)
+            if self.operational_store:
+                self.operational_store.update_job_status(
+                    job_key=record.get("job_key") or build_job_key(job),
+                    status=status,
+                    record=record if status != "unreviewed" else None,
+                    dashboard_path=self.dashboard_data_path,
+                    user_state_path=self.user_state_path,
+                )
             response = {
                 "ok": True,
                 "record": record,
