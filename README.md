@@ -7,6 +7,23 @@ dashboard, and keeps application progress and run history in one place.
 The dashboard is the primary interface. Terminal commands remain available for
 recovery and development, but normal daily use does not require them.
 
+## Project Motivation
+
+I found manual job hunting to be highly inefficient and opaque. I wanted to learn modern AI-assisted development (Cursor/Claude Code) while solving a real problem, so I built an automated agent to scrape, score, and track job applications based on my exact profile. Treating this like a full-scale product build allowed me to master AI prompting, state management, and API integrations.
+
+## Tech Stack
+
+- **Backend**: Python 3.10+, SQLite (Operational indexing)
+- **Frontend**: HTML, Vanilla JavaScript, CSS (Local GUI Dashboard)
+- **Automation**: Playwright (Asynchronous headless DOM interaction)
+- **AI Integrations**: Claude, OpenAI, Gemini, Cerebras, Ollama (via unified API fallback architecture)
+
+## Technical Highlights
+
+- **Resilient AI-Scoring Engine (`agent/brain.py`)**: Built a modular AI evaluation engine that parses job descriptions and falls back to different API providers seamlessly if one hits a rate limit or fails.
+- **Privacy-First Architecture**: Designed a local operational SQLite database and isolated `user_workspace` to ensure sensitive API keys, cookies, and private CV metadata are never pushed to the public repo.
+- **Asynchronous Workflows**: Engineered multi-query asynchronous extraction pipelines using Playwright to bypass common DOM bottlenecks while maintaining accurate scraping parameters.
+
 ## Start The App
 
 On this Windows installation, double-click:

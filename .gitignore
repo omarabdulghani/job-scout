@@ -49,3 +49,4 @@ scout_collected_jobs.json.*.tmp
 scratch/
 description_logs/
 
+config/profile.json

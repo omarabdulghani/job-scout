@@ -1,0 +1,22 @@
+{
+  "personal": {
+    "first_name": "First Name",
+    "last_name": "Last Name",
+    "email": "your.email@example.com",
+    "phone": "+1234567890",
+    "gender": "prefer not to say",
+    "location": {
+      "city": "City",
+      "country": "Country",
+      "postal_code": "12345"
+    },
+    "linkedin_url": "https://www.linkedin.com/in/your-profile",
+    "portfolio_url": "https://www.yourportfolio.com",
+    "github_url": ""
+  },
+  "cv_path": "cv/Your CV.pdf",
+  "about_me": "Professional summary goes here...",
+  "work_experience": [],
+  "education": [],
+  "skills": []
+}
