@@ -1,0 +1,6 @@
+# Nixpacks configuration to install Playwright browsers and dependencies on Railway
+[phases.postinstall]
+cmds = [
+  "python -m playwright install chromium",
+  "python -m playwright install-deps chromium"
+]

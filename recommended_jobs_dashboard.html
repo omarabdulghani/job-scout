@@ -1,0 +1,2048 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Recommended Jobs Dashboard</title>
+  <link rel="icon" href="icon-dashboard.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="icon-dashboard.png" />
+  <script>
+    (function () {
+      try {
+        const saved = localStorage.getItem("jobDashboardTheme");
+        const preferred = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = preferred === "dark" ? "dark" : "light";
+      } catch (_error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="dashboard/styles.css?v=20260619-workplace" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+
+<body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-info" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8h.01" />
+      <path d="M11 12h1v4h1" />
+    </symbol>
+    <symbol id="icon-archive" viewBox="0 0 24 24">
+      <path d="M3 7h18" />
+      <path d="M5 7l1 13h12l1-13" />
+      <path d="M8 7V4h8v3" />
+      <path d="M10 12h4" />
+    </symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24">
+      <path d="M3 12h4l3-7 4 14 3-7h4" />
+    </symbol>
+    <symbol id="icon-alert-circle" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v5" />
+      <path d="M12 17h.01" />
+    </symbol>
+    <symbol id="icon-ban" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M6.6 6.6l10.8 10.8" />
+    </symbol>
+    <symbol id="icon-minus-circle" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12h8" />
+    </symbol>
+    <symbol id="icon-bar-chart" viewBox="0 0 24 24">
+      <path d="M4 20V10" />
+      <path d="M10 20V4" />
+      <path d="M16 20v-7" />
+      <path d="M22 20H2" />
+    </symbol>
+    <symbol id="icon-briefcase" viewBox="0 0 24 24">
+      <path d="M10 6V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1" />
+      <rect x="3" y="6" width="18" height="14" rx="2" />
+      <path d="M3 12h18" />
+      <path d="M10 12v1h4v-1" />
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="M20 6L9 17l-5-5" />
+    </symbol>
+    <symbol id="icon-check-circle" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12l3 3 5-6" />
+    </symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M5 16H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </symbol>
+    <symbol id="icon-external-link" viewBox="0 0 24 24">
+      <path d="M14 3h7v7" />
+      <path d="M21 3l-9 9" />
+      <path d="M11 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
+    </symbol>
+    <symbol id="icon-filter" viewBox="0 0 24 24">
+      <path d="M4 5h16l-6 7v5l-4 2v-7z" />
+    </symbol>
+    <symbol id="icon-layout" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="7" height="7" rx="1" />
+      <rect x="14" y="4" width="7" height="7" rx="1" />
+      <rect x="3" y="15" width="7" height="5" rx="1" />
+      <rect x="14" y="15" width="7" height="5" rx="1" />
+    </symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24">
+      <path d="M8 6h13" />
+      <path d="M8 12h13" />
+      <path d="M8 18h13" />
+      <path d="M3 6h.01" />
+      <path d="M3 12h.01" />
+      <path d="M3 18h.01" />
+    </symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24">
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24">
+      <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3a7 7 0 1 0 11.5 11.5z" />
+    </symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24">
+      <path d="M8 5v14l11-7z" />
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M20 6v5h-5" />
+      <path d="M4 18v-5h5" />
+      <path d="M18 9a7 7 0 0 0-11-3l-3 3" />
+      <path d="M6 15a7 7 0 0 0 11 3l3-3" />
+    </symbol>
+    <symbol id="icon-rotate-ccw" viewBox="0 0 24 24">
+      <path d="M3 7v6h6" />
+      <path d="M21 12a9 9 0 0 0-15-6l-3 3" />
+      <path d="M7 17a9 9 0 0 0 14-5" />
+    </symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24">
+      <path d="M5 3h12l2 2v16H5z" />
+      <path d="M8 3v6h8V3" />
+      <path d="M8 21v-7h8v7" />
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-4-4" />
+    </symbol>
+    <symbol id="icon-spark" viewBox="0 0 24 24">
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
+    </symbol>
+    <symbol id="icon-star" viewBox="0 0 24 24">
+      <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2 7.5 14 3 9.6l6.2-.9z" />
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="M4.93 4.93l1.41 1.41" />
+      <path d="M17.66 17.66l1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="M4.93 19.07l1.41-1.41" />
+      <path d="M17.66 6.34l1.41-1.41" />
+    </symbol>
+    <symbol id="icon-target" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </symbol>
+    <symbol id="icon-trending-down" viewBox="0 0 24 24">
+      <path d="M22 17l-8-8-4 4-6-6" />
+      <path d="M16 17h6v-6" />
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24">
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="M7 7l1 14h8l1-14" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </symbol>
+    <symbol id="icon-file-text" viewBox="0 0 24 24">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 13h8" />
+      <path d="M8 17h8" />
+      <path d="M8 9h2" />
+    </symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3" />
+      <path
+        d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1z" />
+    </symbol>
+    <symbol id="icon-x-circle" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15 9l-6 6" />
+      <path d="M9 9l6 6" />
+    </symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24">
+      <path d="M18 6L6 18" />
+      <path d="M6 6l12 12" />
+    </symbol>
+  </svg>
+  <div class="app-frame">
+    <button id="mobileNavBackdrop" class="mobile-nav-backdrop" type="button" aria-label="Close workspace navigation"
+      tabindex="-1"></button>
+    <aside id="appSidebar" class="app-sidebar" aria-label="Application navigation">
+      <div class="app-sidebar-brand">
+        <img src="icon-dashboard.png" alt="" aria-hidden="true" />
+        <div><strong>Job Scout</strong><span>Personal job-search workspace</span></div>
+      </div>
+      <nav id="appNavigation" class="app-nav">
+        <button class="app-nav-button" type="button" data-app-page="home"><svg class="icon">
+            <use href="#icon-spark"></use>
+          </svg>Home</button>
+        <button class="app-nav-button active" type="button" data-app-page="jobs"><svg class="icon">
+            <use href="#icon-briefcase"></use>
+          </svg>Jobs</button>
+        <button class="app-nav-button" type="button" data-app-page="scout"><svg class="icon">
+            <use href="#icon-search"></use>
+          </svg>Scout</button>
+        <button class="app-nav-button" type="button" data-app-page="profile"><svg class="icon">
+            <use href="#icon-file-text"></use>
+          </svg>Profile &amp; CV</button>
+        <button class="app-nav-button" type="button" data-app-page="strategy"><svg class="icon">
+            <use href="#icon-target"></use>
+          </svg>Job Strategy</button>
+        <button class="app-nav-button" type="button" data-app-page="coverLetter"><svg class="icon">
+            <use href="#icon-file-text"></use>
+          </svg>Cover Letter</button>
+        <button class="app-nav-button" type="button" data-app-page="applications"><svg class="icon">
+            <use href="#icon-check-circle"></use>
+          </svg>Applications</button>
+        <button class="app-nav-button" type="button" data-app-page="descriptions"><svg class="icon">
+            <use href="#icon-file-text"></use>
+          </svg>Descriptions</button>
+        <button class="app-nav-button" type="button" data-app-page="assistant"><svg class="icon">
+            <use href="#icon-file-text"></use>
+          </svg>Assistant</button>
+        <button class="app-nav-button" type="button" data-app-page="runs"><svg class="icon">
+            <use href="#icon-clock"></use>
+          </svg>Runs &amp; Logs</button>
+        <button class="app-nav-button" type="button" data-app-page="settings"><svg class="icon">
+            <use href="#icon-settings"></use>
+          </svg>Settings</button>
+        <button id="themeToggle" class="app-nav-button app-theme-button" type="button" aria-pressed="false"
+          title="Switch to dark mode"><svg id="themeToggleIcon" class="icon">
+            <use href="#icon-moon"></use>
+          </svg><span id="themeToggleText">Dark mode</span></button>
+        <button class="app-nav-button" type="button" data-app-page="resetClean" style="color: #52c41a;"><svg class="icon" style="stroke: #52c41a;">
+            <use href="#icon-trash"></use>
+          </svg>Reset &amp; Clean</button>
+        <button id="restartServerButton" class="app-nav-button" type="button" style="color: #ff4d4f;">
+          <svg class="icon" style="stroke: #ff4d4f;">
+            <use href="#icon-activity"></use>
+          </svg>Restart Backend
+        </button>
+      </nav>
+      <div class="app-sidebar-footer">Local workspace<br />Private by default</div>
+    </aside>
+    <div class="app-content">
+      <header class="mobile-app-header">
+        <div class="mobile-app-identity">
+          <img src="icon-dashboard.png" alt="" aria-hidden="true" />
+          <div><strong id="mobileWorkspaceTitle">Jobs</strong><span>Job Scout workspace</span></div>
+        </div>
+        <button id="mobileNavToggle" class="mobile-menu-button" type="button" aria-label="Open workspace navigation"
+          aria-controls="appSidebar" aria-expanded="false">
+          <svg class="icon">
+            <use href="#icon-menu"></use>
+          </svg>
+        </button>
+      </header>
+      <main id="jobsPage" class="shell app-page" data-page-id="jobs">
+        <header class="topbar">
+          <div class="brand">
+            <img class="brand-icon" src="icon-dashboard.png" alt="" aria-hidden="true" />
+            <div>
+              <h1>Live Recommended Jobs Dashboard</h1>
+              <p class="page-intent">See what the scout is doing, choose the strongest jobs first, and keep your
+                application progress tidy.</p>
+            </div>
+          </div>
+          <div class="top-actions">
+            <div class="top-button-row">
+              <button id="runScoutButton" class="button primary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-play"></use>
+                </svg>Run Scout</button>
+              <button id="trackManualJobButton" class="button secondary" type="button" style="margin-left: 8px;"><svg
+                  class="icon icon-sm">
+                  <use href="#icon-target"></use>
+                </svg>Track External Job</button>
+            </div>
+            <div class="meta" aria-live="polite">
+              <span><span id="statusDot" class="status-dot"></span> <span id="statusText">Waiting for data</span></span>
+              <span id="updatedAt">Updated: never</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="stats" aria-label="Dashboard summary">
+          <div class="stat supporting-stat"><span>Total jobs</span><strong id="statTotal">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-briefcase"></use>
+            </svg></div>
+          <div class="stat supporting-stat"><span>Active run</span><strong id="statActive">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-activity"></use>
+            </svg></div>
+          <div class="stat apply primary-stat"><span>Apply first</span><strong id="statApply">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-star"></use>
+            </svg></div>
+          <div class="stat good primary-stat"><span>Good options</span><strong id="statGood">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-check-circle"></use>
+            </svg></div>
+          <div class="stat low archive-stat"><span>Low probability</span><strong id="statLow">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-trending-down"></use>
+            </svg></div>
+          <div class="stat rejected archive-stat"><span>Rejected</span><strong id="statRejected">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-x-circle"></use>
+            </svg></div>
+          <div class="stat needs-action primary-stat"><span>Actionable</span><strong id="statUnreviewed">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-target"></use>
+            </svg></div>
+          <div class="stat apply supporting-stat"><span>Applied</span><strong id="statApplied">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-check"></use>
+            </svg></div>
+          <div class="stat archive-stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-archive"></use>
+            </svg></div>
+          <div class="stat archive-stat"><span>Expired</span><strong id="statExpired">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-clock"></use>
+            </svg></div>
+        </section>
+
+        <section id="freshPanel" class="fresh-panel hidden" aria-label="Fresh Scout progress">
+          <div class="fresh-head">
+            <div>
+              <h2 id="freshTitle"><span class="section-title"><svg class="icon icon-lg">
+                    <use href="#icon-refresh"></use>
+                  </svg>Fresh Scout Progress</span></h2>
+              <p id="freshStatus">Waiting for a fresh run.</p>
+            </div>
+            <div class="decision-chip" id="freshRunLabel">No fresh run</div>
+          </div>
+          <div id="overallProgressContainer" class="overall-progress-container hidden">
+            <span>Overall Scout Progress: <span id="overallProgressText">0%</span></span>
+            <div class="overall-progress-bar">
+              <div id="overallProgressFill" class="overall-progress-fill"></div>
+            </div>
+          </div>
+          <div id="freshCompleteSummary" class="fresh-complete-summary hidden"></div>
+          <div id="freshSearchPathSummary" class="fresh-complete-summary hidden" aria-label="Search path progress">
+          </div>
+          <div class="fresh-metrics">
+            <div class="fresh-metric">
+              <span>Apply first</span>
+              <strong id="freshApply">0 / 0</strong>
+              <div class="fresh-bar apply"><i id="freshApplyBar"></i></div>
+            </div>
+            <div class="fresh-metric">
+              <span>Good or better</span>
+              <strong id="freshGood">0 / 0</strong>
+              <div class="fresh-bar good"><i id="freshGoodBar"></i></div>
+            </div>
+            <div class="fresh-metric">
+              <span>Fresh jobs</span>
+              <strong id="freshJobs">0 / 0</strong>
+              <div class="fresh-bar volume"><i id="freshJobsBar"></i></div>
+            </div>
+            <div class="fresh-metric">
+              <span>Known skipped</span>
+              <strong id="freshKnownSkipped">0</strong>
+              <div class="fresh-bar"><i id="freshKnownBar"></i></div>
+            </div>
+          </div>
+          <div class="fresh-details">
+            <div class="fresh-detail"><span>Query</span><strong id="freshQuery">-</strong></div>
+            <div class="fresh-detail"><span>Page</span><strong id="freshPage">-</strong></div>
+            <div class="fresh-detail"><span>Queries searched</span><strong id="freshQueries">-</strong></div>
+            <div class="fresh-detail"><span>Pages scanned</span><strong id="freshPagesScanned">0</strong></div>
+          </div>
+          <div id="freshPages" class="fresh-pages" aria-label="Recent fresh page decisions"></div>
+        </section>
+
+        <section id="bestNextPanel" class="panel hidden" aria-label="Best next jobs">
+          <div class="section-head">
+            <div>
+              <h2><span class="section-title"><svg class="icon icon-lg">
+                    <use href="#icon-spark"></use>
+                  </svg>Best Next Jobs</span></h2>
+              <p>Start here: the strongest unreviewed jobs from your current filters.</p>
+            </div>
+            <span class="decision-chip APPLY_FIRST" id="bestNextCount">0 ready</span>
+          </div>
+          <div id="bestNextList" class="best-grid"></div>
+        </section>
+
+        <section id="dashboardTerminalPanel" class="panel terminal-panel" aria-label="Scout run status terminal">
+          <div class="section-head">
+            <div>
+              <h2><span class="section-title"><svg class="icon icon-lg">
+                    <use href="#icon-activity"></use>
+                  </svg>Run Status Terminal</span></h2>
+              <p id="runStatusText">Checking dashboard controller...</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span id="runStatusBadge" class="decision-chip">Idle</span>
+              <button id="toggleTerminalButton" class="fresh-action" type="button" aria-expanded="false"><svg
+                  class="icon icon-sm">
+                  <use href="#icon-settings"></use>
+                </svg>Show Terminal</button>
+            </div>
+          </div>
+          <div id="terminalContainer" class="terminal-container hidden">
+            <div class="run-control-actions" style="margin-bottom: 10px;">
+              <button id="stopAfterJobButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-ban"></use>
+                </svg>Stop after current job</button>
+              <button id="stopAfterPageButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-ban"></use>
+                </svg>Stop after current page</button>
+              <button id="stopNowButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-ban"></use>
+                </svg>Stop now</button>
+            </div>
+            <pre id="runLogTail" class="run-log">No run log yet.</pre>
+          </div>
+        </section>
+
+        <section id="runHistoryPanel" class="panel run-history-panel compact" aria-label="Scout run history">
+          <div class="section-head">
+            <div>
+              <h2><span class="section-title"><svg class="icon icon-lg">
+                    <use href="#icon-clock"></use>
+                  </svg>Run History</span></h2>
+              <p>Recent scout runs, why they stopped, and what they found.</p>
+            </div>
+            <button id="toggleRunHistoryButton" class="fresh-action" type="button"><svg class="icon icon-sm">
+                <use href="#icon-clock"></use>
+              </svg>Show fewer</button>
+          </div>
+          <div id="runHistoryList" class="run-history-list"></div>
+        </section>
+
+
+
+        <nav id="careerLaneTabs" class="career-lane-tabs" aria-label="Career lane">
+          <button class="career-lane-tab" type="button" data-career-lane="primary"><svg class="icon icon-sm">
+              <use href="#icon-star"></use>
+            </svg><span>Primary Career</span></button>
+          <button class="career-lane-tab" type="button" data-career-lane="bridge"><svg class="icon icon-sm">
+              <use href="#icon-activity"></use>
+            </svg><span>Bridge Roles</span></button>
+          <button class="career-lane-tab" type="button" data-career-lane="fallback"><svg class="icon icon-sm">
+              <use href="#icon-briefcase"></use>
+            </svg><span>Fallback Income</span></button>
+          <button class="career-lane-tab" type="button" data-career-lane="other"><svg class="icon icon-sm">
+              <use href="#icon-layout"></use>
+            </svg><span>Other</span></button>
+          <button class="career-lane-tab active" type="button" data-career-lane="all"><svg class="icon icon-sm">
+              <use href="#icon-list"></use>
+            </svg><span>All Opportunities</span></button>
+        </nav>
+
+        <section class="filters" aria-label="Dashboard filters">
+          <div id="quickPresets" class="quick-presets" aria-label="Quick filter presets"></div>
+          <div id="filterHint" class="filter-hint">Actionable jobs are unreviewed Apply First and Good Options roles.
+          </div>
+          <div class="control search-control">
+            <label for="searchInput">Search</label>
+            <input id="searchInput" type="search" placeholder="Title, company, query, reason" />
+          </div>
+          <div class="control compact-control">
+            <label for="actionFilter">View</label>
+            <select id="actionFilter">
+              <option value="needs_action" selected>Actionable jobs</option>
+              <option value="all">All jobs</option>
+            </select>
+          </div>
+          <div class="control compact-control">
+            <label for="marketFilter">Market</label>
+            <select id="marketFilter"></select>
+          </div>
+          <div class="control compact-control">
+            <label for="sortFilter">Sort</label>
+            <select id="sortFilter">
+              <option value="newest">Newest</option>
+              <option value="score">Score</option>
+              <option value="company">Company</option>
+              <option value="location">Location</option>
+              <option value="default" selected>Default</option>
+            </select>
+          </div>
+          <button id="advancedFiltersToggle" class="button secondary" type="button" aria-expanded="false"><svg
+              class="icon icon-sm">
+              <use href="#icon-settings"></use>
+            </svg>Advanced Filters</button>
+
+          <div id="advancedFiltersContainer" class="advanced-filters hidden">
+            <div class="control compact-control">
+              <label for="runFilter">Run</label>
+              <select id="runFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="decisionFilter">Decision</label>
+              <select id="decisionFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="domainFilter">Domain</label>
+              <select id="domainFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="searchGroupFilter">Search path</label>
+              <select id="searchGroupFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="employmentFilter">Employment</label>
+              <select id="employmentFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="sponsorshipFilter">Sponsorship</label>
+              <select id="sponsorshipFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="platformFilter">Platform</label>
+              <select id="platformFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="flexibleHoursFilter">Hours</label>
+              <select id="flexibleHoursFilter">
+                <option value="all">All hours</option>
+                <option value="true">Flexible hours</option>
+                <option value="false">Fixed/unspecified</option>
+              </select>
+            </div>
+            <div class="control compact-control">
+              <label for="flagFilter">Flag</label>
+              <select id="flagFilter"></select>
+            </div>
+            <div class="control wide-control">
+              <label for="applyMethodFilter">Apply</label>
+              <select id="applyMethodFilter"></select>
+            </div>
+            <div class="control compact-control">
+              <label for="manualStatusFilter">Status</label>
+              <select id="manualStatusFilter"></select>
+            </div>
+          </div>
+          <div class="control compact-control">
+            <label>Layout</label>
+            <div class="layout-toggle" role="group" aria-label="Layout">
+              <button id="boardViewButton" class="layout-button active" type="button" data-view-mode="board"><svg
+                  class="icon icon-sm">
+                  <use href="#icon-layout"></use>
+                </svg>Board</button>
+              <button id="listViewButton" class="layout-button" type="button" data-view-mode="list"><svg
+                  class="icon icon-sm">
+                  <use href="#icon-list"></use>
+                </svg>List</button>
+            </div>
+          </div>
+          <button id="undoButton" class="button secondary" type="button" disabled><svg class="icon icon-sm">
+              <use href="#icon-rotate-ccw"></use>
+            </svg>Undo</button>
+          <button id="refreshButton" class="button" type="button"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Refresh</button>
+
+            
+        </section>
+
+        <div id="runAiQueriesSummary" class="workflow-hint hidden" style="margin-top: 14px; margin-bottom: 14px;">
+          <svg class="icon icon-sm" style="color: var(--accent-color); fill: currentColor; margin-right: 6px; vertical-align: middle;">
+            <use href="#icon-spark"></use>
+          </svg>
+          <strong>AI Generated Queries for this run:</strong>
+          <div id="runAiQueriesList" style="display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle;"></div>
+        </div>
+
+        <section id="boardView" class="board" aria-label="Recommended jobs board">
+          <section class="column" data-column="APPLY_FIRST">
+            <div class="column-header">
+              <h2>APPLY FIRST</h2><span class="count" id="countApply">0</span>
+            </div>
+            <div class="job-list" id="listApply"></div>
+          </section>
+          <section class="column" data-column="GOOD_OPTIONS">
+            <div class="column-header">
+              <h2>GOOD OPTIONS</h2><span class="count" id="countGood">0</span>
+            </div>
+            <div class="job-list" id="listGood"></div>
+          </section>
+          <section class="column" data-column="LOW_PROBABILITY">
+            <div class="column-header">
+              <h2>LOW PROBABILITY</h2><span class="count" id="countLow">0</span>
+            </div>
+            <div class="job-list" id="listLow"></div>
+          </section>
+          <section class="column" data-column="REJECTED">
+            <div class="column-header">
+              <h2>REJECTED</h2><span class="count" id="countRejected">0</span>
+            </div>
+            <div class="job-list" id="listRejected"></div>
+          </section>
+        </section>
+
+        <section id="compactList" class="compact-list hidden" aria-label="Compact recommended jobs list"></section>
+        <div id="jobsTableFooter" class="application-table-footer hidden">
+          <span id="jobsVisibleCount">Showing 0 jobs</span>
+          <button id="loadMoreJobsButton" class="button secondary" type="button">Show more jobs</button>
+        </div>
+      </main>
+      <main id="homePage" class="shell app-page workspace-page" data-page-id="home" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-spark"></use>
+              </svg>Home</h1>
+            <p>Your daily starting point for strong jobs, run health, and application progress.</p>
+          </div>
+          <button id="homeStartScoutButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-play"></use>
+            </svg>Run Scout</button>
+        </header>
+        <section class="home-focus">
+          <article class="home-focus-card">
+            <div>
+              <span class="home-eyebrow">Your next move</span>
+              <h2 id="homeFocusTitle">Loading your strongest next actions...</h2>
+              <p id="homeFocusCopy">The dashboard is checking recent jobs and your review progress.</p>
+            </div>
+            <div>
+              <div class="home-focus-metrics" aria-label="Home job summary">
+                <div class="home-focus-metric"><span>Actionable</span><strong id="homeActionableCount">0</strong></div>
+                <div class="home-focus-metric"><span>Apply first</span><strong id="homeApplyCount">0</strong></div>
+                <div class="home-focus-metric"><span>Good options</span><strong id="homeGoodCount">0</strong></div>
+              </div>
+              <div class="workspace-card-actions" style="margin-top:14px;">
+                <button id="homeReviewJobsButton" class="button primary" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-briefcase"></use>
+                  </svg>Review jobs</button>
+                <button id="homeApplicationsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-check-circle"></use>
+                  </svg>Applications</button>
+              </div>
+            </div>
+          </article>
+          <article class="home-side-card">
+            <div>
+              <span id="homeRunBadge" class="home-card-status">Checking scout</span>
+              <strong id="homeRunTitle">Reading the latest run</strong>
+              <p id="homeRunCopy">Run status and recovery information will appear here.</p>
+            </div>
+            <button id="homeRunDetailsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                <use href="#icon-activity"></use>
+              </svg>Open Scout</button>
+          </article>
+        </section>
+        <section class="workspace-grid">
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Setup health</h2><svg class="icon icon-lg">
+                  <use href="#icon-file-text"></use>
+                </svg>
+              </div>
+              <div id="homeSetupValue" class="workspace-card-value">Checking...</div>
+              <p id="homeSetupHealth">Checking your profile and CV...</p>
+            </div>
+            <div class="workspace-card-actions"><button id="openProfileSetupButton" class="button secondary"
+                type="button">Review setup</button></div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Application progress</h2><svg class="icon icon-lg">
+                  <use href="#icon-check"></use>
+                </svg>
+              </div>
+              <div id="homeAppliedValue" class="workspace-card-value">0 applied</div>
+              <p id="homeAppliedCopy">Track interviews, offers, and follow-up notes in one place.</p>
+            </div>
+            <div class="workspace-card-actions"><button id="homeTrackApplicationsButton" class="button secondary"
+                type="button">Track applications</button></div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Latest activity</h2><svg class="icon icon-lg">
+                  <use href="#icon-clock"></use>
+                </svg>
+              </div>
+              <div id="homeLatestRunValue" class="workspace-card-value">No run loaded</div>
+              <p id="homeLatestRunCopy">Recent scout results and saved terminal logs remain available for review.</p>
+            </div>
+            <div class="workspace-card-actions"><button id="homeRunsButton" class="button secondary" type="button">Runs
+                &amp; logs</button></div>
+          </article>
+        </section>
+      </main>
+      <main id="scoutPage" class="shell app-page workspace-page" data-page-id="scout" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-search"></use>
+              </svg>Scout</h1>
+            <p>Configure, start, stop, and resume approved job searches without using terminal commands.</p>
+          </div>
+          <button id="openScoutWorkspaceRunButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-play"></use>
+            </svg>Start a run</button>
+        </header>
+        <section class="scout-status-hero" aria-live="polite">
+          <div class="scout-status-copy">
+            <span id="scoutWorkspaceEyebrow" class="subline">Checking local controller...</span>
+            <strong id="scoutWorkspaceStatus">Scout status is loading</strong>
+            <span id="scoutWorkspaceDetail">The dashboard only launches approved local workflows. Login and verification
+              remain manual.</span>
+          </div>
+          <span id="scoutWorkspaceBadge" class="decision-chip">Idle</span>
+        </section>
+        <section class="workspace-grid">
+          <article class="workspace-card action-card wide">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Recommended daily run</h2><svg class="icon icon-lg">
+                  <use href="#icon-spark"></use>
+                </svg>
+              </div>
+              <div class="workspace-card-value">LinkedIn multi-query fresh</div>
+              <p>Uses your saved query strategy, skips known jobs, adapts page depth when results are duplicate-heavy,
+                and updates the Jobs dashboard live.</p>
+            </div>
+            <div class="workspace-card-actions">
+              <button id="startRecommendedScoutButton" class="button primary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-play"></use>
+                </svg>Configure run</button>
+              <button id="openSearchStrategyButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-target"></use>
+                </svg>Edit search strategy</button>
+            </div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Search coverage</h2><svg class="icon icon-lg">
+                  <use href="#icon-search"></use>
+                </svg>
+              </div>
+              <div id="scoutQueryCount" class="workspace-card-value">Loading...</div>
+              <p id="scoutLocationSummary">Reading your saved locations and query-learning settings.</p>
+            </div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>AI scoring</h2><svg class="icon icon-lg">
+                  <use href="#icon-activity"></use>
+                </svg>
+              </div>
+              <div id="scoutAiBackend" class="workspace-card-value">Loading...</div>
+              <p id="scoutAiFallbacks">Checking configured providers and fallback order.</p>
+            </div>
+            <div class="workspace-card-actions"><button id="openAiSettingsButton" class="button secondary"
+                type="button">Manage AI</button></div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Resume &amp; recovery</h2><svg class="icon icon-lg">
+                  <use href="#icon-rotate-ccw"></use>
+                </svg>
+              </div>
+              <div id="scoutResumeStatus" class="workspace-card-value">Checking...</div>
+              <p>Interrupted runs keep progress so the next run can continue without reopening already processed jobs.
+              </p>
+            </div>
+            <div class="workspace-card-actions"><button id="resumeScoutButton" class="button secondary"
+                type="button">Resume last run</button></div>
+          </article>
+          <article class="workspace-card action-card">
+            <div>
+              <div class="workspace-card-head">
+                <h2>Safety boundary</h2><svg class="icon icon-lg">
+                  <use href="#icon-check-circle"></use>
+                </svg>
+              </div>
+              <div class="workspace-card-value">Manual login stays manual</div>
+              <p>The app does not store credentials or bypass verification, CAPTCHA, access controls, or rate limits.
+              </p>
+            </div>
+          </article>
+        </section>
+        <section class="form-section" aria-labelledby="advancedToolsTitle" style="margin-top:18px;">
+          <div class="form-section-head">
+            <div>
+              <h2 id="advancedToolsTitle">Advanced Tools</h2>
+              <p>Read-only legacy statistics and audited maintenance workflows. Automatic application submission and
+                unaudited Glassdoor execution stay unavailable.</p>
+            </div>
+            <button id="refreshLegacyStatsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                <use href="#icon-refresh"></use>
+              </svg>Refresh stats</button>
+          </div>
+          <div id="legacyToolsStatus" class="profile-status" role="status" aria-live="polite">Loading read-only
+            application statistics...</div>
+          <section class="application-summary" aria-label="Read-only legacy application statistics">
+            <article class="application-stat"><span>Legacy applications</span><strong
+                id="legacyApplicationCount">0</strong></article>
+            <article class="application-stat"><span>Applied today</span><strong id="legacyTodayCount">0</strong>
+            </article>
+            <article class="application-stat"><span>Reviewed jobs</span><strong id="legacyReviewCount">0</strong>
+            </article>
+            <article class="application-stat"><span>Seen jobs</span><strong id="legacySeenCount">0</strong></article>
+          </section>
+          <div class="security-note" style="margin-top:14px;">
+            <svg class="icon icon-sm">
+              <use href="#icon-check-circle"></use>
+            </svg>
+            Validation opens enabled job boards and checks their selectors only. It cannot apply to jobs or submit an application.
+          </div>
+          <div class="workspace-card-actions" style="margin-top:14px;">
+            <button id="validateBoardsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                <use href="#icon-search"></use>
+              </svg>Validate job boards</button>
+          </div>
+        </section>
+      </main>
+      <main id="profilePage" class="shell app-page workspace-page" data-page-id="profile" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-file-text"></use>
+              </svg>Profile &amp; CV</h1>
+            <p>Manage the information the scout and application assistant use to represent you.</p>
+          </div>
+          <button id="saveProfileButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-check"></use>
+            </svg>Save profile</button>
+        </header>
+        <div id="profileStatus" class="profile-status" role="status" aria-live="polite">Loading your private profile...
+        </div>
+        <div class="editor-layout">
+          <aside class="editor-sidebar">
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Profile readiness</h2>
+                  <p>The information currently available to the scout.</p>
+                </div>
+              </div>
+              <div id="profileReadinessRing" class="readiness-ring" data-label="0%" style="--readiness: 0%"></div>
+              <ul id="profileReadinessList" class="readiness-list"></ul>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Active CV</h2>
+                  <p>PDF used when the AI compares jobs with your background.</p>
+                </div>
+              </div>
+              <div class="cv-drop">
+                <span id="activeCvName" class="cv-file-name">No CV selected</span>
+                <span id="activeCvSize" class="subline"></span>
+                <input id="cvUploadInput" type="file" accept="application/pdf,.pdf" />
+                <button id="uploadCvButton" class="button secondary" type="button">Upload PDF</button>
+                <a id="openCvPreview" class="job-action hidden" href="/api/profile/cv/file" target="_blank"
+                  rel="noopener">Open CV</a>
+              </div>
+              <details id="cvTextDetails" class="form-section" style="margin-top:12px;padding:12px;">
+                <summary>Text the AI can read</summary>
+                <p id="cvExtractedText" style="max-height:260px;overflow:auto;white-space:pre-wrap;"></p>
+              </details>
+            </section>
+          </aside>
+          <form id="profileForm" class="editor-main">
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Personal information</h2>
+                  <p>Used for applications and eligibility questions.</p>
+                </div>
+              </div>
+              <div class="form-grid three">
+                <div class="field"><label for="profileFirstName">First name</label><input id="profileFirstName"
+                    required /></div>
+                <div class="field"><label for="profileLastName">Last name</label><input id="profileLastName" required />
+                </div>
+                <div class="field"><label for="profileGender">Gender</label><input id="profileGender" /></div>
+                <div class="field"><label for="profileEmail">Email</label><input id="profileEmail" type="email"
+                    required /></div>
+                <div class="field"><label for="profilePhone">Phone</label><input id="profilePhone" required /></div>
+                <div class="field"><label for="profilePostalCode">Postal code</label><input id="profilePostalCode" />
+                </div>
+                <div class="field"><label for="profileCity">City</label><input id="profileCity" required /></div>
+                <div class="field"><label for="profileCountry">Country</label><input id="profileCountry" required />
+                </div>
+              </div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Professional summary</h2>
+                  <p>This strongly influences job scoring and generated application text.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full"><label for="profileAbout">About me</label><textarea
+                    id="profileAbout"></textarea></div>
+                <div class="field"><label for="profileLinkedin">LinkedIn URL</label><input id="profileLinkedin"
+                    type="url" /></div>
+                <div class="field"><label for="profilePortfolio">Portfolio URL</label><input id="profilePortfolio"
+                    type="url" /></div>
+                <div class="field"><label for="profileGithub">GitHub URL</label><input id="profileGithub" type="url" />
+                </div>
+                <div class="field"><label for="profileCoverLetterStyle">Cover-letter style</label><input
+                    id="profileCoverLetterStyle" /></div>
+              </div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Work experience</h2>
+                  <p>Add the roles and responsibilities the AI should consider.</p>
+                </div><button id="addExperienceButton" class="button secondary" type="button">Add experience</button>
+              </div>
+              <div id="experienceRepeater" class="repeater"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Education</h2>
+                  <p>Degrees, programmes, grades, and completion years.</p>
+                </div><button id="addEducationButton" class="button secondary" type="button">Add education</button>
+              </div>
+              <div id="educationRepeater" class="repeater"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Skills and evidence</h2>
+                  <p>One item per line. Commas and semicolons are preserved.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full"><label for="profileSkills">Skills</label><textarea
+                    id="profileSkills"></textarea></div>
+                <div class="field"><label for="profileTools">Tools</label><textarea id="profileTools"></textarea></div>
+                <div class="field"><label for="profileCertifications">Certifications</label><textarea
+                    id="profileCertifications"></textarea></div>
+              </div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Languages</h2>
+                  <p>Be precise because language requirements affect filtering and scoring.</p>
+                </div><button id="addLanguageButton" class="button secondary" type="button">Add language</button>
+              </div>
+              <div id="languageRepeater" class="repeater"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Work preferences</h2>
+                  <p>Salary, availability, and work authorization.</p>
+                </div>
+              </div>
+              <div class="form-grid three">
+                <div class="field"><label for="profileSalaryMinimum">Minimum salary</label><input
+                    id="profileSalaryMinimum" type="number" min="0" /></div>
+                <div class="field"><label for="profileSalaryTarget">Target salary</label><input id="profileSalaryTarget"
+                    type="number" min="0" /></div>
+                <div class="field"><label for="profileSalaryCurrency">Currency</label><input
+                    id="profileSalaryCurrency" /></div>
+                <div class="field"><label for="profileStartDate">Availability</label><input id="profileStartDate" />
+                </div>
+                <div class="field"><label for="profileNoticeWeeks">Notice period (weeks)</label><input
+                    id="profileNoticeWeeks" type="number" min="0" /></div>
+                <div class="field"><label for="profileVisaStatus">Visa/status</label><input id="profileVisaStatus" />
+                </div>
+                <div class="field full"><label for="profileWorkAuthorization">Work authorization
+                    summary</label><textarea id="profileWorkAuthorization"></textarea></div>
+              </div>
+            </section>
+          </form>
+      </main>
+      <main id="strategyPage" class="shell app-page workspace-page" data-page-id="strategy" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-target"></use>
+              </svg>Job Strategy</h1>
+            <p>Shape target roles, realistic bridge opportunities, blockers, salary, and location preferences.</p>
+          </div>
+          <button id="saveStrategyButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-check"></use>
+            </svg>Save strategy</button>
+        </header>
+        <div id="strategyStatus" class="profile-status" role="status" aria-live="polite">Loading search strategy...
+        </div>
+        <form id="strategyForm" class="editor-main" style="padding-top:18px;">
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Career direction</h2>
+                <p>Tell the scout what a good long-term outcome looks like. Enter one role family per line; commas and
+                  semicolons are preserved.</p>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field full"><label for="strategyCoreGoal">Core goal</label><textarea
+                  id="strategyCoreGoal"></textarea></div>
+              <div class="field full"><label for="strategyOpenness">Openness to other paths</label><textarea
+                  id="strategyOpenness"></textarea></div>
+              <div class="field"><label for="strategyPrimaryPaths">Primary career paths</label><textarea
+                  id="strategyPrimaryPaths" placeholder="One role family per line"></textarea></div>
+              <div class="field"><label for="strategyBridgeRoles">Strong bridge roles</label><textarea
+                  id="strategyBridgeRoles" placeholder="One role family per line"></textarea></div>
+              <div class="field full"><label for="strategyFallbackRoles">Fallback income roles</label><textarea
+                  id="strategyFallbackRoles" placeholder="One role family per line"></textarea></div>
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Filtering rules</h2>
+                <p>Hard blockers reject jobs; soft concerns reduce confidence but still allow AI review. Enter one item
+                  per line; commas and semicolons are preserved.</p>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field"><label for="strategyHardBlockers">Hard blockers</label><textarea
+                  id="strategyHardBlockers"></textarea></div>
+              <div class="field"><label for="strategySoftRisks">Soft concerns</label><textarea
+                  id="strategySoftRisks"></textarea></div>
+              <div class="field"><label for="strategyFallbackKeywords">Fallback keywords</label><textarea
+                  id="strategyFallbackKeywords"></textarea></div>
+              <div class="field"><label for="strategyLocations">Locations</label><textarea
+                  id="strategyLocations"></textarea></div>
+              <div class="field"><label for="strategyCompanyBlacklist">Company blacklist</label><textarea
+                  id="strategyCompanyBlacklist"></textarea></div>
+              <div class="field"><label for="strategyCompanyWhitelist">Priority companies</label><textarea
+                  id="strategyCompanyWhitelist"></textarea></div>
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Scoring and practical limits</h2>
+                <p>These values guide score categories, commute range, pay expectations, and company discipline.</p>
+              </div>
+            </div>
+            <div class="form-grid three">
+              <div class="field"><label for="strategyApplyScore">Apply First score</label><input id="strategyApplyScore"
+                  type="number" min="0" max="100" /></div>
+              <div class="field"><label for="strategyReviewScore">Human review score</label><input
+                  id="strategyReviewScore" type="number" min="0" max="100" /></div>
+              <div class="field"><label for="strategyDistance">Search distance (miles)</label><input
+                  id="strategyDistance" type="number" min="1" /></div>
+              <div class="field"><label for="strategyPreferredSalary">Preferred monthly salary</label><input
+                  id="strategyPreferredSalary" type="number" min="0" /></div>
+              <div class="field"><label for="strategyBridgeSalary">Bridge-role minimum</label><input
+                  id="strategyBridgeSalary" type="number" min="0" /></div>
+              <div class="field"><label for="strategyHourlySalary">Part-time hourly minimum</label><input
+                  id="strategyHourlySalary" type="number" min="0" step="0.5" /></div>
+              <div class="field"><label for="strategyCompanyLimit">Applications/company in 14 days</label><input
+                  id="strategyCompanyLimit" type="number" min="1" /></div>
+              <label class="check-row" for="strategyAvoidUnrelated"><input id="strategyAvoidUnrelated"
+                  type="checkbox" />Avoid unrelated roles at one company</label>
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Search queries</h2>
+                <p>Curated search phrases are separate from the richer career descriptions above. Enter one query per
+                  line; punctuation is preserved.</p>
+              </div><span id="strategyQueryCount" class="decision-chip">0 queries</span>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="strategyPrimaryQueries">Primary queries <span id="strategyPrimaryQueryCount"
+                    class="field-count">0</span></label>
+                <textarea id="strategyPrimaryQueries" style="min-height:260px;"
+                  placeholder="junior ux designer&#10;junior product designer"></textarea>
+              </div>
+              <div class="field">
+                <label for="strategyBridgeQueries">Bridge queries <span id="strategyBridgeQueryCount"
+                    class="field-count">0</span></label>
+                <textarea id="strategyBridgeQueries" style="min-height:260px;"
+                  placeholder="customer success coordinator&#10;junior data analyst"></textarea>
+              </div>
+              <div class="field full">
+                <label for="strategyFallbackQueries">Fallback income queries <span id="strategyFallbackQueryCount"
+                    class="field-count">0</span></label>
+                <textarea id="strategyFallbackQueries" style="min-height:190px;"
+                  placeholder="customer support&#10;back office"></textarea>
+              </div>
+              <div id="strategyQueryDuplicateNotice" class="query-duplicate-notice hidden" role="status"
+                aria-live="polite"></div>
+              <label class="check-row" for="strategyQueryLearningEnabled"><input id="strategyQueryLearningEnabled"
+                  type="checkbox" />Use query-learning order</label>
+              <div class="field"><label for="strategyExplorationInterval">Explore a lower-ranked query
+                  every</label><input id="strategyExplorationInterval" type="number" min="1" /></div>
+              <div class="field full"><label>What the app has learned</label>
+                <div id="strategyQueryLearningSummary" class="workflow-hint"></div>
+              </div>
+              <div class="field full">
+                <label>Latest AI-generated search queries</label>
+                <div id="strategyLatestAiQueries" class="workflow-hint" style="display: flex; flex-wrap: wrap; gap: 6px;">No AI queries generated yet.</div>
+              </div>
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Fresh Scout behavior</h2>
+                <p>Advanced stopping targets. The Run Scout screen can still override AI budget mode per run.</p>
+              </div>
+            </div>
+            <div class="form-grid three">
+              <div class="field"><label for="strategyFreshMaxPages">Maximum pages/query</label><input
+                  id="strategyFreshMaxPages" type="number" min="1" /></div>
+              <div class="field"><label for="strategyKnownContinue">Continue when known ratio reaches</label><input
+                  id="strategyKnownContinue" type="number" min="0" max="100" /></div>
+              <div class="field"><label for="strategyDuplicateStop">Duplicate-heavy threshold</label><input
+                  id="strategyDuplicateStop" type="number" min="0" max="100" /></div>
+              <div class="field"><label for="strategyTargetApply">Target Apply First jobs</label><input
+                  id="strategyTargetApply" type="number" min="1" /></div>
+              <div class="field"><label for="strategyTargetGood">Target Good-or-better jobs</label><input
+                  id="strategyTargetGood" type="number" min="1" /></div>
+              <div class="field"><label for="strategyFreshCap">Fresh-job soft cap</label><input id="strategyFreshCap"
+                  type="number" min="1" /></div>
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Recruiter instructions and evidence</h2>
+                <p>The complete nuanced guidance and portfolio evidence used by the scoring prompt.</p>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field full"><label for="strategyFullText">Full recruiter instructions</label><textarea
+                  id="strategyFullText" style="min-height:360px;"></textarea></div>
+              <div class="field full"><label for="strategyPortfolioNotes">Portfolio evidence notes</label><textarea
+                  id="strategyPortfolioNotes" style="min-height:200px;"></textarea></div>
+            </div>
+          </section>
+        </form>
+      </main>
+
+      <main id="coverLetterPage" class="shell app-page workspace-page" data-page-id="coverLetter" hidden>
+        <header class="workspace-header">
+        <div>
+          <h1><svg class="icon">
+              <use href="#icon-file-text"></use>
+            </svg>Cover Letter</h1>
+          <p>Design your base template in HTML and CSS. The dashboard will automatically inject your details.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button id="saveCoverLetterButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-save"></use>
+            </svg>Save templates</button>
+          <button id="downloadUniversalPdfButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-external-link"></use>
+            </svg>Download Universal PDF</button>
+        </div>
+      </header>
+      <div id="coverLetterStatus" class="profile-status" role="status" aria-live="polite" style="display: none;"></div>
+        
+        <div class="split-view" style="display: flex; gap: 20px; height: calc(100vh - 150px); margin-top: 20px;">
+          <!-- Left side: Code Editors -->
+          <div class="cl-editors" style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+            <div class="field full" style="flex: 1; display: flex; flex-direction: column;">
+              <label for="coverLetterHtmlInput">HTML Template (Use [Company Name], [Position Name], and [something specific...])</label>
+              <textarea id="coverLetterHtmlInput" style="flex: 1; font-family: monospace; font-size: 12px; white-space: pre;"></textarea>
+            </div>
+            <div class="field full" style="flex: 1; display: flex; flex-direction: column;">
+              <label for="coverLetterCssInput">CSS Styles</label>
+              <textarea id="coverLetterCssInput" style="flex: 1; font-family: monospace; font-size: 12px; white-space: pre;"></textarea>
+            </div>
+          </div>
+          
+          <!-- Right side: Live Preview -->
+          <div class="cl-preview-pane" style="flex: 1; background: #e0e0e0; border-radius: 8px; padding: 20px; overflow-y: auto; display: flex; justify-content: center;">
+             <div id="coverLetterLivePreview" style="box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <!-- Live HTML goes here -->
+             </div>
+          </div>
+        </div>
+      </main>
+      <main id="applicationsPage" class="shell app-page workspace-page" data-page-id="applications" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-check-circle"></use>
+              </svg>Applications</h1>
+            <p>Track active applications, interviews, outcomes, notes, and follow-ups in one place.</p>
+          </div>
+          <button id="refreshApplicationsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Refresh</button>
+        </header>
+        <div id="applicationsStatus" class="profile-status" role="status" aria-live="polite">Loading applications...
+        </div>
+        <section class="application-summary" aria-label="Application pipeline summary">
+          <article class="application-stat"><span>Total tracked</span><strong id="applicationStatTotal">0</strong>
+          </article>
+          <article class="application-stat"><span>Preparing</span><strong id="applicationStatPreparing">0</strong>
+          </article>
+          <article class="application-stat"><span>Applied</span><strong id="applicationStatApplied">0</strong></article>
+          <article class="application-stat"><span>Interviews</span><strong id="applicationStatInterview">0</strong>
+          </article>
+          <article class="application-stat"><span>Offers</span><strong id="applicationStatOffer">0</strong></article>
+        </section>
+        <section class="application-toolbar">
+          <div class="field"><label for="applicationSearch">Search applications</label><input id="applicationSearch"
+              placeholder="Title, company, location, notes" /></div>
+          <div class="field"><label for="applicationStageFilter">Stage</label><select id="applicationStageFilter">
+              <option value="all">All stages</option>
+              <option value="preparing">Preparing</option>
+              <option value="applied">Applied</option>
+              <option value="interview">Interview</option>
+              <option value="offer">Offer</option>
+              <option value="rejected">Rejected</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select></div>
+        </section>
+        <section id="applicationsTableWrap" class="application-table-wrap">
+          <table class="application-table">
+            <caption class="sr-only">Tracked job applications with stage, follow-up date, notes, and save action
+            </caption>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Stage &amp; follow-up</th>
+                <th>Notes</th>
+                <th>Updated</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="applicationsTableBody"></tbody>
+          </table>
+          <div id="applicationsEmpty" class="empty-workspace hidden">No applications match this view. Mark a job Applied
+            from the Jobs page to begin tracking it here.</div>
+          <div id="applicationsTableFooter" class="application-table-footer hidden">
+            <span id="applicationsVisibleCount">Showing 0 applications</span>
+            <button id="loadMoreApplicationsButton" class="button secondary" type="button">Show 50 more</button>
+          </div>
+        </section>
+      </main>
+      <main id="descriptionsPage" class="shell app-page workspace-page" data-page-id="descriptions" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-file-text"></use>
+              </svg>Descriptions</h1>
+            <p>Browse jobs with successfully extracted descriptions.</p>
+          </div>
+          <button id="refreshDescriptionsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Refresh</button>
+        </header>
+        <div id="descriptionsStatus" class="profile-status" role="status" aria-live="polite">Loading descriptions...
+        </div>
+        <section class="application-toolbar">
+          <div class="field"><label for="descriptionSearch">Search</label><input id="descriptionSearch"
+              placeholder="Title, company, location" /></div>
+          <div class="field"><label for="descriptionSourceFilter">Source</label><select id="descriptionSourceFilter">
+              <option value="all">All Sources</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="indeed">Indeed</option>
+            </select></div>
+        </section>
+        <section id="descriptionsTableWrap" class="application-table-wrap">
+          <table class="application-table">
+            <caption class="sr-only">Jobs with extracted descriptions</caption>
+            <thead>
+              <tr>
+                <th>Job &amp; Company</th>
+                <th>Source</th>
+                <th>Description Preview</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="descriptionsTableBody"></tbody>
+          </table>
+          <div id="descriptionsEmpty" class="empty-workspace hidden">No extracted descriptions found. Run a description
+            extraction workflow to populate this list.</div>
+          <div id="descriptionsTableFooter" class="application-table-footer hidden">
+            <span id="descriptionsVisibleCount">Showing 0 descriptions</span>
+            <button id="loadMoreDescriptionsButton" class="button secondary" type="button">Show 50 more</button>
+          </div>
+        </section>
+      </main>
+      <main id="assistantPage" class="shell app-page workspace-page" data-page-id="assistant" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-file-text"></use>
+              </svg>Application Assistant</h1>
+            <p>Manage truthful reusable answers and prepare job-specific documents without automatic submission.</p>
+          </div>
+          <button id="saveAssistantKnowledgeButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-check"></use>
+            </svg>Save answer library</button>
+        </header>
+        <div id="assistantStatus" class="profile-status" role="status" aria-live="polite">Loading application
+          knowledge...</div>
+        <div class="security-note"><svg class="icon icon-sm">
+            <use href="#icon-check-circle"></use>
+          </svg>Final submission always pauses for your review. Generated text is a draft, not a factual source.</div>
+        <div class="assistant-layout">
+          <div class="editor-main">
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Structured application answers</h2>
+                  <p>Stable facts from your profile, such as sponsorship, notice period, language, and work
+                    authorization.</p>
+                </div><button id="addApplicationAnswerButton" class="button secondary" type="button">Add answer</button>
+              </div>
+              <div id="applicationAnswersEditor" class="repeater"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Learned question answers</h2>
+                  <p>Answers captured or added for recurring application questions. Review these carefully before
+                    relying on them.</p>
+                </div><button id="addLearnedAnswerButton" class="button secondary" type="button">Add learned
+                  answer</button>
+              </div>
+              <div id="learnedAnswersEditor" class="repeater"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Question helper</h2>
+                  <p>Checks deterministic saved answers first. It will not invent an answer when your profile does not
+                    support one.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="field full"><label for="assistantQuestion">Application question</label><textarea
+                    id="assistantQuestion"
+                    placeholder="For example: Are you authorized to work in the Netherlands?"></textarea></div>
+                <div class="field full"><label for="assistantQuestionContext">Optional context or available
+                    choices</label><textarea id="assistantQuestionContext"></textarea></div>
+              </div>
+              <div class="workspace-card-actions" style="margin-top:12px;"><button id="findAssistantAnswerButton"
+                  class="button secondary" type="button">Find saved answer</button></div>
+              <div id="assistantAnswerResult" class="assistant-answer-result" style="margin-top:12px;">No question
+                checked yet.</div>
+            </section>
+          </div>
+          <aside class="editor-sidebar">
+            <section class="form-section document-studio">
+              <div class="form-section-head">
+                <div>
+                  <h2>Cover-letter studio</h2>
+                  <p>Create a free local draft, then optionally improve it with Claude.</p>
+                </div>
+              </div>
+              <div class="field"><label for="assistantJobSelect">Job</label><select id="assistantJobSelect"></select>
+              </div>
+              <div class="field"><label for="assistantCoverStyle">Writing style</label><textarea
+                  id="assistantCoverStyle"></textarea></div>
+              <div class="workspace-card-actions">
+                <button id="createLocalDraftButton" class="button secondary" type="button">Create free draft</button>
+                <button id="createAiDraftButton" class="button secondary" type="button">Improve with Claude</button>
+              </div>
+              <div id="assistantAiNote" class="subline"></div>
+              <div class="field"><label for="assistantDraft">Draft</label><textarea id="assistantDraft"
+                  placeholder="Choose a job and create a draft."></textarea></div>
+              <div class="workspace-card-actions">
+                <button id="copyAssistantDraftButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-copy"></use>
+                  </svg>Copy</button>
+                <button id="downloadAssistantDraftButton" class="button secondary" type="button">Download .txt</button>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+      <main id="runsPage" class="shell app-page workspace-page" data-page-id="runs" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-clock"></use>
+              </svg>Runs &amp; Logs</h1>
+            <p>Understand what each scout run searched, found, skipped, and why it stopped.</p>
+          </div>
+          <button id="refreshMaintenanceButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Refresh</button>
+        </header>
+        <div id="maintenanceStatus" class="profile-status" role="status" aria-live="polite">Loading diagnostics...</div>
+        <section class="diagnostic-grid" aria-label="System diagnostics">
+          <article class="diagnostic-card"><span>Workspace</span><strong id="diagnosticWorkspace">Checking</strong>
+          </article>
+          <article class="diagnostic-card"><span>Data index</span><strong id="diagnosticDatabase">Checking</strong>
+          </article>
+          <article class="diagnostic-card"><span>Resume</span><strong id="diagnosticResume">Checking</strong></article>
+          <article class="diagnostic-card"><span>Persistence</span><strong id="diagnosticPersistence">Checking</strong>
+          </article>
+          <article class="diagnostic-card"><span>Logs</span><strong id="diagnosticLogs">0</strong></article>
+          <article class="diagnostic-card"><span>Run history</span><strong id="diagnosticRuns">0</strong></article>
+        </section>
+        <section id="latestRunIncident" class="workflow-hint hidden" style="margin-top:14px;"></section>
+        <section id="latestDiagnosticError" class="workflow-hint hidden" style="margin-top:14px;"></section>
+        <section id="latestPersistenceWarning" class="workflow-hint hidden" style="margin-top:14px;"></section>
+        <div class="operations-layout">
+          <aside class="editor-sidebar">
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Log files</h2>
+                  <p>Select a saved terminal or dashboard-run log.</p>
+                </div>
+              </div>
+              <div id="maintenanceLogList" class="log-list"></div>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Maintenance</h2>
+                  <p>Create a secret-free backup or remove old log files conservatively.</p>
+                </div>
+              </div>
+              <div class="maintenance-actions">
+                <button id="createBackupButton" class="button secondary" type="button">Create backup</button>
+                <button id="pruneLogsButton" class="button secondary" type="button">Delete logs older than 90
+                  days</button>
+                <button id="exportMigrationBackupButton" class="button secondary" type="button">Export migration
+                  backup</button>
+                <button id="importMigrationBackupButton" class="button secondary" type="button">Import migration
+                  backup</button>
+                <input id="migrationBackupUploadInput" type="file" accept="application/zip,.zip"
+                  style="display:none;" />
+                <button id="exportSessionButton" class="button secondary" type="button">Export login session</button>
+                <button id="importSessionButton" class="button secondary" type="button">Import login session</button>
+                <input id="sessionUploadInput" type="file" accept="application/zip,.zip" style="display:none;" />
+
+              </div>
+              <div class="security-note" style="margin-top:12px;"><svg class="icon icon-sm">
+                  <use href="#icon-check-circle"></use>
+                </svg>Backups exclude API keys, cookies, browser profiles, and session data.</div>
+              <div id="maintenanceBackupList" class="backup-list" style="margin-top:12px;"></div>
+            </section>
+          </aside>
+          <div class="editor-main">
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2 id="selectedLogTitle">Log viewer</h2>
+                  <p id="selectedLogMeta">Choose a log file to inspect.</p>
+                </div><button id="copyLogButton" class="button secondary" type="button" disabled><svg
+                    class="icon icon-sm">
+                    <use href="#icon-copy"></use>
+                  </svg>Copy log</button>
+              </div>
+              <pre id="maintenanceLogViewer" class="operations-log">No log selected.</pre>
+            </section>
+            <section class="form-section">
+              <div class="form-section-head">
+                <div>
+                  <h2>Historical scout activity</h2>
+                  <p>Query-level run records from the existing scout history.</p>
+                </div>
+              </div>
+              <div id="maintenanceRunList" class="run-list"></div>
+            </section>
+          </div>
+        </div>
+      </main>
+      <main id="settingsPage" class="shell app-page workspace-page" data-page-id="settings" hidden>
+        <header class="workspace-header">
+          <div>
+            <h1><svg class="icon">
+                <use href="#icon-settings"></use>
+              </svg>Settings</h1>
+            <p>Configure AI scoring safely. Provider keys remain local and are never sent back to the browser.</p>
+          </div>
+          <button id="saveAiSettingsButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-check"></use>
+            </svg>Save AI settings</button>
+        </header>
+        <div id="aiSettingsStatus" class="profile-status" role="status" aria-live="polite">Loading AI settings...</div>
+        <div class="settings-layout">
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Scoring behavior</h2>
+                <p>Auto mode tries configured providers in order and falls back when one is unavailable or rate-limited.
+                </p>
+              </div>
+            </div>
+            <div class="security-note"><svg class="icon icon-sm">
+                <use href="#icon-check-circle"></use>
+              </svg><span id="aiSecurityNote">Stored API keys are never returned to the browser.</span></div>
+            <div class="form-grid three" style="margin-top:14px;">
+              <div class="field">
+                <label for="aiBackend">Scoring backend</label>
+                <select id="aiBackend">
+                  <option value="auto">Auto fallback (recommended)</option>
+                  <option value="cerebras">Cerebras only</option>
+                  <option value="ollama_cloud">Ollama Cloud only</option>
+                  <option value="gemini">Gemini only</option>
+                  <option value="claude">Claude only</option>
+                  <option value="openai_compatible">OpenAI-compatible only</option>
+                  <option value="deepseek">DeepSeek only</option>
+                  <option value="openrouter">OpenRouter only</option>
+                  <option value="lmstudio">LM Studio only</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="aiRateLimitCooldown">Rate-limit cooldown (seconds)</label>
+                <input id="aiRateLimitCooldown" type="number" min="5" max="3600" />
+              </div>
+              <div class="field">
+                <label>Environment file</label>
+                <div id="aiEnvironmentStatus" class="workflow-hint">Checking local environment...</div>
+              </div>
+            </div>
+            <div class="form-section-head" style="margin-top:18px;margin-bottom:8px;">
+              <div>
+                <h2>Automatic fallback order</h2>
+                <p>Only enabled providers in this list are attempted when backend is Auto.</p>
+              </div>
+            </div>
+            <div id="aiFallbackOrder" class="fallback-order-list"></div>
+          </section>
+          <section>
+            <div class="form-section-head">
+              <div>
+                <h2>Providers</h2>
+                <p>Leave an API-key field blank to keep the existing key. Enter a new value only when replacing it.</p>
+              </div>
+            </div>
+            <div id="aiProviderGrid" class="provider-grid"></div>
+          </section>
+          <section class="form-section">
+            <div class="form-section-head">
+              <div>
+                <h2>Job boards and browser defaults</h2>
+                <p>Control which sources are available and which safe defaults appear when you open Run Scout.</p>
+              </div>
+              <button id="saveBoardSettingsButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-check"></use>
+                </svg>Save board settings</button>
+            </div>
+            <div id="boardSettingsStatus" class="profile-status" role="status" aria-live="polite">Loading job-board
+              settings...</div>
+            <div class="board-settings-grid">
+              <article class="board-settings-card">
+                <div class="workspace-card-head">
+                  <h3>LinkedIn</h3><svg class="icon">
+                    <use href="#icon-briefcase"></use>
+                  </svg>
+                </div>
+                <label class="check-row" for="boardLinkedinEnabled"><input id="boardLinkedinEnabled"
+                    type="checkbox" />Enable LinkedIn workflows</label>
+                <label class="check-row" for="boardLinkedinEasyApplyOnly"><input id="boardLinkedinEasyApplyOnly"
+                    type="checkbox" />Easy Apply only for application automation</label>
+                <div class="form-grid">
+                  <div class="field"><label for="boardLinkedinDistance">Distance (miles)</label><input
+                      id="boardLinkedinDistance" type="number" min="1" max="100" /></div>
+                  <div class="field"><label for="boardLinkedinCollect">Jobs collected/search</label><input
+                      id="boardLinkedinCollect" type="number" min="1" max="200" /></div>
+                </div>
+                <div class="field"><label>Experience levels</label>
+                  <div class="workspace-card-actions"><label class="check-row"><input type="checkbox"
+                        data-linkedin-level="internship" />Internship</label><label class="check-row"><input
+                        type="checkbox" data-linkedin-level="entry" />Entry</label><label class="check-row"><input
+                        type="checkbox" data-linkedin-level="associate" />Associate</label><label
+                      class="check-row"><input type="checkbox" data-linkedin-level="mid_senior" />Mid-senior</label>
+                  </div>
+                </div>
+              </article>
+              <article class="board-settings-card">
+                <div class="workspace-card-head">
+                  <h3>Indeed Netherlands</h3><svg class="icon">
+                    <use href="#icon-search"></use>
+                  </svg>
+                </div>
+                <label class="check-row" for="boardIndeedEnabled"><input id="boardIndeedEnabled"
+                    type="checkbox" />Enable Indeed description workflow</label>
+                <div class="field"><label for="boardIndeedUrl">Search URL</label><input id="boardIndeedUrl"
+                    type="url" /></div>
+                <div class="form-grid">
+                  <div class="field"><label for="boardIndeedRadius">Radius (km)</label><input id="boardIndeedRadius"
+                      type="number" min="1" max="100" /></div>
+                  <div class="field"><label for="boardIndeedCollect">Jobs collected/search</label><input
+                      id="boardIndeedCollect" type="number" min="1" max="200" /></div>
+                </div>
+                <div class="security-note"><svg class="icon icon-sm">
+                    <use href="#icon-check-circle"></use>
+                  </svg>Login and verification always remain manual.</div>
+              </article>
+              <article class="board-settings-card">
+                <div class="workspace-card-head">
+                  <h3>Run defaults</h3><svg class="icon">
+                    <use href="#icon-play"></use>
+                  </svg>
+                </div>
+                <div class="form-grid">
+                  <div class="field"><label for="boardDefaultBrowser">Browser</label><select id="boardDefaultBrowser">
+                      <option value="chromium">Chromium</option>
+                      <option value="firefox">Firefox</option>
+                    </select></div>
+                  <div class="field"><label for="boardDefaultLocation">Location</label><input
+                      id="boardDefaultLocation" /></div>
+                  <div class="field"><label for="boardDefaultAiBudget">AI budget</label><select
+                      id="boardDefaultAiBudget">
+                      <option value="smart">Smart Guard</option>
+                      <option value="deep">Deep Search</option>
+                      <option value="off">Off</option>
+                    </select></div>
+                </div>
+                <label class="check-row" for="boardDefaultHuman"><input id="boardDefaultHuman"
+                    type="checkbox" />Human-paced browsing</label>
+                <label class="check-row" for="boardDefaultFresh"><input id="boardDefaultFresh" type="checkbox" />Fresh
+                  mode by default</label>
+                <label class="check-row" for="boardScrapingProxyEnabled"><input id="boardScrapingProxyEnabled"
+                    type="checkbox" />Enable scraping proxy</label>
+              </article>
+              <article class="board-settings-card">
+                <div class="workspace-card-head">
+                  <h3>Application safety</h3><svg class="icon">
+                    <use href="#icon-check-circle"></use>
+                  </svg>
+                </div>
+                <label class="check-row" for="behaviorPauseSubmit"><input id="behaviorPauseSubmit" type="checkbox"
+                    disabled checked />Pause before final submission</label>
+                <label class="check-row" for="behaviorSkipApplied"><input id="behaviorSkipApplied"
+                    type="checkbox" />Skip already-applied jobs</label>
+                <label class="check-row" for="behaviorCoverLetter"><input id="behaviorCoverLetter"
+                    type="checkbox" />Submit cover letters</label>
+                <label class="check-row" for="behaviorGenerateCoverLetter"><input id="behaviorGenerateCoverLetter"
+                    type="checkbox" />Generate cover letters with AI</label>
+                <label class="check-row" for="behaviorQuestions"><input id="behaviorQuestions" type="checkbox" />Answer
+                  known screening questions</label>
+                <label class="check-row" for="behaviorPauseUnknown"><input id="behaviorPauseUnknown"
+                    type="checkbox" />Pause on unknown questions</label>
+                <label class="check-row" for="behaviorHumanDelays"><input id="behaviorHumanDelays" type="checkbox" />Use
+                  human-paced delays</label>
+                <div class="form-grid three">
+                  <div class="field"><label for="limitApplicationsRun">Applications/run</label><input
+                      id="limitApplicationsRun" type="number" min="1" max="50" /></div>
+                  <div class="field"><label for="limitJobsRun">Jobs tried/run</label><input id="limitJobsRun"
+                      type="number" min="1" max="100" /></div>
+                  <div class="field"><label for="limitApplicationsDay">Applications/day</label><input
+                      id="limitApplicationsDay" type="number" min="1" max="100" /></div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <main id="resetCleanPage" data-page-id="resetClean" class="shell app-page workspace-page" hidden>
+        <div class="dashboard-header">
+          <div class="dashboard-title">
+            <h1 id="resetCleanHeaderTitle">Reset &amp; Clean</h1>
+            <p id="resetCleanHeaderSubtitle">Manage, clean, and reset your workspace data.</p>
+          </div>
+        </div>
+        
+        <div class="dashboard-grid">
+          
+          <section class="panel compact" aria-label="Auto Clean Expired Jobs" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Auto Clean Expired Jobs</span></h2>
+                <p>Scan your "Low Probability" and "Rejected" jobs to remove those that have expired.</p>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <div class="control compact-control">
+                  <select id="autoCleanMode" aria-label="Scan mode">
+                    <option value="SKIP_ACTIVE" selected>Skip Recently Active</option>
+                    <option value="SCAN_ALL">Force Scan Everything</option>
+                  </select>
+                </div>
+                <button id="autoCleanExpiredButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-trash"></use>
+                  </svg>Auto Clean</button>
+                <button id="stopAutoCleanButton" class="button secondary" type="button" style="display: none;"><svg class="icon icon-sm">
+                    <use href="#icon-ban"></use>
+                  </svg>Stop</button>
+              </div>
+            </div>
+            <div id="autoCleanProgressContainer" style="display: none; flex-direction: column; margin-top: 1rem; width: 100%;">
+               <span id="autoCleanStatus" style="font-size: 0.85rem; color: var(--muted); margin-bottom: 4px;">Starting...</span>
+               <div class="overall-progress-bar" style="height: 6px; width: 100%;">
+                 <div id="autoCleanProgressFill" class="overall-progress-fill" style="width: 0%;"></div>
+               </div>
+            </div>
+          </section>
+
+          <section id="autoCleanHistoryPanel" class="panel run-history-panel" aria-label="Auto Clean history" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Auto Clean Expired Logs</span></h2>
+                <p>Results from your recent cleanups.</p>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button id="toggleAutoCleanLogsButton" class="fresh-action" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-chevron-down"></use>
+                  </svg><span>Expand Logs</span></button>
+                <button id="refreshAutoCleanLogsButton" class="fresh-action" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-refresh"></use>
+                  </svg>Refresh Logs</button>
+              </div>
+            </div>
+            <div id="autoCleanHistoryContent" class="terminal-container" style="max-height: 400px; overflow-y: auto; display: none; flex-direction: column; gap: 1rem;">
+               <em>No cleanup logs yet.</em>
+            </div>
+          </section>
+
+          <section class="panel compact" aria-label="Manual Wipes" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Manual Wipes</span></h2>
+                <p>Instantly reset parts of your workspace.</p>
+              </div>
+              <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <button id="wipeUnappliedButton" class="button secondary" type="button" style="color: #ff4d4f; border-color: #ff4d4f;">
+                  <svg class="icon icon-sm" style="stroke: #ff4d4f;">
+                    <use href="#icon-trash"></use>
+                  </svg>Wipe Unapplied Jobs
+                </button>
+                <button id="nukeBadJobsButton" class="button danger" type="button" style="background-color: var(--danger-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; transition: opacity 0.2s; box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);">
+                  <svg class="icon icon-sm"><use href="#icon-trash"></use></svg>Nuke Low Probability/Rejected Jobs
+                </button>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="trackManualJobOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="trackManualJobTitle" aria-describedby="trackManualJobDescription">
+    <section class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="trackManualJobTitle">Track External Job</h2>
+          <p id="trackManualJobDescription">Track a job found outside the scout process by entering its LinkedIn URL and
+            a status.</p>
+        </div>
+        <button id="closeTrackManualJobButton" class="icon-button" type="button"
+          aria-label="Close track manual job dialog"><svg class="icon">
+            <use href="#icon-x"></use>
+          </svg></button>
+      </div>
+      <div class="modal-body">
+        <form id="trackManualJobForm">
+          <div class="modal-grid">
+            <div class="control full-control">
+              <label for="trackManualJobUrl">LinkedIn Job URL or ID *</label>
+              <input id="trackManualJobUrl" type="text" placeholder="https://www.linkedin.com/jobs/view/..." required />
+            </div>
+            <div class="control compact-control">
+              <label for="trackManualJobStatus">Status *</label>
+              <select id="trackManualJobStatus" required>
+                <option value="unreviewed" selected>Unreviewed</option>
+                <option value="applied">Applied</option>
+                <option value="irrelevant">Irrelevant</option>
+                <option value="expired">Expired</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelTrackManualJobButton" class="button secondary" type="button">Cancel</button>
+        <button id="submitTrackManualJobButton" class="button primary" type="submit" form="trackManualJobForm">Track
+          Job</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="runScoutOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="runScoutTitle" aria-describedby="runScoutDescription runWorkflowHint">
+    <section class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="runScoutTitle">Run Scout</h2>
+          <p id="runScoutDescription">Start a safe approved scout workflow from the dashboard. Login and verification
+            still stay manual in the browser.</p>
+        </div>
+        <button id="closeRunScoutButton" class="icon-button" type="button" aria-label="Close run scout dialog"><svg
+            class="icon">
+            <use href="#icon-x"></use>
+          </svg></button>
+      </div>
+      <div class="modal-body">
+        <div id="runControlNotice" class="subline"></div>
+        <div id="runWorkflowHint" class="workflow-hint" aria-live="polite"></div>
+        <div class="modal-grid">
+
+          <div class="control">
+            <div class="label-with-action">
+              <label for="runSearchMarket">Search market</label>
+              <button id="manageMarketsButton" class="link-button" type="button">Manage</button>
+            </div>
+            <select id="runSearchMarket"></select>
+          </div>
+          <div class="control">
+            <label for="runLocation">Location</label>
+            <input id="runLocation" type="text" value="Amstelveen" list="runLocationOptions" />
+            <datalist id="runLocationOptions"></datalist>
+          </div>
+          <div id="runSearchGoalControl" class="control full-control">
+            <label for="runSearchGoal">Search goal</label>
+            <select id="runSearchGoal">
+              <option value="career-growth" selected>Career + Growth - Recommended</option>
+              <option value="career-focus">Career Focus</option>
+              <option value="broad">Broaden Opportunities</option>
+              <option value="income">Income Priority</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="runEmployment">Employment preference</label>
+            <select id="runEmployment">
+              <option value="full-time-preferred" selected>Full-time preferred</option>
+              <option value="full-time-only">Full-time only</option>
+              <option value="part-time-only">Part-time only</option>
+              <option value="full-or-part-time">Full-time or part-time equally</option>
+              <option value="any">Any employment type</option>
+            </select>
+          </div>
+          <div id="runWorkplaceTypeControl" class="workplace-type-picker control">
+            <label>Workplace type (LinkedIn)</label>
+            <div class="checkbox-row-group">
+              <label class="check-row" for="runWorkplaceRemote"><input id="runWorkplaceRemote" type="checkbox" checked />Remote</label>
+              <label class="check-row" for="runWorkplaceHybrid"><input id="runWorkplaceHybrid" type="checkbox" checked />Hybrid</label>
+              <label class="check-row" for="runWorkplaceOnsite"><input id="runWorkplaceOnsite" type="checkbox" checked />On-site</label>
+            </div>
+          </div>
+          <div id="runCustomSearchGroups" class="search-group-picker hidden" aria-label="Custom search groups">
+            <label class="check-row" for="runSearchPrimary"><input id="runSearchPrimary" type="checkbox"
+                checked />Primary paths</label>
+            <label class="check-row" for="runSearchBridge"><input id="runSearchBridge" type="checkbox" checked />Bridge
+              opportunities</label>
+            <label class="check-row" for="runSearchFallback"><input id="runSearchFallback" type="checkbox" />Fallback
+              income</label>
+          </div>
+          <div id="runSponsorshipControl" class="control full-control">
+            <label class="check-row" for="runScopeSponsorshipPolicy">
+              <input id="runScopeSponsorshipPolicy" type="checkbox" checked />
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                Require visa sponsorship for this run
+                <svg class="icon tooltip-icon" style="color: var(--muted); cursor: help; width: 16px; height: 16px;"
+                  title="Caps jobs with unknown sponsorship at 69 (Good Options tier) and filters out local-visa-only roles.">
+                  <use href="#icon-info"></use>
+                </svg>
+              </span>
+            </label>
+            <p class="help-text" id="runSponsorshipWarning">
+              I understand this market is experimental and sponsorship details require manual verification.
+            </p>
+          </div>
+          <div id="runExperienceLevelsControl" class="experience-level-picker full-control">
+            <label>Experience levels (LinkedIn)</label>
+            <div class="checkbox-row-group">
+              <label class="check-row" for="runExpInternship"><input id="runExpInternship" type="checkbox"
+                  data-level="internship" />Internship</label>
+              <label class="check-row" for="runExpEntry"><input id="runExpEntry" type="checkbox" data-level="entry"
+                  checked />Entry Level</label>
+              <label class="check-row" for="runExpAssociate"><input id="runExpAssociate" type="checkbox"
+                  data-level="associate" checked />Associate</label>
+              <label class="check-row" for="runExpMidSenior"><input id="runExpMidSenior" type="checkbox"
+                  data-level="mid-senior" />Mid-Senior</label>
+              <label class="check-row" for="runExpDirector"><input id="runExpDirector" type="checkbox"
+                  data-level="director" />Director</label>
+              <label class="check-row" for="runExpExecutive"><input id="runExpExecutive" type="checkbox"
+                  data-level="executive" />Executive</label>
+            </div>
+          </div>
+          <div id="runSearchGoalSummary" class="search-goal-summary full-control" aria-live="polite"></div>
+          <div id="runScopeSummary" class="search-goal-summary scope-summary full-control" aria-live="polite"></div>
+          <label id="runExperimentalConfirmRow" class="check-row full-control hidden" for="runExperimentalConfirm">
+            <input id="runExperimentalConfirm" type="checkbox" />
+            I understand this market is experimental and sponsorship details require manual verification.
+          </label>
+
+          <button id="runAdvancedOptionsToggle" class="button secondary full-control" type="button"
+            aria-expanded="false" style="margin-top: 10px;">
+            <svg class="icon icon-sm">
+              <use href="#icon-settings"></use>
+            </svg>Advanced Execution Options
+          </button>
+
+          <div id="runAdvancedOptionsContainer" class="advanced-options-grid hidden">
+            <div class="control">
+              <label for="runPlatform">Platform</label>
+              <select id="runPlatform">
+                <option value="linkedin" selected>LinkedIn</option>
+                <option value="indeed">Indeed Netherlands (descriptions only)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runWorkflow">Workflow</label>
+              <select id="runWorkflow">
+                <option value="linkedin_multi_fresh">LinkedIn multi-query fresh</option>
+                <option value="linkedin_ai_fresh">LinkedIn AI-query fresh</option>
+                <option value="linkedin_ai">LinkedIn AI-query</option>
+                <option value="linkedin_single">LinkedIn single query</option>
+                <option value="linkedin_process_only">LinkedIn process-only</option>
+                <option value="indeed_description">Indeed description extraction</option>
+                <option value="validate_boards">Validate job boards (no applications)</option>
+              </select>
+            </div>
+            <div id="runAiQueryCountContainer" class="control hidden">
+              <label for="runAiQueryCount">AI query count</label>
+              <input id="runAiQueryCount" type="number" min="1" max="50" value="10" />
+            </div>
+            <div class="control">
+              <label for="runRadius">Radius</label>
+              <select id="runRadius"></select>
+            </div>
+            <div class="control">
+              <label for="runQuery">Query</label>
+              <input id="runQuery" type="text" value="ux designer" />
+            </div>
+            <div class="control">
+              <label for="runMaxPages">Max pages</label>
+              <select id="runMaxPages">
+                <option value="1">1 page</option>
+                <option value="2">2 pages</option>
+                <option value="3">3 pages</option>
+                <option value="all">All pages</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runBrowser">Browser</label>
+              <select id="runBrowser">
+                <option value="chromium">Chromium</option>
+                <option value="firefox">Firefox</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="runAiBudgetMode">AI budget</label>
+              <select id="runAiBudgetMode">
+                <option value="smart" selected>Smart Guard</option>
+                <option value="deep">Deep Search</option>
+                <option value="off">Off</option>
+              </select>
+            </div>
+            <label class="check-row" for="runHumanMode">
+              <input id="runHumanMode" type="checkbox" checked />
+              Human mode
+            </label>
+            <label class="check-row" for="runFreshMode">
+              <input id="runFreshMode" type="checkbox" checked />
+              Fresh mode
+            </label>
+            <label class="check-row" for="runTestMode">
+              <input id="runTestMode" type="checkbox" />
+              Test Run (Dry run: do not save progress)
+            </label>
+            <label class="check-row" for="runResumeMode">
+              <input id="runResumeMode" type="checkbox" />
+              Resume saved progress
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="startRunButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-play"></use>
+            </svg>Start run</button>
+          <button id="refreshRunControlButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Refresh status</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="manageMarketsOverlay" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+    aria-labelledby="manageMarketsTitle">
+    <section class="modal sm">
+      <div class="modal-head">
+        <div>
+          <h2 id="manageMarketsTitle">Manage Search Markets</h2>
+          <p>Add or remove custom search countries dynamically.</p>
+        </div>
+        <button id="closeManageMarketsButton" class="icon-button" type="button" aria-label="Close dialog"><svg
+            class="icon">
+            <use href="#icon-x"></use>
+          </svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="markets-list-container">
+          <ul id="customMarketsList" class="custom-markets-list"></ul>
+        </div>
+        <form id="addMarketForm" class="add-market-form">
+          <h3>Add custom market</h3>
+          <div class="modal-grid">
+            <div class="control">
+              <label for="marketIdInput">ID (e.g. france)</label>
+              <input id="marketIdInput" type="text" placeholder="france" required />
+            </div>
+            <div class="control">
+              <label for="marketLabelInput">Label (e.g. France)</label>
+              <input id="marketLabelInput" type="text" placeholder="France" required />
+            </div>
+            <div class="control">
+              <label for="marketCountryInput">Country Name</label>
+              <input id="marketCountryInput" type="text" placeholder="France" required />
+            </div>
+            <div class="control">
+              <label for="marketLocationInput">Default Location</label>
+              <input id="marketLocationInput" type="text" placeholder="Paris" required />
+            </div>
+            <div class="control full-control">
+              <label for="marketLocationsInput">Locations (comma-separated)</label>
+              <input id="marketLocationsInput" type="text" placeholder="Paris, Lyon, Marseille, France, Remote"
+                required />
+            </div>
+            <div class="control full-control">
+              <label class="check-row" for="marketAuthInput">
+                <input id="marketAuthInput" type="checkbox" checked />
+                Authorized to work without sponsorship by default
+              </label>
+            </div>
+          </div>
+          <button id="addMarketButton" class="button primary" type="submit"><svg class="icon icon-sm">
+              <use href="#icon-plus-circle"></use>
+            </svg>Add country</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+    <script type="module" src="dashboard/app.js?v=20260716-async-font-loading"></script>
+</body>
+
+</html>
