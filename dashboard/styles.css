@@ -31,6 +31,7 @@
       --brand-icon-border: rgba(36, 89, 166, 0.16);
       --manual-applied-bg: #f7faf8;
       --manual-irrelevant-bg: #f8f8f8;
+      --manual-expired-bg: #fff5f5;
       --toast-bg: #17202a;
       --toast-ink: #ffffff;
       --toast-border: rgba(23, 32, 42, 0.14);
@@ -94,6 +95,7 @@
       --brand-icon-border: rgba(147, 189, 255, 0.26);
       --manual-applied-bg: #14281f;
       --manual-irrelevant-bg: #171d24;
+      --manual-expired-bg: #2a1f22;
       --toast-bg: #e8eef6;
       --toast-ink: #101923;
       --toast-border: rgba(232, 238, 246, 0.24);
@@ -2212,6 +2214,12 @@
       filter: grayscale(0.25);
     }
 
+    .compact-job.manual-expired {
+      opacity: 0.5;
+      background: var(--manual-expired-bg);
+      filter: grayscale(0.25);
+    }
+
     .compact-main {
       display: grid;
       min-width: 0;
@@ -2335,6 +2343,12 @@
     .job.manual-irrelevant {
       opacity: 0.5;
       background: var(--manual-irrelevant-bg);
+      filter: grayscale(0.25);
+    }
+
+    .job.manual-expired {
+      opacity: 0.5;
+      background: var(--manual-expired-bg);
       filter: grayscale(0.25);
     }
 
@@ -2538,6 +2552,12 @@
     }
 
     .badge.status.irrelevant {
+      color: var(--danger-ink);
+      border-color: var(--red-border);
+      background: var(--red-wash);
+    }
+
+    .badge.status.expired {
       color: var(--danger-ink);
       border-color: var(--red-border);
       background: var(--red-wash);
@@ -3392,3 +3412,27 @@
       color: var(--ink);
     }
 
+    /* --- Animation Utilities --- */
+    .fade-out-up {
+      animation: fadeOutUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    @keyframes fadeOutUp {
+      0% {
+        opacity: 1;
+        max-height: 500px;
+        transform: scale(1);
+      }
+      100% {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        border-width: 0;
+        transform: scale(0.95);
+      }
+    }

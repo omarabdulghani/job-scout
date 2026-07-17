@@ -801,6 +801,146 @@ class OperationalStore:
             parameters.extend([needle, needle, needle, needle])
         return (" WHERE " + " AND ".join(clauses) if clauses else ""), parameters
 
+    def batch_amnesia_delete(self, job_keys: list[str], dashboard_path: Path | str, user_state_path: Path | str) -> None:
+        if not job_keys:
+            return
+        dashboard_path = Path(dashboard_path)
+        user_state_path = Path(user_state_path)
+        
+        with self._connect() as conn:
+            for i in range(0, len(job_keys), 900):
+                chunk = job_keys[i:i+900]
+                placeholders = ",".join("?" for _ in chunk)
+                conn.execute(f"DELETE FROM jobs WHERE job_key IN ({placeholders})", chunk)
+                conn.execute(f"DELETE FROM applications WHERE job_key IN ({placeholders})", chunk)
+            conn.commit()
+            
+        scout_db_path = Path("data/user_workspace/job_scout.db")
+        if scout_db_path.exists():
+            try:
+                import sqlite3
+                with sqlite3.connect(scout_db_path) as conn:
+                    for i in range(0, len(job_keys), 900):
+                        chunk = job_keys[i:i+900]
+                        placeholders = ",".join("?" for _ in chunk)
+                        conn.execute(f"DELETE FROM jobs WHERE job_key IN ({placeholders})", chunk)
+                        conn.execute(f"DELETE FROM applications WHERE job_key IN ({placeholders})", chunk)
+                    conn.commit()
+            except Exception as e:
+                print("Error deleting from scout db:", e)
+                
+        if dashboard_path.exists():
+            try:
+                import json
+                with open(dashboard_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                
+                keys_set = set(job_keys)
+                from agent.dashboard_user_state import build_job_key
+                
+                decisions_to_decrement = {}
+                for j in data.get("jobs", []):
+                    if build_job_key(j) in keys_set:
+                        cat = j.get("decision_category")
+                        if cat:
+                            decisions_to_decrement[cat] = decisions_to_decrement.get(cat, 0) + 1
+                        
+                original_len = len(data.get("jobs", []))
+                data["jobs"] = [j for j in data.get("jobs", []) if build_job_key(j) not in keys_set]
+                removed_count = original_len - len(data["jobs"])
+                
+                if removed_count > 0:
+                    if "summary" in data and "by_decision" in data["summary"]:
+                        for cat, count in decisions_to_decrement.items():
+                            if cat in data["summary"]["by_decision"]:
+                                data["summary"]["by_decision"][cat] = max(0, data["summary"]["by_decision"][cat] - count)
+                    if "summary" in data and "total_jobs" in data["summary"]:
+                        data["summary"]["total_jobs"] = max(0, data["summary"]["total_jobs"] - removed_count)
+                        
+                    from agent.safe_file_io import atomic_write_json
+                    atomic_write_json(dashboard_path, data)
+            except Exception as e:
+                print(f"Error updating dashboard data for batch amnesia delete: {e}")
+                
+        if user_state_path.exists():
+            try:
+                import json
+                with open(user_state_path, "r", encoding="utf-8") as f:
+                    state_data = json.load(f)
+                    
+                removed_any = False
+                for key in job_keys:
+                    if key in state_data.get("jobs", {}):
+                        state_data["jobs"].pop(key, None)
+                        removed_any = True
+                
+                if removed_any:
+                    from agent.safe_file_io import atomic_write_json
+                    atomic_write_json(user_state_path, state_data)
+            except Exception:
+                pass
+
+    def true_amnesia_delete(self, job_key: str, dashboard_path: Path | str, user_state_path: Path | str) -> None:
+        dashboard_path = Path(dashboard_path)
+        user_state_path = Path(user_state_path)
+        
+        with self._connect() as conn:
+            conn.execute("DELETE FROM jobs WHERE job_key = ?", (job_key,))
+            conn.execute("DELETE FROM applications WHERE job_key = ?", (job_key,))
+            conn.commit()
+            
+        scout_db_path = Path("data/user_workspace/job_scout.db")
+        if scout_db_path.exists():
+            try:
+                import sqlite3
+                with sqlite3.connect(scout_db_path) as conn:
+                    conn.execute("DELETE FROM jobs WHERE job_key = ?", (job_key,))
+                    conn.execute("DELETE FROM applications WHERE job_key = ?", (job_key,))
+                    conn.commit()
+            except Exception:
+                pass
+                
+        if dashboard_path.exists():
+            try:
+                import json
+                with open(dashboard_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                
+                decision_to_decrement = None
+                from agent.dashboard_user_state import build_job_key
+                for j in data.get("jobs", []):
+                    if build_job_key(j) == job_key:
+                        decision_to_decrement = j.get("decision_category")
+                        break
+                        
+                original_len = len(data.get("jobs", []))
+                data["jobs"] = [j for j in data.get("jobs", []) if build_job_key(j) != job_key]
+                
+                if len(data["jobs"]) < original_len:
+                    if decision_to_decrement and "summary" in data and "by_decision" in data["summary"]:
+                        if decision_to_decrement in data["summary"]["by_decision"]:
+                            data["summary"]["by_decision"][decision_to_decrement] = max(0, data["summary"]["by_decision"][decision_to_decrement] - 1)
+                    if "summary" in data and "total_jobs" in data["summary"]:
+                        data["summary"]["total_jobs"] = max(0, data["summary"]["total_jobs"] - 1)
+                        
+                    from agent.safe_file_io import atomic_write_json
+                    atomic_write_json(dashboard_path, data)
+            except Exception as e:
+                print(f"Error updating dashboard data for amnesia delete: {e}")
+                
+        if user_state_path.exists():
+            try:
+                import json
+                with open(user_state_path, "r", encoding="utf-8") as f:
+                    state_data = json.load(f)
+                    
+                if job_key in state_data.get("jobs", {}):
+                    state_data["jobs"].pop(job_key, None)
+                    from agent.safe_file_io import atomic_write_json
+                    atomic_write_json(user_state_path, state_data)
+            except Exception:
+                pass
+
     def update_job_status(
         self,
         *,

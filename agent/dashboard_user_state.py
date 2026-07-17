@@ -19,11 +19,13 @@ DEFAULT_USER_STATE_PATH = Path("data/recommended_jobs_dashboard_user_state.json"
 STATUS_UNREVIEWED = "unreviewed"
 STATUS_APPLIED = "applied"
 STATUS_IRRELEVANT = "irrelevant"
-VALID_STATUSES = {STATUS_UNREVIEWED, STATUS_APPLIED, STATUS_IRRELEVANT}
+STATUS_EXPIRED = "expired"
+VALID_STATUSES = {STATUS_UNREVIEWED, STATUS_APPLIED, STATUS_IRRELEVANT, STATUS_EXPIRED}
 STATUS_LABELS = {
     STATUS_UNREVIEWED: "Unreviewed",
     STATUS_APPLIED: "Applied",
     STATUS_IRRELEVANT: "Irrelevant",
+    STATUS_EXPIRED: "Expired"
 }
 APPLICATION_STAGE_NONE = ""
 APPLICATION_STAGE_PREPARING = "preparing"
@@ -248,6 +250,18 @@ class DashboardUserStateStore:
         summary = merged.setdefault("summary", {})
         if isinstance(summary, dict):
             summary["by_manual_status"] = manual_status_counts(jobs)
+            
+            # Live Inbox dynamic subtraction
+            if "by_decision" in summary:
+                by_decision = dict(summary["by_decision"])
+                for job in jobs:
+                    if job.get("manual_status") != STATUS_UNREVIEWED:
+                        decision = job.get("decision_category")
+                        if decision and decision in by_decision:
+                            by_decision[decision] = max(0, by_decision[decision] - 1)
+                summary["by_decision"] = by_decision
+                
+            summary["total_jobs"] = summary["by_manual_status"].get(STATUS_UNREVIEWED, 0)
 
         filter_options = merged.setdefault("filter_options", {})
         if isinstance(filter_options, dict):

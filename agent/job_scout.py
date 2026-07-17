@@ -3470,6 +3470,7 @@ class LinkedInJobScout:
                 ),
                 "results_layout_types": stats.get("results_layout_types", []),
                 "search_scope": dict(output.get("search_scope") or self.search_scope),
+                "ai_queries": output.get("query_plan", {}).get("ai_queries", []) if isinstance(output.get("query_plan"), dict) else [],
             }
         )
         self._report(
@@ -3938,6 +3939,9 @@ class LinkedInJobScout:
             cached_entry["last_recommended_at"] = now
             cache_dirty = True
 
+        # Cover letters are no longer generated during the background sweep.
+        # They are now generated on-demand via the dashboard to save tokens.
+
         ai_result = {
             "status": output_status,
             "job_id": job_id,
@@ -3977,6 +3981,7 @@ class LinkedInJobScout:
             "market_eligible": market_eligible,
             "market_rejection_reasons": ai_payload.get("market_rejection_reasons", []),
             "market_concerns": ai_payload.get("market_concerns", []),
+            "cover_letter": ai_payload.get("cover_letter", ""),
             "debug_record": self._build_ai_debug_record(
                 job=job,
                 verdict=verdict,
@@ -4124,6 +4129,7 @@ class LinkedInJobScout:
             "market_eligible": bool(ai_result.get("market_eligible", True)),
             "market_rejection_reasons": ai_result.get("market_rejection_reasons", []),
             "market_concerns": ai_result.get("market_concerns", []),
+            "cover_letter": ai_result.get("cover_letter", ""),
         }
         tracking_entry = self.job_tracking.get(
             job_id=record.get("job_id", ""),

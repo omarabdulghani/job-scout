@@ -9,12 +9,11 @@ import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
-import requests
 import threading
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -44,6 +43,35 @@ from agent.search_scope import (
 )
 from agent.strategy_service import StrategyService
 from agent.user_workspace import UserWorkspace
+
+CLEAN_EXPIRED_STATUS = "Not running"
+CLEAN_EXPIRED_PROCESS = None
+OPERATIONAL_STORE_LOCK = threading.Lock()
+
+def _run_clean_expired_background(targets: list[str], scan_mode: str = "SKIP_ACTIVE"):
+    global CLEAN_EXPIRED_STATUS, CLEAN_EXPIRED_PROCESS
+    try:
+        args = [sys.executable, "-m", "agent.clean_expired"]
+        if targets:
+            args.extend(["--targets"] + targets)
+        if scan_mode:
+            args.extend(["--scan-mode", scan_mode])
+            
+        CLEAN_EXPIRED_PROCESS = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        for line in CLEAN_EXPIRED_PROCESS.stdout:
+            if line.strip():
+                CLEAN_EXPIRED_STATUS = line.strip()
+        CLEAN_EXPIRED_PROCESS.wait()
+    except Exception as e:
+        CLEAN_EXPIRED_STATUS = f"Error: {e}"
+    finally:
+        CLEAN_EXPIRED_PROCESS = None
 
 
 DEFAULT_HOST = os.environ.get("HOST", "0.0.0.0") if "PORT" in os.environ else "127.0.0.1"
@@ -78,6 +106,8 @@ class DashboardRunController:
 
     WORKFLOW_LABELS = {
         "linkedin_multi_fresh": "LinkedIn multi-query fresh",
+        "linkedin_ai_fresh": "LinkedIn AI-query fresh",
+        "linkedin_ai": "LinkedIn AI-query",
         "linkedin_single": "LinkedIn single query",
         "linkedin_process_only": "LinkedIn process-only",
         "indeed_description": "Indeed description extraction",
@@ -325,7 +355,7 @@ class DashboardRunController:
         browser = self._clean_choice(payload.get("browser"), self.BROWSER_CHOICES, "chromium")
         ai_budget_mode = self._clean_choice(payload.get("ai_budget_mode"), self.AI_BUDGET_MODE_CHOICES, "smart")
         human_mode = bool(payload.get("human_mode", True))
-        fresh = bool(payload.get("fresh", workflow == "linkedin_multi_fresh"))
+        fresh = bool(payload.get("fresh", workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh"}))
         test_run = bool(payload.get("test_run", False))
         resume = bool(payload.get("resume", False))
         search_goal = self._clean_choice(
@@ -375,13 +405,22 @@ class DashboardRunController:
             )
 
         command = [sys.executable]
-        if workflow == "linkedin_multi_fresh":
+        if workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh", "linkedin_ai"}:
             command += ["scout_jobs_multi.py", "--linkedin", "--location", location, "--max-pages", max_pages]
-            command += ["--search-goal", search_goal]
-            if search_goal == "custom":
-                if not search_groups:
-                    raise ValueError("Custom search goal requires at least one search group")
-                command += ["--search-groups", ",".join(search_groups)]
+            if workflow == "linkedin_multi_fresh":
+                command += ["--search-goal", search_goal]
+                if search_goal == "custom":
+                    if not search_groups:
+                        raise ValueError("Custom search goal requires at least one search group")
+                    command += ["--search-groups", ",".join(search_groups)]
+            else:
+                ai_query_count = payload.get("ai_query_count")
+                try:
+                    ai_query_count = max(1, min(50, int(ai_query_count or 10)))
+                except (ValueError, TypeError):
+                    ai_query_count = 10
+                command.append("--ai-queries")
+                command += ["--ai-query-count", str(ai_query_count)]
             if fresh:
                 command.append("--fresh")
         elif workflow == "linkedin_single":
@@ -405,7 +444,7 @@ class DashboardRunController:
         else:
             raise ValueError("Unsupported workflow")
 
-        if workflow in {"linkedin_multi_fresh", "linkedin_single", "linkedin_process_only"}:
+        if workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh", "linkedin_ai", "linkedin_single", "linkedin_process_only"}:
             command += [
                 "--search-market",
                 search_market,
@@ -435,7 +474,7 @@ class DashboardRunController:
             command.append("--human-mode")
         if resume and workflow != "linkedin_process_only":
             command.append("--resume")
-        if fresh and ai_budget_mode != "smart" and workflow in {"linkedin_multi_fresh", "linkedin_single"}:
+        if fresh and ai_budget_mode != "smart" and workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh", "linkedin_single"}:
             command += ["--ai-budget-mode", ai_budget_mode]
         command += ["--browser", browser]
         if "PORT" in os.environ:
@@ -1074,14 +1113,129 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 return
             self._send_binary(cv_path.read_bytes(), content_type="application/pdf")
             return
+        if self._path_without_query() == "/api/clean-expired-status":
+            global CLEAN_EXPIRED_STATUS, CLEAN_EXPIRED_PROCESS
+            is_running = CLEAN_EXPIRED_PROCESS is not None
+            progress = {}
+            history = {"cleaned": [], "not_expired": [], "unknown": []}
+            try:
+                if Path("data/clean_expired_progress.json").exists():
+                    with open("data/clean_expired_progress.json", "r", encoding="utf-8") as f:
+                        progress = json.load(f)
+                if Path("data/clean_expired_history.json").exists():
+                    with open("data/clean_expired_history.json", "r", encoding="utf-8") as f:
+                        history = json.load(f)
+            except Exception:
+                pass
+                
+            self._send_json({
+                "ok": True, 
+                "status": CLEAN_EXPIRED_STATUS, 
+                "is_running": is_running,
+                "progress": progress,
+                "history": history
+            })
+            return
         super().do_GET()
 
     def do_POST(self) -> None:
+        global CLEAN_EXPIRED_PROCESS, CLEAN_EXPIRED_STATUS
+        
         if not self._authenticate():
             return
         if not self._local_origin_allowed():
             self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
             return
+
+        if self._path_without_query() == "/api/clean-expired":
+            if CLEAN_EXPIRED_PROCESS is not None:
+                self._send_json({"ok": False, "error": "Already running"})
+                return
+            
+            payload = self._read_json_body(max_bytes=1024)
+            targets = payload.get("targets", ["LOW_PROBABILITY", "REJECTED"])
+            scan_mode = payload.get("scan_mode", "SKIP_ACTIVE")
+            
+            CLEAN_EXPIRED_STATUS = "Starting background cleaner..."
+            threading.Thread(target=_run_clean_expired_background, args=(targets, scan_mode), daemon=True).start()
+            self._send_json({"ok": True})
+            return
+
+        if self._path_without_query() == "/api/clean-expired-stop":
+            if CLEAN_EXPIRED_PROCESS is not None:
+                CLEAN_EXPIRED_STATUS = "Stopping..."
+                try:
+                    terminate_process(CLEAN_EXPIRED_PROCESS)
+                except Exception as e:
+                    pass
+                CLEAN_EXPIRED_PROCESS = None
+                self._send_json({"ok": True})
+            else:
+                self._send_json({"ok": False, "error": "Not running"})
+            return
+
+        if self._path_without_query() == "/api/generate-cover-letter":
+            payload = self._read_json_body(max_bytes=1024)
+            job_id = payload.get("job_id")
+            if not job_id:
+                self._send_json({"ok": False, "error": "Missing job_id"}, status=400)
+                return
+            
+            try:
+                from agent.brain import JobBrain
+                from agent.env_loader import load_workspace_env
+                load_workspace_env()
+                
+                import os
+                dashboard_path = Path("data/recommended_jobs_dashboard_data.json")
+                with OPERATIONAL_STORE_LOCK:
+                    if not dashboard_path.exists():
+                        raise FileNotFoundError(f"Dashboard data not found at {dashboard_path.absolute()} (cwd: {os.getcwd()})")
+                    with open(dashboard_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    
+                    target_job = None
+                    for job in data.get("jobs", []):
+                        if job.get("job_id") == job_id:
+                            target_job = job
+                            break
+                    
+                    if not target_job:
+                        raise ValueError("Job not found")
+
+                profile = self._profile_service().payload() or {}
+                prefs = self._strategy_service().payload().get("preferences", {})
+                
+                brain = JobBrain(profile, prefs)
+                reasoning = brain.generate_cover_letter_reasoning(target_job)
+                
+                with OPERATIONAL_STORE_LOCK:
+                    with open(dashboard_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for job in data.get("jobs", []):
+                        if job.get("job_id") == job_id:
+                            job["cover_letter"] = reasoning
+                            break
+                    with open(dashboard_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+
+                self._send_json({"ok": True, "cover_letter": reasoning})
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self._send_json({"ok": False, "error": str(e)}, status=500)
+            return
+
+        if self._path_without_query() == "/api/restart-server":
+            self._send_json({"ok": True})
+            def restart_process():
+                import time, os, sys, subprocess
+                time.sleep(1)
+                subprocess.Popen([sys.executable, "serve_dashboard.py"])
+                os._exit(0)
+            threading.Thread(target=restart_process, daemon=True).start()
+            return
+
 
         if self._path_without_query() == "/api/maintenance/import-session":
             if self.run_controller and self.run_controller.state.get("active"):
@@ -1146,6 +1300,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             "/api/maintenance/backup",
             "/api/maintenance/prune-logs",
             "/api/maintenance/archive",
+            "/api/maintenance/nuke-bad-jobs",
+            "/api/maintenance/wipe-unapplied",
             "/api/markets",
             "/api/markets/delete",
         }:
@@ -1207,6 +1363,80 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     )
                 elif self._path_without_query() == "/api/maintenance/archive":
                     data = self._maintenance_service().archive_historical_data()
+                elif self._path_without_query() == "/api/maintenance/nuke-bad-jobs":
+                    if self.operational_store:
+                        dashboard_data = self._read_dashboard_data()
+                        store = DashboardUserStateStore(self.user_state_path)
+                        job_keys_to_delete = set()
+                        
+                        for job in dashboard_data.get("jobs", []):
+                            cat = job.get("decision_category")
+                            if cat in ("LOW_PROBABILITY", "REJECTED"):
+                                job_keys_to_delete.add(build_job_key(job))
+                                
+                        scout_db_path = Path("data/user_workspace/job_scout.db")
+                        if scout_db_path.exists():
+                            try:
+                                import sqlite3
+                                with sqlite3.connect(scout_db_path) as conn:
+                                    for row in conn.execute("SELECT job_key FROM jobs WHERE decision_category IN ('LOW_PROBABILITY', 'REJECTED')"):
+                                        job_keys_to_delete.add(row[0])
+                            except Exception as e:
+                                print(f"Error reading scout.db for nuke: {e}")
+                                
+                        final_keys = []
+                        for key in job_keys_to_delete:
+                            state = store.data.get("jobs", {}).get(key, {})
+                            m_status = state.get("status", "unreviewed")
+                            if m_status in ("unreviewed", "rejected"):
+                                final_keys.append(key)
+                        
+                        if final_keys:
+                            self.operational_store.batch_amnesia_delete(
+                                final_keys,
+                                self.dashboard_data_path,
+                                self.user_state_path
+                            )
+                        data = {"nuked": len(final_keys)}
+                    else:
+                        raise ValueError("Operational store unavailable")
+                elif self._path_without_query() == "/api/maintenance/wipe-unapplied":
+                    if self.operational_store:
+                        dashboard_data = self._read_dashboard_data()
+                        store = DashboardUserStateStore(self.user_state_path)
+                        job_keys_to_delete = set()
+                        
+                        # Gather all keys from dashboard_data
+                        for job in dashboard_data.get("jobs", []):
+                            job_keys_to_delete.add(build_job_key(job))
+                                
+                        # Gather all keys from scout.db
+                        scout_db_path = Path("data/user_workspace/job_scout.db")
+                        if scout_db_path.exists():
+                            try:
+                                import sqlite3
+                                with sqlite3.connect(scout_db_path) as conn:
+                                    for row in conn.execute("SELECT job_key FROM jobs"):
+                                        job_keys_to_delete.add(row[0])
+                            except Exception as e:
+                                print(f"Error reading scout.db for wipe: {e}")
+                                
+                        # Filter OUT anything marked 'applied'
+                        final_keys = []
+                        for key in job_keys_to_delete:
+                            state = store.data.get("jobs", {}).get(key, {})
+                            if state.get("status") != "applied":
+                                final_keys.append(key)
+                        
+                        if final_keys:
+                            self.operational_store.batch_amnesia_delete(
+                                final_keys,
+                                self.dashboard_data_path,
+                                self.user_state_path
+                            )
+                        data = {"wiped": len(final_keys)}
+                    else:
+                        raise ValueError("Operational store unavailable")
                 elif self._path_without_query() == "/api/strategy":
                     data = self._strategy_service().save(payload)
                 elif self._path_without_query().endswith("/cv"):
@@ -1278,6 +1508,24 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             payload = self._read_json_body()
             job = payload.get("job") if isinstance(payload.get("job"), dict) else payload
             status = payload.get("status", "")
+            if status == "expired" and self.operational_store:
+                job_key = build_job_key(job)
+                self.operational_store.true_amnesia_delete(
+                    job_key,
+                    self.dashboard_data_path,
+                    self.user_state_path
+                )
+                response = {
+                    "ok": True,
+                    "record": {"status": "expired"},
+                    "job_key": job_key,
+                }
+                if not bool(payload.get("compact")):
+                    store = DashboardUserStateStore(self.user_state_path)
+                    response["data"] = self._load_dashboard_with_user_state(store=store)
+                self._send_json(response)
+                return
+                
             store = DashboardUserStateStore(self.user_state_path)
             record = store.set_status(job, status)
             if self.operational_store:
@@ -1321,7 +1569,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         dashboard_data = self._read_dashboard_data()
         dashboard_data["jobs"] = []
         state = DashboardUserStateStore(self.user_state_path).data
-        manual_counts = {"unreviewed": 0, "applied": 0, "irrelevant": 0}
+        manual_counts = {"unreviewed": 0, "applied": 0, "irrelevant": 0, "expired": 0}
         total_jobs = int((dashboard_data.get("summary") or {}).get("total_jobs") or 0)
         saved_jobs = state.get("jobs", {}) if isinstance(state, dict) else {}
         for record in saved_jobs.values() if isinstance(saved_jobs, dict) else []:
@@ -1332,13 +1580,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 manual_counts[status] += 1
         manual_counts["unreviewed"] = max(
             0,
-            total_jobs - manual_counts["applied"] - manual_counts["irrelevant"],
+            total_jobs - manual_counts["applied"] - manual_counts["irrelevant"] - manual_counts["expired"],
         )
         dashboard_data.setdefault("summary", {})["by_manual_status"] = manual_counts
         dashboard_data.setdefault("filter_options", {})["manual_statuses"] = [
             {"value": "unreviewed", "label": "Unreviewed"},
             {"value": "applied", "label": "Applied"},
             {"value": "irrelevant", "label": "Irrelevant"},
+            {"value": "expired", "label": "Expired"},
         ]
         if self.operational_store:
             self._sync_operational_store_if_changed()
@@ -1470,10 +1719,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
     def _sync_operational_store_if_changed(self) -> None:
         if not self.operational_store:
             return
-        self.operational_store.sync_if_changed(
-            self.dashboard_data_path,
-            self.user_state_path,
-        )
+        with OPERATIONAL_STORE_LOCK:
+            self.operational_store.sync_if_changed(
+                self.dashboard_data_path,
+                self.user_state_path,
+            )
 
     def _local_origin_allowed(self) -> bool:
         origin = str(self.headers.get("Origin") or "").strip()

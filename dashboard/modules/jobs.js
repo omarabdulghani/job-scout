@@ -9,6 +9,7 @@ export const MANUAL_STATUSES = [
   ["unreviewed", "Unreviewed"],
   ["applied", "Applied"],
   ["irrelevant", "Irrelevant"],
+  ["expired", "Expired"],
 ];
 
 export const APPLY_METHODS = [
@@ -29,6 +30,7 @@ export const QUICK_PRESETS = [
   ["hybrid_only", "Hybrid Only"],
   ["applied", "Applied"],
   ["irrelevant", "Irrelevant"],
+  ["expired", "Expired"],
   ["no_action", "No Action"],
 ];
 
@@ -44,6 +46,7 @@ export const QUICK_PRESET_ICONS = Object.freeze({
   hybrid_only: "activity",
   applied: "check",
   irrelevant: "archive",
+  expired: "clock",
   no_action: "minus-circle",
 });
 

@@ -5,10 +5,33 @@ __pycache__/
 *.py[cod]
 
 data/*
-!data/portfolio_site_notes.txt
 data/user_workspace/
 cv/*.pdf
 config/profile.local.json
+config/profile.json
+config/preferences.json
+
+# Local Databases
+*.db
+*.sqlite3
+
+# Personal Strategy & Notes
+PERFECT SUITABLE JOB PROFILE.txt
+search_queries.txt
+data/portfolio_site_notes.txt
+cover letter assets/
+
+# Scratch & Markdown Artifacts
+project_state_report.md
+walkthrough.md
+code_extract.md
+scratch_out.txt
+temp_out.json
+
+# Local Debug Scripts
+test_scrape.py
+test_script.py
+take_screenshots.py
 
 .playwright/
 .pytest_cache/

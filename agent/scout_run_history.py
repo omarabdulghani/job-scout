@@ -26,6 +26,7 @@ class ScoutRunHistoryStore:
                 record.get("rejected_or_below_threshold", 0) or 0
             ),
             "results_layout_types": list(record.get("results_layout_types", []) or []),
+            "ai_queries": list(record.get("ai_queries", []) or []),
         }
         self.entries.append(entry)
         self._write()

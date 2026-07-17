@@ -205,6 +205,7 @@ const DEFAULT_THEME = initialTheme();
       strategyFallbackQueryCount: document.getElementById("strategyFallbackQueryCount"),
       strategyQueryDuplicateNotice: document.getElementById("strategyQueryDuplicateNotice"),
       strategyQueryLearningSummary: document.getElementById("strategyQueryLearningSummary"),
+      strategyLatestAiQueries: document.getElementById("strategyLatestAiQueries"),
       openScoutWorkspaceRunButton: document.getElementById("openScoutWorkspaceRunButton"),
       startRecommendedScoutButton: document.getElementById("startRecommendedScoutButton"),
       openSearchStrategyButton: document.getElementById("openSearchStrategyButton"),
@@ -315,6 +316,7 @@ const DEFAULT_THEME = initialTheme();
       latestPersistenceWarning: document.getElementById("latestPersistenceWarning"),
       maintenanceLogList: document.getElementById("maintenanceLogList"),
       createBackupButton: document.getElementById("createBackupButton"),
+      nukeBadJobsButton: document.getElementById("nukeBadJobsButton"),
       exportMigrationBackupButton: document.getElementById("exportMigrationBackupButton"),
       importMigrationBackupButton: document.getElementById("importMigrationBackupButton"),
       migrationBackupUploadInput: document.getElementById("migrationBackupUploadInput"),
@@ -351,6 +353,7 @@ const DEFAULT_THEME = initialTheme();
       statUnreviewed: document.getElementById("statUnreviewed"),
       statApplied: document.getElementById("statApplied"),
       statIrrelevant: document.getElementById("statIrrelevant"),
+      statExpired: document.getElementById("statExpired"),
       freshPanel: document.getElementById("freshPanel"),
       freshTitle: document.getElementById("freshTitle"),
       overallProgressContainer: document.getElementById("overallProgressContainer"),
@@ -403,6 +406,17 @@ const DEFAULT_THEME = initialTheme();
       listViewButton: document.getElementById("listViewButton"),
       undoButton: document.getElementById("undoButton"),
       refreshButton: document.getElementById("refreshButton"),
+      restartServerButton: document.getElementById("restartServerButton"),
+      wipeUnappliedButton: document.getElementById("wipeUnappliedButton"),
+      autoCleanExpiredButton: document.getElementById("autoCleanExpiredButton"),
+      stopAutoCleanButton: document.getElementById("stopAutoCleanButton"),
+      autoCleanMode: document.getElementById("autoCleanMode"),
+      autoCleanProgressContainer: document.getElementById("autoCleanProgressContainer"),
+      autoCleanProgressFill: document.getElementById("autoCleanProgressFill"),
+      autoCleanStatus: document.getElementById("autoCleanStatus"),
+      autoCleanHistoryContent: document.getElementById("autoCleanHistoryContent"),
+      refreshAutoCleanLogsButton: document.getElementById("refreshAutoCleanLogsButton"),
+      toggleAutoCleanLogsButton: document.getElementById("toggleAutoCleanLogsButton"),
       boardView: document.getElementById("boardView"),
       compactList: document.getElementById("compactList"),
       jobsTableFooter: document.getElementById("jobsTableFooter"),
@@ -448,6 +462,10 @@ const DEFAULT_THEME = initialTheme();
       runFreshMode: document.getElementById("runFreshMode"),
       runTestMode: document.getElementById("runTestMode"),
       runAiBudgetMode: document.getElementById("runAiBudgetMode"),
+      runAiQueryCountContainer: document.getElementById("runAiQueryCountContainer"),
+      runAiQueryCount: document.getElementById("runAiQueryCount"),
+      runAiQueriesSummary: document.getElementById("runAiQueriesSummary"),
+      runAiQueriesList: document.getElementById("runAiQueriesList"),
       runResumeMode: document.getElementById("runResumeMode"),
       startRunButton: document.getElementById("startRunButton"),
       refreshRunControlButton: document.getElementById("refreshRunControlButton"),
@@ -473,7 +491,14 @@ const DEFAULT_THEME = initialTheme();
       runAdvancedOptionsContainer: document.getElementById("runAdvancedOptionsContainer"),
       dashboardTerminalPanel: document.getElementById("dashboardTerminalPanel"),
       toggleTerminalButton: document.getElementById("toggleTerminalButton"),
-      terminalContainer: document.getElementById("terminalContainer")
+      terminalContainer: document.getElementById("terminalContainer"),
+      
+      coverLetterHtmlInput: document.getElementById("coverLetterHtmlInput"),
+      coverLetterCssInput: document.getElementById("coverLetterCssInput"),
+      saveCoverLetterButton: document.getElementById("saveCoverLetterButton"),
+      downloadUniversalPdfButton: document.getElementById("downloadUniversalPdfButton"),
+      coverLetterLivePreview: document.getElementById("coverLetterLivePreview"),
+      coverLetterStatus: document.getElementById("coverLetterStatus")
     };
 
     function usesMobileNavigation() {
@@ -584,6 +609,9 @@ const DEFAULT_THEME = initialTheme();
         loadProfileData();
       }
       if (resolvedPage === "strategy" && !state.strategyPayload && !state.strategyLoading) {
+        loadStrategyData();
+      }
+      if (resolvedPage === "coverLetter" && !state.strategyPayload && !state.strategyLoading) {
         loadStrategyData();
       }
       if (resolvedPage === "settings" && !state.aiSettingsPayload && !state.aiSettingsLoading) {
@@ -909,6 +937,9 @@ const DEFAULT_THEME = initialTheme();
         if (!response.ok) throw new Error("HTTP " + response.status);
         state.strategyPayload = await response.json();
         renderStrategyEditor();
+        if (typeof renderCoverLetterEditor === "function") {
+          renderCoverLetterEditor();
+        }
       } catch (error) {
         setStrategyStatus("Strategy could not be loaded: " + (safe(error.message) || "unknown error"), "error");
       } finally {
@@ -954,9 +985,10 @@ const DEFAULT_THEME = initialTheme();
       setFieldValue("strategyTargetApply", fresh.target_apply_first_jobs || 8);
       setFieldValue("strategyTargetGood", fresh.target_good_or_better_jobs || 20);
       setFieldValue("strategyFreshCap", fresh.global_new_jobs_soft_cap || 140);
-      setFieldValue("strategyFullText", payload.strategy_text);
+      setFieldValue("strategyFullText", payload.full_text);
       setFieldValue("strategyPortfolioNotes", payload.portfolio_notes);
       renderQueryLearningSummary(payload.query_learning || {});
+      renderLatestAiQueries(payload.latest_ai_queries || []);
       updateStrategyQueryCount();
       setStrategyStatus("Strategy changes are versioned in your private workspace.");
       renderScoutWorkspace();
@@ -972,6 +1004,29 @@ const DEFAULT_THEME = initialTheme();
         ? "Current leaders: " + top.map((item) => `${item.query} (${numeric(item.score)})`).join(", ")
         : safe(learning.reason) || "The app needs more completed runs before it can rank queries.";
       els.strategyQueryLearningSummary.append(title, description);
+    }
+
+    function renderLatestAiQueries(queries) {
+      if (!els.strategyLatestAiQueries) return;
+      els.strategyLatestAiQueries.replaceChildren();
+      if (Array.isArray(queries) && queries.length > 0) {
+        for (const query of queries) {
+          const badge = document.createElement("span");
+          badge.className = "decision-chip";
+          badge.style.display = "inline-block";
+          badge.style.fontSize = "0.75rem";
+          badge.style.padding = "2px 8px";
+          badge.style.borderRadius = "12px";
+          badge.style.backgroundColor = "var(--input-background)";
+          badge.style.color = "var(--text-color)";
+          badge.style.border = "1px solid var(--border-color)";
+          badge.style.fontWeight = "500";
+          badge.textContent = query;
+          els.strategyLatestAiQueries.appendChild(badge);
+        }
+      } else {
+        els.strategyLatestAiQueries.textContent = "No AI queries generated yet.";
+      }
     }
 
     function updateStrategyQueryCount() {
@@ -1050,7 +1105,7 @@ const DEFAULT_THEME = initialTheme();
         ...payload.query_groups.bridge,
         ...payload.query_groups.fallback,
       ];
-      payload.strategy_text = document.getElementById("strategyFullText").value;
+      payload.full_text = document.getElementById("strategyFullText").value;
       payload.portfolio_notes = document.getElementById("strategyPortfolioNotes").value;
 
       els.saveStrategyButton.disabled = true;
@@ -1071,6 +1126,190 @@ const DEFAULT_THEME = initialTheme();
       } finally {
         els.saveStrategyButton.disabled = false;
       }
+    }
+
+    // --- Cover Letter Editor ---
+
+    function updateCoverLetterPreview() {
+      const html = els.coverLetterHtmlInput.value;
+      const css = els.coverLetterCssInput.value;
+      
+      const fullHtml = `
+        <style>${css}</style>
+        ${html}
+      `;
+      els.coverLetterLivePreview.innerHTML = fullHtml;
+    }
+
+    function renderCoverLetterEditor() {
+      const payload = state.strategyPayload || {};
+      const preferences = payload.preferences || {};
+      els.coverLetterHtmlInput.value = preferences.cover_letter_html || "";
+      els.coverLetterCssInput.value = preferences.cover_letter_css || "";
+      updateCoverLetterPreview();
+      
+      els.coverLetterStatus.style.display = "none";
+      els.coverLetterStatus.textContent = "";
+
+      if (!els.coverLetterHtmlInput.dataset.listenersBound) {
+        els.coverLetterHtmlInput.addEventListener('input', updateCoverLetterPreview);
+        els.coverLetterCssInput.addEventListener('input', updateCoverLetterPreview);
+        els.coverLetterHtmlInput.dataset.listenersBound = "true";
+      }
+    }
+
+    async function saveCoverLetter() {
+      if (!state.strategyPayload) return;
+      const payload = JSON.parse(JSON.stringify(state.strategyPayload));
+      payload.preferences = payload.preferences || {};
+      payload.preferences.cover_letter_html = els.coverLetterHtmlInput.value;
+      payload.preferences.cover_letter_css = els.coverLetterCssInput.value;
+      
+      els.saveCoverLetterButton.disabled = true;
+      els.coverLetterStatus.style.display = "block";
+      els.coverLetterStatus.textContent = "Saving templates...";
+      els.coverLetterStatus.className = "profile-status";
+      
+      try {
+        const response = await fetch(API_STRATEGY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || "Cover letter save failed");
+        state.strategyPayload = result.data;
+        renderCoverLetterEditor();
+        els.coverLetterStatus.textContent = "Cover Letter templates saved successfully.";
+        els.coverLetterStatus.className = "profile-status success";
+      } catch (error) {
+        els.coverLetterStatus.textContent = safe(error.message) || "Cover Letter could not be saved.";
+        els.coverLetterStatus.className = "profile-status error";
+      } finally {
+        els.saveCoverLetterButton.disabled = false;
+      }
+    }
+
+    function generateCoverLetterPdf(filledHtml, cssTemplate, filename) {
+      const element = document.createElement('div');
+      
+      // Force the host element itself to be exactly A4 dimensions.
+      element.style.width = '794px';
+      element.style.height = '1122px';
+      // Ensure background is white
+      element.style.backgroundColor = 'white';
+
+      element.innerHTML = `
+        <style>
+          ${cssTemplate}
+          .cover-letter-wrapper {
+            height: 1122px !important;
+            min-height: 1122px !important;
+            overflow: hidden !important;
+            /* CRITICAL FIX: Override 'margin: 0 auto' so the wrapper doesn't center
+               itself in the html2pdf clone container, which was causing it to be
+               shifted right and cut off by html2canvas */
+            margin: 0 !important;
+          }
+          
+          /* FIX: Force links to be inline-block so they don't wrap across lines. 
+             If an inline element wraps across lines, getBoundingClientRect() draws a massive 
+             rectangle covering the entire height of both lines, making empty space clickable! */
+          .cover-letter-wrapper a {
+            display: inline-block !important;
+          }
+        </style>
+        ${filledHtml}
+      `;
+
+      // --- PHASE 1: PERFECT MEASUREMENT ---
+      // Temporarily attach to DOM invisibly so it instantly inherits the loaded Inter font
+      // from the dashboard. We position it absolutely at 0,0 relative to the document.
+      element.style.position = 'absolute';
+      element.style.top = '0px';
+      element.style.left = '0px';
+      element.style.visibility = 'hidden'; // Make it invisible but keep layout intact
+      element.style.zIndex = '-9999';
+      document.body.appendChild(element);
+
+      // Return a promise chain that waits for fonts to load before measuring
+      return document.fonts.ready.then(() => {
+        // Add a 150ms buffer to guarantee the browser has finished layout recalculation
+        return new Promise(resolve => setTimeout(resolve, 150));
+      }).then(() => {
+        // Measure the exact pixel coordinates of every single link on the page
+        const linkData = [];
+        element.querySelectorAll('a').forEach(link => {
+          const rect = link.getBoundingClientRect();
+          linkData.push({
+            url: link.href,
+            // getBoundingClientRect is viewport-relative, so we add scroll offsets
+            // to get the true document-relative pixel coordinates within the 794x1122 wrapper.
+            x: rect.left + window.scrollX,
+            y: rect.top + window.scrollY,
+            w: rect.width,
+            h: rect.height
+          });
+        });
+
+        // --- PHASE 2: SAFE RENDER ---
+        // Immediately detach the element from the DOM!
+        // This prevents the "blank PDF" html2canvas viewport-clipping bug entirely,
+        // because html2pdf will process it safely in its own internal void.
+        document.body.removeChild(element);
+
+        // CRITICAL FIX: Reset the styles before generating the PDF!
+        // If we leave visibility: hidden, html2canvas will clone it and render a blank PDF!
+        element.style.position = '';
+        element.style.top = '';
+        element.style.left = '';
+        element.style.visibility = '';
+        element.style.zIndex = '';
+
+        const opt = {
+          margin:       0,
+          filename:     filename,
+          image:        { type: 'jpeg', quality: 1.0 },
+          // We explicitly DISABLE the buggy internal link generation!
+          enableLinks:  false,
+          // Use default html2canvas options. The element itself bounds the capture perfectly.
+          html2canvas:  { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
+          // Disabling html2pdf's page-break algorithm prevents it from injecting
+          // large margin-top values that push content to the bottom of the page.
+          pagebreak:    { mode: [] },
+          jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        // --- PHASE 3: MANUAL INJECTION ---
+        return html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf) => {
+          try {
+            // Calculate our own flawless math scale to map the 794px wrapper to the PDF inches
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const scale = pdfWidth / 794;
+            
+            // Inject the clickable rectangles exactly where we measured them
+            linkData.forEach(l => {
+              pdf.link(l.x * scale, l.y * scale, l.w * scale, l.h * scale, { url: l.url });
+            });
+          } catch (err) {
+            console.error("Error adding custom PDF links:", err);
+          }
+        }).save();
+      });
+    }
+
+    function downloadUniversalPdf() {
+      const cssTemplate = els.coverLetterCssInput.value 
+        || (state.strategyPayload?.preferences?.cover_letter_css) 
+        || "";
+      const rawHtml = els.coverLetterHtmlInput.value
+        || (state.strategyPayload?.preferences?.cover_letter_html)
+        || "";
+      if (!rawHtml) {
+        alert("Cover letter HTML template is empty. Please set it in the Cover Letter tab.");
+        return;
+      }
+      generateCoverLetterPdf(rawHtml, cssTemplate, 'Universal_Cover_Letter.pdf');
     }
 
     function setStrategyStatus(message, kind = "") {
@@ -1839,6 +2078,51 @@ const DEFAULT_THEME = initialTheme();
         els.maintenanceBackupList.textContent = "No backups created yet.";
       }
     }
+    async function wipeUnappliedJobs() {
+      if (!window.confirm("Are you sure you want to permanently delete all unapplied jobs? This will completely wipe everything except your Applied jobs, so the AI can find them fresh in the future.")) {
+        return;
+      }
+      els.wipeUnappliedButton.disabled = true;
+      const originalText = els.wipeUnappliedButton.innerHTML;
+      els.wipeUnappliedButton.innerHTML = "Wiping...";
+      try {
+        const response = await fetch("/api/maintenance/wipe-unapplied", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        if (!response.ok) throw new Error("Failed to wipe unapplied jobs");
+        alert("Success! All unapplied jobs have been permanently deleted.");
+        setTimeout(() => location.reload(), 1000);
+      } catch (e) {
+        alert("Error: " + e.message);
+        els.wipeUnappliedButton.innerHTML = originalText;
+        els.wipeUnappliedButton.disabled = false;
+      }
+    }
+
+    async function nukeBadJobs() {
+      if (!window.confirm("Are you sure you want to permanently delete all unreviewed Low Probability and Rejected jobs? This will completely wipe them from the database so the AI can find them fresh in the future.")) {
+        return;
+      }
+      els.nukeBadJobsButton.disabled = true;
+      const originalText = els.nukeBadJobsButton.innerHTML;
+      els.nukeBadJobsButton.innerHTML = "Nuking...";
+      try {
+        const response = await fetch("/api/maintenance/nuke-bad-jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        if (!response.ok) throw new Error("Failed to nuke bad jobs");
+        alert("Success! All unreviewed Low Probability and Rejected jobs have been permanently deleted.");
+        setTimeout(() => location.reload(), 1000);
+      } catch (e) {
+        alert("Error: " + e.message);
+        els.nukeBadJobsButton.innerHTML = originalText;
+        els.nukeBadJobsButton.disabled = false;
+      }
+    }
 
     async function createMaintenanceBackup() {
       els.createBackupButton.disabled = true;
@@ -2325,6 +2609,7 @@ const DEFAULT_THEME = initialTheme();
       renderRunHistory();
       renderQuickPresets();
       renderFilterHint();
+      renderAiQueriesSummary();
       renderJobs();
       renderDescriptions();
       renderLayoutMode();
@@ -2661,6 +2946,7 @@ const DEFAULT_THEME = initialTheme();
       );
       els.statApplied.textContent = String(manual.applied || 0);
       els.statIrrelevant.textContent = String(manual.irrelevant || 0);
+      els.statExpired.textContent = String(manual.expired || 0);
       els.updatedAt.textContent = "Updated: " + (formatDateTime(state.data.dashboard_updated_at) || "never");
     }
 
@@ -3121,6 +3407,44 @@ const DEFAULT_THEME = initialTheme();
       els.filterHint.textContent = parts.join(" ");
     }
 
+    function renderAiQueriesSummary() {
+      if (!els.runAiQueriesSummary || !els.runAiQueriesList) return;
+      
+      const selectedRunId = state.filters.run;
+      if (selectedRunId === "all") {
+        els.runAiQueriesSummary.classList.add("hidden");
+        return;
+      }
+      
+      const runs = Array.isArray(state.data.runs) ? state.data.runs : [];
+      const currentRun = runs.find((r) => r.run_id === selectedRunId);
+      
+      const queryPlan = currentRun?.query_plan || {};
+      const aiQueries = queryPlan.ai_queries || currentRun?.ai_queries || [];
+      
+      if (Array.isArray(aiQueries) && aiQueries.length > 0) {
+        els.runAiQueriesSummary.classList.remove("hidden");
+        els.runAiQueriesList.replaceChildren();
+        
+        for (const query of aiQueries) {
+          const badge = document.createElement("span");
+          badge.className = "decision-chip";
+          badge.style.display = "inline-block";
+          badge.style.fontSize = "0.75rem";
+          badge.style.padding = "2px 8px";
+          badge.style.borderRadius = "12px";
+          badge.style.backgroundColor = "var(--input-background)";
+          badge.style.color = "var(--text-color)";
+          badge.style.border = "1px solid var(--border-color)";
+          badge.style.fontWeight = "500";
+          badge.textContent = query;
+          els.runAiQueriesList.appendChild(badge);
+        }
+      } else {
+        els.runAiQueriesSummary.classList.add("hidden");
+      }
+    }
+
     function careerLaneLabel(lane) {
       return {
         primary: "Primary Career",
@@ -3333,7 +3657,7 @@ const DEFAULT_THEME = initialTheme();
         } else if (key === "easy_apply") {
           state.filters.applyMethod = "all";
           state.filters.actionScope = "all";
-        } else if (key === "applied" || key === "irrelevant" || key === "no_action") {
+        } else if (key === "applied" || key === "irrelevant" || key === "expired" || key === "no_action") {
           state.filters.manualStatus = "all";
         }
       } else {
@@ -3364,6 +3688,9 @@ const DEFAULT_THEME = initialTheme();
         } else if (key === "irrelevant") {
           state.filters.actionScope = "all";
           state.filters.manualStatus = "irrelevant";
+        } else if (key === "expired") {
+          state.filters.actionScope = "all";
+          state.filters.manualStatus = "expired";
         } else if (key === "no_action") {
           state.filters.actionScope = "all";
           state.filters.manualStatus = "unreviewed";
@@ -3383,6 +3710,7 @@ const DEFAULT_THEME = initialTheme();
       if (key === "easy_apply") return state.filters.applyMethod === "easy_apply";
       if (key === "applied") return state.filters.manualStatus === "applied";
       if (key === "irrelevant") return state.filters.manualStatus === "irrelevant";
+      if (key === "expired") return state.filters.manualStatus === "expired";
       if (key === "no_action") return state.filters.manualStatus === "unreviewed" && state.filters.actionScope === "all";
       return state.filters.quickPreset === key;
     }
@@ -3778,9 +4106,85 @@ const DEFAULT_THEME = initialTheme();
         openJobButton(job),
         copyLinkButton(job),
         actionButton("Applied", "applied", job, status, "Mark job as applied"),
-        actionButton("Irrelevant", "irrelevant", job, status, "Mark job as irrelevant")
+        actionButton("Irrelevant", "irrelevant", job, status, "Mark job as irrelevant"),
+        actionButton("Expired", "expired", job, status, "Mark job as expired")
       );
+      row.append(downloadCoverLetterButton(job));
       return row;
+    }
+
+    function downloadCoverLetterButton(job) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "job-action";
+      setIconText(btn, "file-text", "Cover Letter");
+      btn.title = "Download Cover Letter PDF";
+      btn.addEventListener("click", async () => {
+        // Immediately disable the button and show accurate progress state
+        btn.disabled = true;
+        if (job.cover_letter) {
+          setIconText(btn, "clock", "Building PDF...");
+        } else {
+          setIconText(btn, "clock", "Generating AI Snippet...");
+        }
+        
+        try {
+          // Get preferences — fetch fresh from API if strategyPayload isn't loaded yet.
+          // This fixes the race condition where job cards render before strategy data loads.
+          let preferences = state.strategyPayload?.preferences || null;
+          if (!preferences || !preferences.cover_letter_html) {
+            const resp = await fetch('/api/strategy?t=' + Date.now(), { cache: 'no-store' });
+            const fresh = await resp.json();
+            state.strategyPayload = fresh;
+            preferences = fresh.preferences || {};
+          }
+
+          const htmlTemplate = preferences.cover_letter_html || "";
+          const cssTemplate  = preferences.cover_letter_css  || "";
+
+          if (!htmlTemplate) {
+            alert("Cover letter HTML template is empty. Please set it in the Cover Letter tab.");
+            return;
+          }
+
+          // Fetch the AI reasoning on-demand if it hasn't been generated yet
+          if (!job.cover_letter) {
+            const apiResp = await fetch('/api/generate-cover-letter', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.job_id })
+            });
+            const apiData = await apiResp.json();
+            if (apiData.ok && apiData.cover_letter) {
+              job.cover_letter = apiData.cover_letter;
+            } else {
+              throw new Error(apiData.error || "Failed to generate cover letter AI snippet");
+            }
+          }
+
+          setIconText(btn, "clock", "Building PDF...");
+
+          // Fill in the job-specific placeholders
+          const filledHtml = htmlTemplate
+            .replace(/\[Company Name\]/g, job.company || "the company")
+            .replace(/\[Position Name\]/g, job.title || "this position")
+            .replace(/\[something specific about the company, team, product, mission, or role\]/g, job.cover_letter || "")
+            .replace(/\[AI_FILL\]/g, job.cover_letter || "");
+
+          const safeCompany = (job.company || "Company").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+          const safeTitle = (job.title || "Position").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+          const pdfFilename = `Omar Abdulghani - ${safeCompany}, ${safeTitle}, Cover Letter.pdf`;
+          
+          await generateCoverLetterPdf(filledHtml, cssTemplate, pdfFilename);
+        } catch (err) {
+          console.error("PDF generation failed:", err);
+          alert("PDF generation failed: " + err.message);
+        } finally {
+          btn.disabled = false;
+          setIconText(btn, "file-text", "Cover Letter");
+        }
+      });
+      return btn;
     }
 
     function openJobButton(job) {
@@ -3813,8 +4217,11 @@ const DEFAULT_THEME = initialTheme();
     function actionButton(label, targetStatus, job, currentStatus, title) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "job-action" + (targetStatus === currentStatus ? " active" : "") + (targetStatus === "irrelevant" ? " danger" : "");
-      setIconText(button, targetStatus === "irrelevant" ? "archive" : "check", label);
+      button.className = "job-action" + (targetStatus === currentStatus ? " active" : "") + ((targetStatus === "irrelevant" || targetStatus === "expired") ? " danger" : "");
+      let iconName = "check";
+      if (targetStatus === "irrelevant") iconName = "archive";
+      if (targetStatus === "expired") iconName = "clock";
+      setIconText(button, iconName, label);
       const nextStatus = targetStatus === currentStatus ? "unreviewed" : targetStatus;
       button.setAttribute("aria-pressed", String(targetStatus === currentStatus));
       button.setAttribute("aria-label", label + ": " + (safe(job.title) || "Untitled job"));
@@ -3838,11 +4245,35 @@ const DEFAULT_THEME = initialTheme();
     }
 
     async function saveManualStatus(job, status, options = {}) {
+      if (status === "expired") {
+        if (!window.confirm("Are you sure you want to mark this job as expired? This will completely delete it from your database.")) {
+          return;
+        }
+      }
       const key = safe(job.job_key) || jobIdentity(job);
       const previousStatus = options.previousStatus || manualStatus(job);
       state.savingJobKey = key;
       updateUndoButtonState();
-      renderJobs();
+      
+      let jobElement = null;
+      for (const el of document.querySelectorAll("article.job, article.compact-job")) {
+        if (el.dataset.jobKey === key) {
+          jobElement = el;
+          break;
+        }
+      }
+      
+      if (jobElement) {
+        jobElement.querySelectorAll("button").forEach(btn => btn.disabled = true);
+        const actionBtn = [...jobElement.querySelectorAll("button.job-action")].find(btn => 
+          btn.getAttribute("aria-label")?.includes(labelize(status))
+        );
+        if (actionBtn) {
+          actionBtn.classList.add("active");
+          actionBtn.style.opacity = "0.7";
+        }
+      }
+
       try {
         const response = await fetch(API_STATUS_URL, {
           method: "POST",
@@ -3872,6 +4303,15 @@ const DEFAULT_THEME = initialTheme();
         if (!options.silent) {
           showUndoToast(job, previousStatus, status);
         }
+        
+        if (jobElement) {
+          const willBeVisible = filteredJobs().some(j => (safe(j.job_key) || jobIdentity(j)) === savedKey);
+          if (!willBeVisible) {
+            jobElement.classList.add("fade-out-up");
+            await new Promise(r => setTimeout(r, 350));
+          }
+        }
+        
         await loadData();
         return true;
       } catch (error) {
@@ -3961,7 +4401,7 @@ const DEFAULT_THEME = initialTheme();
       const hasUndo = state.manualUndoStack.length > 0;
       els.undoButton.disabled = !state.apiAvailable || !hasUndo || Boolean(state.savingJobKey);
       els.undoButton.title = hasUndo
-        ? "Undo the last Applied/Irrelevant status change"
+        ? "Undo the last Applied/Irrelevant/Expired status change"
         : "No manual status changes to undo";
     }
 
@@ -3978,7 +4418,7 @@ const DEFAULT_THEME = initialTheme();
         : extraClass && extraClass.includes("risk")
           ? "filter"
           : extraClass && extraClass.includes("status")
-            ? (extraClass.includes("irrelevant") ? "archive" : "check")
+            ? (extraClass.includes("irrelevant") ? "archive" : extraClass.includes("expired") ? "clock" : "check")
             : "";
       if (iconName) span.append(createIcon(iconName, "icon icon-sm"));
       span.append(document.createTextNode(text || "Other"));
@@ -4171,7 +4611,7 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function manualStatusCounts(items) {
-      const counts = { unreviewed: 0, applied: 0, irrelevant: 0 };
+      const counts = { unreviewed: 0, applied: 0, irrelevant: 0, expired: 0 };
       for (const job of Array.isArray(items) ? items : []) {
         counts[manualStatus(job)] += 1;
       }
@@ -4633,8 +5073,11 @@ const DEFAULT_THEME = initialTheme();
       const supportsSearchGoal = workflow === "linkedin_multi_fresh";
       els.runSearchGoalControl.classList.toggle("hidden", !supportsSearchGoal);
       els.runSearchGoal.disabled = !supportsSearchGoal;
+      if (els.runAiQueryCountContainer) {
+        els.runAiQueryCountContainer.classList.toggle("hidden", !presentation.needsAiQueryCount);
+      }
       els.runFreshMode.disabled = !presentation.supportsFresh;
-      if (workflow === "linkedin_multi_fresh") {
+      if (workflow === "linkedin_multi_fresh" || workflow === "linkedin_ai_fresh") {
         els.runFreshMode.checked = true;
       }
       if (!presentation.supportsFresh) {
@@ -4800,7 +5243,8 @@ const DEFAULT_THEME = initialTheme();
         test_run: els.runTestMode.checked,
         resume: els.runResumeMode.checked,
         sponsorship_policy: els.runScopeSponsorshipPolicy.checked ? "required" : "not_required",
-        experience_levels: selectedExperienceLevels()
+        experience_levels: selectedExperienceLevels(),
+        ai_query_count: els.runAiQueryCount ? parseInt(els.runAiQueryCount.value, 10) : 10
       };
       
       // Immediate UI feedback
@@ -5061,6 +5505,12 @@ const DEFAULT_THEME = initialTheme();
 
       els.refreshMaintenanceButton.addEventListener("click", loadMaintenance);
       els.createBackupButton.addEventListener("click", createMaintenanceBackup);
+      if (els.nukeBadJobsButton) {
+        els.nukeBadJobsButton.addEventListener("click", nukeBadJobs);
+      }
+      if (els.wipeUnappliedButton) {
+        els.wipeUnappliedButton.addEventListener("click", wipeUnappliedJobs);
+      }
       els.exportMigrationBackupButton.addEventListener("click", exportMigrationBackup);
       els.importMigrationBackupButton.addEventListener("click", triggerImportMigrationBackup);
       els.migrationBackupUploadInput.addEventListener("change", importMigrationBackup);
@@ -5121,6 +5571,264 @@ const DEFAULT_THEME = initialTheme();
       els.listViewButton.addEventListener("click", () => setViewMode("list"));
       els.undoButton.addEventListener("click", undoLastManualStatus);
       els.refreshButton.addEventListener("click", loadData);
+      
+      if (els.toggleAutoCleanLogsButton && els.autoCleanHistoryContent) {
+        els.toggleAutoCleanLogsButton.addEventListener("click", () => {
+          if (els.autoCleanHistoryContent.style.display === "none") {
+            els.autoCleanHistoryContent.style.display = "flex";
+            els.toggleAutoCleanLogsButton.innerHTML = `<svg class="icon icon-sm"><use href="#icon-chevron-up"></use></svg><span>Collapse Logs</span>`;
+          } else {
+            els.autoCleanHistoryContent.style.display = "none";
+            els.toggleAutoCleanLogsButton.innerHTML = `<svg class="icon icon-sm"><use href="#icon-chevron-down"></use></svg><span>Expand Logs</span>`;
+          }
+        });
+      }
+      
+      if (els.autoCleanExpiredButton) {
+        let autoCleanInterval = null;
+        
+        const escapeHtml = (str) => {
+            if (!str) return "";
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        };
+        
+        const formatHistoryList = (list, title) => {
+          if (!list || list.length === 0) return "";
+          return `
+            <div style="margin-bottom: 1rem;">
+              <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">${title} (${list.length})</h3>
+              <ul style="list-style: disc; margin-left: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                ${list.map(item => `<li>${escapeHtml(item.title || "Unknown Job")}${item.reason ? ` <span style="opacity: 0.7; font-style: italic;">(${escapeHtml(item.reason)})</span>` : ""}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+        };
+
+        const formatSession = (session, index) => {
+          const numCleaned = session.history?.cleaned ? session.history.cleaned.length : 0;
+          const numActive = session.history?.not_expired ? session.history.not_expired.length : 0;
+          const numUnknown = session.history?.unknown ? session.history.unknown.length : 0;
+          
+          let dateStr = "Unknown Date";
+          let durationStr = "";
+          if (session.start_time) {
+            const d = new Date(session.start_time);
+            dateStr = d.toLocaleString();
+          }
+          if (session.duration_seconds !== undefined) {
+             const mins = Math.floor(session.duration_seconds / 60);
+             const secs = session.duration_seconds % 60;
+             durationStr = ` | Duration: ${mins}m ${secs}s`;
+          }
+          
+          const isRunning = session.status === "Running...";
+          const displayStyle = isRunning ? "block" : "none";
+          const expandText = isRunning ? "Collapse Logs" : "Expand Logs";
+          const chevron = isRunning ? "up" : "down";
+          
+          return `
+            <div class="session-card" style="border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 1rem; background: var(--surface);">
+               <div class="session-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="const content = this.nextElementSibling; const btn = this.querySelector('button'); if(content.style.display === 'none'){content.style.display='block'; btn.innerHTML='<svg class=\\'icon icon-sm\\'><use href=\\'#icon-chevron-up\\'></use></svg><span>Collapse Logs</span>';}else{content.style.display='none'; btn.innerHTML='<svg class=\\'icon icon-sm\\'><use href=\\'#icon-chevron-down\\'></use></svg><span>Expand Logs</span>';}">
+                 <div>
+                   <h3 style="font-size: 1rem; margin: 0; color: var(--text-color);">Session ${session.id || (index+1)}</h3>
+                   <span style="font-size: 0.85rem; color: var(--text-muted);">${dateStr}${durationStr} - ${session.status || 'Completed'}</span>
+                 </div>
+                 <div style="display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+                   <div style="display: flex; gap: 1rem; font-size: 0.85rem;">
+                     <span style="color: var(--text-color);"><strong>${numCleaned}</strong> Cleaned</span>
+                     <span style="color: var(--text-color);"><strong>${numActive}</strong> Active</span>
+                     <span style="color: var(--text-color);"><strong>${numUnknown}</strong> Unknown</span>
+                   </div>
+                   <button class="fresh-action" type="button" style="pointer-events: none;"><svg class="icon icon-sm">
+                      <use href="#icon-chevron-${chevron}"></use>
+                    </svg><span>${expandText}</span></button>
+                 </div>
+               </div>
+               <div class="session-content" style="padding: 1rem; display: ${displayStyle};">
+                 ${formatHistoryList(session.history?.cleaned, "✅ Successfully Cleaned (Expired)")}
+                 ${formatHistoryList(session.history?.not_expired, "⏳ Still Active (Not Expired)")}
+                 ${formatHistoryList(session.history?.unknown, "❓ Unknown (Check Manually)")}
+               </div>
+            </div>
+          `;
+        };
+
+        const renderAutoCleanHistory = (data) => {
+          if (!els.autoCleanHistoryContent) return;
+          
+          if (!data || (!data.sessions && !data.cleaned && !data.not_expired && !data.unknown)) {
+             els.autoCleanHistoryContent.innerHTML = `<em>No cleanup logs yet.</em>`;
+             return;
+          }
+          
+          if (data.sessions && data.sessions.length > 0) {
+              let html = "";
+              data.sessions.forEach((session, idx) => {
+                  html += formatSession(session, data.sessions.length - idx - 1);
+              });
+              els.autoCleanHistoryContent.innerHTML = html;
+              return;
+          }
+          
+          // Legacy format fallback
+          const numCleaned = data.cleaned ? data.cleaned.length : 0;
+          const numActive = data.not_expired ? data.not_expired.length : 0;
+          const numUnknown = data.unknown ? data.unknown.length : 0;
+          
+          const overviewHtml = `
+            <div style="background: var(--surface); padding: 0.75rem 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; gap: 1.5rem; border: 1px solid var(--border);">
+               <div style="display: flex; flex-direction: column;">
+                 <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Cleaned (Expired)</span>
+                 <span style="font-size: 1.25rem; font-weight: 600; color: var(--text-color);">${numCleaned}</span>
+               </div>
+               <div style="display: flex; flex-direction: column;">
+                 <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Still Active</span>
+                 <span style="font-size: 1.25rem; font-weight: 600; color: var(--text-color);">${numActive}</span>
+               </div>
+               <div style="display: flex; flex-direction: column;">
+                 <span style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Unknown (Blocked)</span>
+                 <span style="font-size: 1.25rem; font-weight: 600; color: var(--text-color);">${numUnknown}</span>
+               </div>
+            </div>
+          `;
+          
+          let html = overviewHtml;
+          html += formatHistoryList(data.cleaned, "✅ Successfully Cleaned (Expired)");
+          html += formatHistoryList(data.not_expired, "⏳ Still Active (Not Expired)");
+          html += formatHistoryList(data.unknown, "❓ Unknown (Check Manually)");
+          els.autoCleanHistoryContent.innerHTML = html;
+        };
+
+        const pollAutoCleanStatus = async () => {
+            try {
+              const statusRes = await fetch("/api/clean-expired-status");
+              if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                els.autoCleanProgressContainer.style.display = "flex";
+                els.autoCleanStatus.textContent = statusData.status || "Running...";
+                
+                if (statusData.progress && statusData.progress.total > 0) {
+                    const pct = Math.round((statusData.progress.current / statusData.progress.total) * 100);
+                    els.autoCleanProgressFill.style.width = `${pct}%`;
+                    if (statusData.progress.job_title) {
+                        els.autoCleanStatus.textContent = `[${pct}%] ${statusData.progress.status} - ${statusData.progress.job_title}`;
+                    }
+                }
+                
+                if (statusData.history) {
+                    renderAutoCleanHistory(statusData.history);
+                }
+
+                if (statusData.is_running) {
+                    els.stopAutoCleanButton.style.display = "inline-flex";
+                    els.autoCleanExpiredButton.style.display = "none";
+                } else {
+                    els.stopAutoCleanButton.style.display = "none";
+                    els.autoCleanExpiredButton.style.display = "inline-flex";
+                }
+
+                if (!statusData.is_running && statusData.status !== "Not running" && statusData.status !== "Starting background cleaner...") {
+                  clearInterval(autoCleanInterval);
+                  autoCleanInterval = null;
+                  els.autoCleanExpiredButton.disabled = false;
+                  
+                  if (statusData.progress && statusData.progress.current >= statusData.progress.total && statusData.progress.total > 0) {
+                      showToast("✅ Auto Clean Expired Jobs Complete!");
+                      els.autoCleanProgressFill.style.width = "100%";
+                      setTimeout(() => {
+                         els.autoCleanProgressContainer.style.display = "none";
+                         loadData(); 
+                      }, 5000);
+                  } else if (statusData.status === "Complete" || statusData.status.startsWith("Complete:")) {
+                      showToast("✅ Auto Clean Complete!");
+                      setTimeout(() => {
+                         els.autoCleanProgressContainer.style.display = "none";
+                         loadData(); 
+                      }, 5000);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Error polling clean expired status", err);
+            }
+        };
+        
+        if (els.stopAutoCleanButton) {
+            els.stopAutoCleanButton.addEventListener("click", async () => {
+                els.stopAutoCleanButton.disabled = true;
+                els.autoCleanStatus.textContent = "Requesting stop...";
+                try {
+                    await fetch("/api/clean-expired-stop", { method: "POST" });
+                } catch (err) {
+                    console.error("Error stopping clean expired", err);
+                }
+                setTimeout(() => { els.stopAutoCleanButton.disabled = false; }, 2000);
+            });
+        }
+        
+        if (els.restartServerButton) {
+            els.restartServerButton.addEventListener("click", async () => {
+                if (!window.confirm("Are you sure you want to restart the backend server? The dashboard will briefly disconnect.")) {
+                    return;
+                }
+                document.body.style.opacity = "0.5";
+                document.body.style.pointerEvents = "none";
+                showToast("🔄 Restarting server... please wait.");
+                try {
+                    await fetch("/api/restart-server", { method: "POST" });
+                } catch (err) {
+                    console.log("Server stopped responding, as expected.");
+                }
+                // Wait 4 seconds for new server to boot, then reload
+                setTimeout(() => {
+                    window.location.reload();
+                }, 4000);
+            });
+        }
+
+        els.autoCleanExpiredButton.addEventListener("click", async () => {
+          if (!window.confirm("Are you sure you want to start the Auto Clean process? This will open a browser window and may take a while depending on the target selection.")) {
+              return;
+          }
+        
+          els.autoCleanExpiredButton.disabled = true;
+          els.autoCleanProgressContainer.style.display = "flex";
+          els.autoCleanProgressFill.style.width = "0%";
+          els.autoCleanStatus.textContent = "Starting...";
+          
+          let targets = ["LOW_PROBABILITY", "REJECTED"];
+          
+          let scan_mode = "SKIP_ACTIVE";
+          if (els.autoCleanMode) {
+              scan_mode = els.autoCleanMode.value;
+          }
+          
+          try {
+            const res = await fetch("/api/clean-expired", { 
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ targets: targets, scan_mode: scan_mode })
+            });
+            const data = await res.json();
+            if (!data.ok) {
+              els.autoCleanStatus.textContent = data.error || "Failed to start.";
+              els.autoCleanExpiredButton.disabled = false;
+              return;
+            }
+            if (autoCleanInterval) clearInterval(autoCleanInterval);
+            autoCleanInterval = setInterval(pollAutoCleanStatus, 2000);
+          } catch (err) {
+            els.autoCleanStatus.textContent = "Error connecting to server.";
+            els.autoCleanExpiredButton.disabled = false;
+          }
+        });
+        
+        if (els.refreshAutoCleanLogsButton) {
+            els.refreshAutoCleanLogsButton.addEventListener("click", pollAutoCleanStatus);
+        }
+
+        pollAutoCleanStatus();
+      }
       if (els.advancedFiltersToggle) {
         els.advancedFiltersToggle.addEventListener("click", () => {
           const isHidden = els.advancedFiltersContainer.classList.contains("hidden");
@@ -5266,6 +5974,8 @@ const DEFAULT_THEME = initialTheme();
         input.addEventListener("change", renderRunSearchGoalSummary);
       }
       els.startRunButton.addEventListener("click", startDashboardRun);
+      els.saveCoverLetterButton.addEventListener("click", saveCoverLetter);
+      els.downloadUniversalPdfButton.addEventListener("click", downloadUniversalPdf);
       els.refreshRunControlButton.addEventListener("click", loadRunControl);
       els.stopAfterJobButton.addEventListener("click", () => stopDashboardRun("after_current_job"));
       els.stopAfterPageButton.addEventListener("click", () => stopDashboardRun("after_current_page"));

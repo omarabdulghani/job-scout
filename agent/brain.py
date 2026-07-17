@@ -1875,6 +1875,7 @@ class JobBrain:
         backend: str,
         prompt: str,
         max_tokens: int,
+        force_scoring_schema: bool = True,
     ) -> tuple[str, str]:
         config = self._validate_hosted_scoring_config(backend)
         base_url = self._normalize_hosted_base_url(
@@ -1882,7 +1883,6 @@ class JobBrain:
             openai_compatible=True,
         )
         self._log_hosted_request_settings_once(config["backend"], max_tokens=max_tokens)
-        response_format = self._hosted_scoring_response_format(backend=config["backend"])
         payload = {
             "model": config["model"],
             "messages": [{"role": "user", "content": prompt}],
@@ -1890,8 +1890,10 @@ class JobBrain:
             "temperature": 0,
             "stream": False,
         }
-        if response_format:
-            payload["response_format"] = response_format
+        if force_scoring_schema:
+            response_format = self._hosted_scoring_response_format(backend=config["backend"])
+            if response_format:
+                payload["response_format"] = response_format
         request = Request(
             f"{base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
@@ -2016,6 +2018,7 @@ class JobBrain:
         *,
         prompt: str,
         max_tokens: int,
+        force_scoring_schema: bool = True,
     ) -> tuple[str, str]:
         config = self._validate_hosted_scoring_config("ollama_cloud")
         base_url = self._normalize_hosted_base_url(
@@ -2033,7 +2036,7 @@ class JobBrain:
                 "num_predict": max_tokens,
             },
         }
-        if self.ollama_structured_outputs:
+        if self.ollama_structured_outputs and force_scoring_schema:
             # Ollama Cloud currently documents structured outputs as unsupported.
             # Keep schema mode opt-in so local Ollama or future Cloud support can use it.
             payload["format"] = self._plain_scoring_json_schema()
@@ -2824,6 +2827,10 @@ class JobBrain:
 
     def _request_scoring_response(self, prompt: str, max_tokens: int) -> tuple[str, str]:
         backend = self._normalize_scoring_backend(self.scoring_backend or "claude")
+        if backend == "auto":
+            backend = self._first_configured_auto_backend()
+            if not backend:
+                raise RuntimeError("No AI backends configured. Please configure at least one API key.")
         if backend == "claude":
             response = self._get_client().messages.create(
                 model=self.model,
@@ -2836,11 +2843,20 @@ class JobBrain:
         if backend == "gemini":
             return self._gemini_generate_content(prompt=prompt, max_tokens=max_tokens)
         if backend in {"cerebras", "ollama_cloud", "openai_compatible", "deepseek", "openrouter"}:
-            parsed, model_label = self._request_hosted_scoring_response_with_retries(
-                backend=backend,
-                prompt=prompt,
-            )
-            return json.dumps(parsed, ensure_ascii=False), model_label
+            config = self._validate_hosted_scoring_config(backend)
+            if config["backend"] == "ollama_cloud":
+                return self._ollama_cloud_chat_completion(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    force_scoring_schema=False,
+                )
+            else:
+                return self._openai_compatible_chat_completion(
+                    backend=config["backend"],
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    force_scoring_schema=False,
+                )
         raise RuntimeError(
             f"Unsupported AI_BACKEND '{self.scoring_backend}'. Use 'auto', 'cerebras', 'ollama_cloud', 'openai_compatible', 'deepseek', 'gemini', 'claude', 'openrouter', or 'lmstudio'."
         )
@@ -3552,12 +3568,32 @@ class JobBrain:
 
         return {"score": score, "apply": apply, "human_review": human_review, "reasons": reasons}
 
-    def generate_cover_letter(self, job: dict) -> str:
-        """Generate a tailored cover letter using Claude."""
+    def generate_cover_letter_reasoning(self, job: dict) -> str:
+        """Generate a 1-2 sentence compelling reason for applying, using the default scoring backend."""
         profile = self.profile
-        name = f"{profile['personal']['first_name']} {profile['personal']['last_name']}"
+        name = f"{profile.get('personal', {}).get('first_name', '')} {profile.get('personal', {}).get('last_name', '')}"
 
-        prompt = f"""Write a concise, genuine cover letter for this job application.
+        try:
+            recent_role = profile.get('work_experience', [{}])[0].get('title', '')
+            recent_company = profile.get('work_experience', [{}])[0].get('company', '')
+            recent_role_text = f"{recent_role} at {recent_company}" if recent_role else "Not specified"
+        except Exception:
+            recent_role_text = "Not specified"
+
+        prompt = f"""You are generating a short, impactful text snippet to complete a specific sentence in a cover letter.
+
+The sentence is:
+"I am particularly drawn to the {job.get('title')} role at {job.get('company')} because it allows me to [AI_FILL]."
+
+Your SOLE task is to generate the exact text to replace `[AI_FILL]`.
+
+CONSTRAINTS:
+1. Output ONLY the exact text that replaces `[AI_FILL]`. Do not include the rest of the sentence, quotation marks, or conversational filler.
+2. The output MUST start with a lowercase action verb (e.g., "leverage", "combine", "manage", "apply") so it grammatically completes "because it allows me to...".
+3. STRICT TECHNICAL MATCHING: Extract 2 to 3 highly specific keywords or core responsibilities explicitly requested in the Job Description. Then, match those EXACT requirements to the applicant's relevant background (whether it's their IT foundation, data analysis, or marketing skills). DO NOT mention tools from the applicant's background (like Figma, GA4, UX design, or SEO) UNLESS they directly solve a problem explicitly mentioned in the Job Description. Prioritize the core operational tools and systems the job actually asks for.
+4. STRICTLY BANNED WORDS/PHRASES: "drive impactful results", "multidisciplinary background", "grow professionally", "add value", "contribute to the team", "success", "my skills", "my experience".
+5. Keep the output strictly between 15 and 25 words. Do not repeat the company name or position name in your output.
+6. Do NOT include a period at the end of your output. The template already provides the ending punctuation.
 
 JOB:
 Title: {job.get('title')}
@@ -3566,29 +3602,102 @@ Description: {job.get('description', 'Not provided')[:1500]}
 
 APPLICANT PROFILE:
 Name: {name}
-About: {profile.get('about_me')}
-Most recent role: {profile['work_experience'][0]['title']} at {profile['work_experience'][0]['company']}
+Most recent role: {recent_role_text}
 Key skills: {', '.join(profile.get('skills', [])[:10])}
-Style preference: {profile.get('cover_letter_style', 'concise and specific')}
 
 ADDITIONAL KNOWLEDGE:
 {self._knowledge_prompt_block()}
 
-Instructions:
-- 3-4 paragraphs max
-- Be specific to THIS role and company
-- Do not use generic filler phrases like "I am writing to express my interest"
-- Sound human and genuine
-- End with a clear call to action
-- Do not include a subject line or date header
-- Start directly with "Dear Hiring Team," or the hiring manager's name if known
+Output ONLY valid JSON with a single key "reasoning" containing the exact string replacement.
 """
-        response = self._get_client().messages.create(
-            model=self.model,
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.content[0].text
+        try:
+            raw_text, _ = self._request_scoring_response(prompt=prompt, max_tokens=1000)
+            parsed = self._parse_json_object(raw_text, ("reasoning",))
+            return parsed.get("reasoning", "").strip()
+        except Exception as e:
+            self._log_scoring_event("CoverLetterReasoningError", str(e))
+            return "apply my multidisciplinary background to drive impactful results"
+
+    def generate_ai_search_queries(
+        self,
+        count: int,
+        recent_queries: list[str],
+    ) -> list[str]:
+        """Generate dynamic, search-engine friendly job search queries using the active scoring AI backend."""
+        from agent.user_workspace import UserWorkspace
+        
+        # Load CV excerpt
+        cv_text = (self.profile_knowledge.get("cv_excerpt") or "").strip()
+        portfolio_text = (self.profile_knowledge.get("portfolio_excerpt") or "").strip()
+        
+        # Load strategy
+        strategy_text = ""
+        try:
+            workspace = UserWorkspace().ensure_initialized()
+            if workspace.strategy_path.exists():
+                strategy_text = workspace.strategy_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+        # Load language policy
+        personal = self.profile.get("personal", {})
+        language_policy = self.profile.get("language_policy", "english_only")
+        location = personal.get("location", {}).get("city") or personal.get("location", {}).get("country") or "Netherlands"
+        
+        # Format the prompt
+        recent_queries_str = "\n".join(f"- {q}" for q in recent_queries) if recent_queries else "None"
+        
+        prompt = f"""You are a professional career strategist and recruitment expert.
+Your task is to generate a list of exactly {count} distinct search queries to use on LinkedIn to find suitable jobs for the applicant.
+
+CANDIDATE PROFILE:
+Name: {personal.get('first_name', '')} {personal.get('last_name', '')}
+About: {self.profile.get('about_me', '')}
+Recent Roles: {[exp.get('title', '') + ' at ' + exp.get('company', '') for exp in self.profile.get('work_experience', [])[:2]]}
+Skills: {', '.join(self.profile.get('skills', []))}
+Target Location: {location}
+Language Policy: {language_policy}
+
+CV EXCERPT:
+{cv_text[:3000]}
+
+JOB STRATEGY DOCUMENT:
+{strategy_text[:4000]}
+
+RECENTLY RUN QUERIES (DO NOT REPEAT OR USE VARYING ORDERS OF THESE):
+{recent_queries_str}
+
+CRITICAL INSTRUCTIONS:
+1. Generate exactly {count} queries.
+2. Each query MUST be very short, concise, and search-engine friendly (2 to 4 words max). For example: "UI UX Designer", "Junior Product Owner", "Customer Success Utrecht", "AI Prompt Evaluator".
+3. Avoid overlapping variations in the same batch (e.g. do not output both "UX UI Designer" and "UI UX Designer"). Keep them semantically diverse.
+4. Adapt to the location and language policy: if the candidate is in the Netherlands and the language policy allows/requires Dutch, generate a mix of English-term queries and Dutch-term queries (e.g. "Product Specialist" vs "Product Specialist Utrecht" vs "Project Coordinator").
+5. Return ONLY the queries list, with one query per line. Do not include any numbering, introductory/concluding explanations, quotes, or conversational filler.
+"""
+
+        # Call active scoring backend
+        try:
+            raw_response, _ = self._request_scoring_response(prompt, max_tokens=1000)
+        except Exception as exc:
+            # Re-raise so caller handles the fallback
+            raise RuntimeError(f"AI query generation failed: {exc}") from exc
+
+        # Parse and sanitize response
+        queries: list[str] = []
+        seen = set()
+        for line in raw_response.splitlines():
+            cleaned = line.strip()
+            # Clean symbols like numbers, quotes, dashes, bullets
+            cleaned = re.sub(r"^[\d\.\-\*\#\•\-\s]+", "", cleaned)
+            cleaned = cleaned.strip("\"' ")
+            if not cleaned:
+                continue
+            normalized = " ".join(cleaned.split()).lower()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                queries.append(cleaned)
+
+        return queries[:count]
 
     def answer_question(self, question: str, context: str = "") -> str:
         """Answer a specific application question using the user's profile."""

@@ -19,6 +19,7 @@
     })();
   </script>
   <link rel="stylesheet" href="dashboard/styles.css?v=20260619-workplace" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 
 <body>
@@ -210,6 +211,9 @@
         <button class="app-nav-button" type="button" data-app-page="strategy"><svg class="icon">
             <use href="#icon-target"></use>
           </svg>Job Strategy</button>
+        <button class="app-nav-button" type="button" data-app-page="coverLetter"><svg class="icon">
+            <use href="#icon-file-text"></use>
+          </svg>Cover Letter</button>
         <button class="app-nav-button" type="button" data-app-page="applications"><svg class="icon">
             <use href="#icon-check-circle"></use>
           </svg>Applications</button>
@@ -229,6 +233,14 @@
           title="Switch to dark mode"><svg id="themeToggleIcon" class="icon">
             <use href="#icon-moon"></use>
           </svg><span id="themeToggleText">Dark mode</span></button>
+        <button class="app-nav-button" type="button" data-app-page="resetClean" style="color: #52c41a;"><svg class="icon" style="stroke: #52c41a;">
+            <use href="#icon-trash"></use>
+          </svg>Reset &amp; Clean</button>
+        <button id="restartServerButton" class="app-nav-button" type="button" style="color: #ff4d4f;">
+          <svg class="icon" style="stroke: #ff4d4f;">
+            <use href="#icon-activity"></use>
+          </svg>Restart Backend
+        </button>
       </nav>
       <div class="app-sidebar-footer">Local workspace<br />Private by default</div>
     </aside>
@@ -308,6 +320,10 @@
           <div class="stat archive-stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong><svg
               class="icon stat-icon">
               <use href="#icon-archive"></use>
+            </svg></div>
+          <div class="stat archive-stat"><span>Expired</span><strong id="statExpired">0</strong><svg
+              class="icon stat-icon">
+              <use href="#icon-clock"></use>
             </svg></div>
         </section>
 
@@ -420,6 +436,8 @@
           </div>
           <div id="runHistoryList" class="run-history-list"></div>
         </section>
+
+
 
         <nav id="careerLaneTabs" class="career-lane-tabs" aria-label="Career lane">
           <button class="career-lane-tab" type="button" data-career-lane="primary"><svg class="icon icon-sm">
@@ -542,7 +560,17 @@
           <button id="refreshButton" class="button" type="button"><svg class="icon icon-sm">
               <use href="#icon-refresh"></use>
             </svg>Refresh</button>
+
+            
         </section>
+
+        <div id="runAiQueriesSummary" class="workflow-hint hidden" style="margin-top: 14px; margin-bottom: 14px;">
+          <svg class="icon icon-sm" style="color: var(--accent-color); fill: currentColor; margin-right: 6px; vertical-align: middle;">
+            <use href="#icon-spark"></use>
+          </svg>
+          <strong>AI Generated Queries for this run:</strong>
+          <div id="runAiQueriesList" style="display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle;"></div>
+        </div>
 
         <section id="boardView" class="board" aria-label="Recommended jobs board">
           <section class="column" data-column="APPLY_FIRST">
@@ -1073,6 +1101,10 @@
               <div class="field full"><label>What the app has learned</label>
                 <div id="strategyQueryLearningSummary" class="workflow-hint"></div>
               </div>
+              <div class="field full">
+                <label>Latest AI-generated search queries</label>
+                <div id="strategyLatestAiQueries" class="workflow-hint" style="display: flex; flex-wrap: wrap; gap: 6px;">No AI queries generated yet.</div>
+              </div>
             </div>
           </section>
           <section class="form-section">
@@ -1112,6 +1144,47 @@
             </div>
           </section>
         </form>
+      </main>
+
+      <main id="coverLetterPage" class="shell app-page workspace-page" data-page-id="coverLetter" hidden>
+        <header class="workspace-header">
+        <div>
+          <h1><svg class="icon">
+              <use href="#icon-file-text"></use>
+            </svg>Cover Letter</h1>
+          <p>Design your base template in HTML and CSS. The dashboard will automatically inject your details.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button id="saveCoverLetterButton" class="button primary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-save"></use>
+            </svg>Save templates</button>
+          <button id="downloadUniversalPdfButton" class="button secondary" type="button"><svg class="icon icon-sm">
+              <use href="#icon-external-link"></use>
+            </svg>Download Universal PDF</button>
+        </div>
+      </header>
+      <div id="coverLetterStatus" class="profile-status" role="status" aria-live="polite" style="display: none;"></div>
+        
+        <div class="split-view" style="display: flex; gap: 20px; height: calc(100vh - 150px); margin-top: 20px;">
+          <!-- Left side: Code Editors -->
+          <div class="cl-editors" style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+            <div class="field full" style="flex: 1; display: flex; flex-direction: column;">
+              <label for="coverLetterHtmlInput">HTML Template (Use [Company Name], [Position Name], and [something specific...])</label>
+              <textarea id="coverLetterHtmlInput" style="flex: 1; font-family: monospace; font-size: 12px; white-space: pre;"></textarea>
+            </div>
+            <div class="field full" style="flex: 1; display: flex; flex-direction: column;">
+              <label for="coverLetterCssInput">CSS Styles</label>
+              <textarea id="coverLetterCssInput" style="flex: 1; font-family: monospace; font-size: 12px; white-space: pre;"></textarea>
+            </div>
+          </div>
+          
+          <!-- Right side: Live Preview -->
+          <div class="cl-preview-pane" style="flex: 1; background: #e0e0e0; border-radius: 8px; padding: 20px; overflow-y: auto; display: flex; justify-content: center;">
+             <div id="coverLetterLivePreview" style="box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <!-- Live HTML goes here -->
+             </div>
+          </div>
+        </div>
       </main>
       <main id="applicationsPage" class="shell app-page workspace-page" data-page-id="applications" hidden>
         <header class="workspace-header">
@@ -1582,6 +1655,93 @@
           </section>
         </div>
       </main>
+
+      <main id="resetCleanPage" data-page-id="resetClean" class="shell app-page workspace-page" hidden>
+        <div class="dashboard-header">
+          <div class="dashboard-title">
+            <h1 id="resetCleanHeaderTitle">Reset &amp; Clean</h1>
+            <p id="resetCleanHeaderSubtitle">Manage, clean, and reset your workspace data.</p>
+          </div>
+        </div>
+        
+        <div class="dashboard-grid">
+          
+          <section class="panel compact" aria-label="Auto Clean Expired Jobs" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Auto Clean Expired Jobs</span></h2>
+                <p>Scan your "Low Probability" and "Rejected" jobs to remove those that have expired.</p>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                <div class="control compact-control">
+                  <select id="autoCleanMode" aria-label="Scan mode">
+                    <option value="SKIP_ACTIVE" selected>Skip Recently Active</option>
+                    <option value="SCAN_ALL">Force Scan Everything</option>
+                  </select>
+                </div>
+                <button id="autoCleanExpiredButton" class="button secondary" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-trash"></use>
+                  </svg>Auto Clean</button>
+                <button id="stopAutoCleanButton" class="button secondary" type="button" style="display: none;"><svg class="icon icon-sm">
+                    <use href="#icon-ban"></use>
+                  </svg>Stop</button>
+              </div>
+            </div>
+            <div id="autoCleanProgressContainer" style="display: none; flex-direction: column; margin-top: 1rem; width: 100%;">
+               <span id="autoCleanStatus" style="font-size: 0.85rem; color: var(--muted); margin-bottom: 4px;">Starting...</span>
+               <div class="overall-progress-bar" style="height: 6px; width: 100%;">
+                 <div id="autoCleanProgressFill" class="overall-progress-fill" style="width: 0%;"></div>
+               </div>
+            </div>
+          </section>
+
+          <section id="autoCleanHistoryPanel" class="panel run-history-panel" aria-label="Auto Clean history" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Auto Clean Expired Logs</span></h2>
+                <p>Results from your recent cleanups.</p>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button id="toggleAutoCleanLogsButton" class="fresh-action" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-chevron-down"></use>
+                  </svg><span>Expand Logs</span></button>
+                <button id="refreshAutoCleanLogsButton" class="fresh-action" type="button"><svg class="icon icon-sm">
+                    <use href="#icon-refresh"></use>
+                  </svg>Refresh Logs</button>
+              </div>
+            </div>
+            <div id="autoCleanHistoryContent" class="terminal-container" style="max-height: 400px; overflow-y: auto; display: none; flex-direction: column; gap: 1rem;">
+               <em>No cleanup logs yet.</em>
+            </div>
+          </section>
+
+          <section class="panel compact" aria-label="Manual Wipes" style="margin-bottom: 1rem;">
+            <div class="section-head">
+              <div>
+                <h2><span class="section-title"><svg class="icon icon-lg">
+                      <use href="#icon-trash"></use>
+                    </svg>Manual Wipes</span></h2>
+                <p>Instantly reset parts of your workspace.</p>
+              </div>
+              <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <button id="wipeUnappliedButton" class="button secondary" type="button" style="color: #ff4d4f; border-color: #ff4d4f;">
+                  <svg class="icon icon-sm" style="stroke: #ff4d4f;">
+                    <use href="#icon-trash"></use>
+                  </svg>Wipe Unapplied Jobs
+                </button>
+                <button id="nukeBadJobsButton" class="button danger" type="button" style="background-color: var(--danger-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; transition: opacity 0.2s; box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);">
+                  <svg class="icon icon-sm"><use href="#icon-trash"></use></svg>Nuke Low Probability/Rejected Jobs
+                </button>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -1613,6 +1773,7 @@
                 <option value="unreviewed" selected>Unreviewed</option>
                 <option value="applied">Applied</option>
                 <option value="irrelevant">Irrelevant</option>
+                <option value="expired">Expired</option>
               </select>
             </div>
           </div>
@@ -1751,11 +1912,17 @@
               <label for="runWorkflow">Workflow</label>
               <select id="runWorkflow">
                 <option value="linkedin_multi_fresh">LinkedIn multi-query fresh</option>
+                <option value="linkedin_ai_fresh">LinkedIn AI-query fresh</option>
+                <option value="linkedin_ai">LinkedIn AI-query</option>
                 <option value="linkedin_single">LinkedIn single query</option>
                 <option value="linkedin_process_only">LinkedIn process-only</option>
                 <option value="indeed_description">Indeed description extraction</option>
                 <option value="validate_boards">Validate job boards (no applications)</option>
               </select>
+            </div>
+            <div id="runAiQueryCountContainer" class="control hidden">
+              <label for="runAiQueryCount">AI query count</label>
+              <input id="runAiQueryCount" type="number" min="1" max="50" value="10" />
             </div>
             <div class="control">
               <label for="runRadius">Radius</label>
@@ -1875,7 +2042,7 @@
     </section>
   </div>
 
-  <script type="module" src="dashboard/app.js?v=20260619-workplace"></script>
+    <script type="module" src="dashboard/app.js?v=20260716-async-font-loading"></script>
 </body>
 
 </html>

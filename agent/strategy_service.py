@@ -33,6 +33,19 @@ class StrategyService:
             multi_output_path=self.workspace.root / "high_success_probability_jobs_multi.json",
             run_history_path=self.workspace.root / "scout_run_history.json",
         )
+        # Get latest AI queries from history
+        from agent.scout_run_history import ScoutRunHistoryStore
+        latest_ai_queries = []
+        try:
+            history_store = ScoutRunHistoryStore(self.workspace.root / "scout_run_history.json")
+            for entry in reversed(history_store.entries):
+                ai_q = entry.get("ai_queries")
+                if ai_q and isinstance(ai_q, list):
+                    latest_ai_queries = ai_q
+                    break
+        except Exception:
+            pass
+
         return {
             "career_strategy": deepcopy(profile.get("career_strategy", {})),
             "preferences": self._public_preferences(preferences),
@@ -41,6 +54,7 @@ class StrategyService:
             "queries": queries,
             "query_groups": query_groups,
             "query_learning": query_learning,
+            "latest_ai_queries": latest_ai_queries,
         }
 
     def save(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -119,6 +133,8 @@ class StrategyService:
             "distance_miles": linkedin.get("distance_miles", 25),
             "fresh_scout": deepcopy(linkedin.get("fresh_scout", {})),
             "query_learning": deepcopy(linkedin.get("query_learning", {})),
+            "cover_letter_html": preferences.get("cover_letter_html", ""),
+            "cover_letter_css": preferences.get("cover_letter_css", ""),
         }
 
     def _merge_public_preferences(
@@ -165,7 +181,12 @@ class StrategyService:
             linkedin["distance_miles"] = int(self._number(incoming.get("distance_miles"), 25))
         if isinstance(incoming.get("fresh_scout"), dict):
             linkedin["fresh_scout"] = deepcopy(incoming["fresh_scout"])
-        if isinstance(incoming.get("query_learning"), dict):
+        if "cover_letter_html" in incoming:
+            preferences["cover_letter_html"] = str(incoming.get("cover_letter_html") or "")
+        if "cover_letter_css" in incoming:
+            preferences["cover_letter_css"] = str(incoming.get("cover_letter_css") or "")
+
+        if "query_learning" in incoming:
             linkedin["query_learning"] = deepcopy(incoming["query_learning"])
 
     def _load_queries(self) -> list[str]:

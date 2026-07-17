@@ -1008,6 +1008,17 @@ async def main():
         help="Keep query-file order instead of prioritizing queries using previous fresh-scout results.",
     )
     parser.add_argument(
+        "--ai-queries",
+        action="store_true",
+        help="Generate search queries dynamically using AI based on user profile and CV.",
+    )
+    parser.add_argument(
+        "--ai-query-count",
+        type=int,
+        default=10,
+        help="Number of search queries to generate when using AI queries.",
+    )
+    parser.add_argument(
         "--human-mode",
         action="store_true",
         help="Use slower, randomized human-like pacing to reduce bot-like behavior.",
@@ -1079,9 +1090,41 @@ async def main():
     workspace = UserWorkspace().ensure_initialized()
     explicit_query_file = bool(args.query_file)
     query_file = Path(args.query_file) if explicit_query_file else active_search_queries_path()
-    base_queries = _load_queries(query_file)
     effective_pages, page_label = _parse_max_pages(args.max_pages)
     profile, preferences = load_config()
+    if args.ai_queries:
+        from agent.scout_run_history import ScoutRunHistoryStore
+        from agent.brain import JobBrain
+        recent_queries = []
+        try:
+            history_store = ScoutRunHistoryStore()
+            seen_recent = set()
+            for entry in history_store.entries:
+                q = entry.get("query")
+                if q and isinstance(q, str):
+                    q_clean = q.strip().lower()
+                    if q_clean not in seen_recent:
+                        seen_recent.add(q_clean)
+                        recent_queries.append(q.strip())
+                        if len(recent_queries) >= 15:
+                            break
+        except Exception:
+            pass
+        
+        try:
+            brain = JobBrain(profile, preferences)
+            base_queries = brain.generate_ai_search_queries(
+                count=args.ai_query_count,
+                recent_queries=recent_queries,
+            )
+            if not base_queries:
+                raise ValueError("AI generated an empty list of queries")
+            console.print(f"[green]AI generated search queries:[/green] {base_queries}")
+        except Exception as exc:
+            console.print(f"[yellow]AI query generation failed ({exc}). Falling back to standard query file.[/yellow]")
+            base_queries = _load_queries(query_file)
+    else:
+        base_queries = _load_queries(query_file)
     explicit_scope_requested = any(
         value is not None
         for value in (args.search_market, args.radius_km, args.employment)
@@ -1172,8 +1215,10 @@ async def main():
             )
             query_plan = _legacy_query_plan(
                 queries,
-                search_goal="custom-file" if explicit_query_file else "legacy",
+                search_goal="ai-generated" if args.ai_queries else ("custom-file" if explicit_query_file else "legacy"),
             )
+            if args.ai_queries:
+                query_plan["ai_queries"] = list(base_queries)
             query_plan["query_learning"] = query_learning
     if resume_active:
         search_scope = normalize_search_scope(

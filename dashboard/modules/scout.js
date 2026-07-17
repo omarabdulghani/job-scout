@@ -3,6 +3,14 @@ const WORKFLOW_HINTS = Object.freeze({
     "Recommended daily workflow",
     "Searches the saved query list, skips known jobs, and keeps going when early pages are mostly duplicates.",
   ],
+  linkedin_ai_fresh: [
+    "AI generated queries (fresh)",
+    "Uses AI to dynamically generate a randomized, distinct list of job search queries based on your CV, strategy, and language settings, running in smart fresh mode.",
+  ],
+  linkedin_ai: [
+    "AI generated queries",
+    "Uses AI to dynamically generate a randomized, distinct list of job search queries based on your CV, strategy, and language settings.",
+  ],
   linkedin_single: [
     "Focused search",
     "Use this when you want one title or phrase only, such as product coordinator or UX designer.",
@@ -24,10 +32,12 @@ const WORKFLOW_HINTS = Object.freeze({
 export function workflowPresentation(workflow, { runControlAvailable, resumeAvailable }) {
   const validationOnly = workflow === "validate_boards";
   const needsQuery = ["linkedin_single", "indeed_description"].includes(workflow);
+  const needsAiQueryCount = ["linkedin_ai_fresh", "linkedin_ai"].includes(workflow);
   const supportsFresh = !["indeed_description", "linkedin_process_only", "validate_boards"].includes(workflow);
   return {
     validationOnly,
     needsQuery,
+    needsAiQueryCount,
     supportsFresh,
     disableLocation: validationOnly,
     disablePages: validationOnly,

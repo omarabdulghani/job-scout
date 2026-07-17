@@ -31,6 +31,7 @@ SEARCH_GOAL_LABELS = {
     "custom": "Custom",
     "custom-file": "Custom query file",
     "legacy": "Legacy query list",
+    "ai-generated": "AI Generated Queries",
 }
 INITIAL_COVERAGE_LIMITS = {
     "primary": 10,
