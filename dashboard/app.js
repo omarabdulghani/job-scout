@@ -1286,16 +1286,18 @@ const DEFAULT_THEME = initialTheme();
         const dialog = document.createElement("dialog");
         dialog.style.padding = "20px";
         dialog.style.borderRadius = "8px";
-        dialog.style.border = "1px solid #ccc";
-        dialog.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+        dialog.style.border = "1px solid var(--modal-border, #ccc)";
+        dialog.style.background = "var(--surface, #fff)";
+        dialog.style.color = "var(--ink, #1a1a1a)";
+        dialog.style.boxShadow = "var(--modal-shadow, 0 4px 12px rgba(0,0,0,0.15))";
         dialog.style.fontFamily = "system-ui, sans-serif";
         dialog.innerHTML = `
-          <h3 style="margin-top:0; margin-bottom: 15px; color: #1a1a1a;">Download Cover Letter</h3>
-          <p style="margin-bottom: 20px; color: #555; font-size: 14px;">Choose the format you want to download:</p>
+          <h3 style="margin-top:0; margin-bottom: 15px; color: var(--ink, #1a1a1a);">Download Cover Letter</h3>
+          <p style="margin-bottom: 20px; color: var(--muted, #555); font-size: 14px;">Choose the format you want to download:</p>
           <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button id="btn-cancel" style="padding: 8px 16px; border: 1px solid #ccc; background: transparent; border-radius: 4px; cursor: pointer;">Cancel</button>
-            <button id="btn-txt" style="padding: 8px 16px; border: 1px solid #2b5c9c; background: #f0f7ff; color: #2b5c9c; border-radius: 4px; cursor: pointer; font-weight: 600;">TXT (Text Only)</button>
-            <button id="btn-pdf" style="padding: 8px 16px; border: none; background: #2b5c9c; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">PDF (Full Layout)</button>
+            <button id="btn-cancel" style="padding: 8px 16px; border: 1px solid var(--line, #ccc); background: transparent; color: var(--ink, #333); border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="btn-txt" style="padding: 8px 16px; border: 1px solid var(--blue, #2b5c9c); background: var(--blue-soft, #f0f7ff); color: var(--blue, #2b5c9c); border-radius: 4px; cursor: pointer; font-weight: 600;">TXT (Text Only)</button>
+            <button id="btn-pdf" style="padding: 8px 16px; border: none; background: var(--blue, #2b5c9c); color: var(--primary-contrast, white); border-radius: 4px; cursor: pointer; font-weight: 600;">PDF (Full Layout)</button>
           </div>
         `;
         document.body.appendChild(dialog);
