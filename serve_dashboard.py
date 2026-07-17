@@ -106,6 +106,7 @@ class DashboardRunController:
 
     WORKFLOW_LABELS = {
         "linkedin_multi_fresh": "LinkedIn multi-query fresh",
+        "linkedin_multi": "LinkedIn multi-query (first time run)",
         "linkedin_ai_fresh": "LinkedIn AI-query fresh",
         "linkedin_ai": "LinkedIn AI-query",
         "linkedin_single": "LinkedIn single query",
@@ -405,9 +406,9 @@ class DashboardRunController:
             )
 
         command = [sys.executable]
-        if workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh", "linkedin_ai"}:
+        if workflow in {"linkedin_multi_fresh", "linkedin_multi", "linkedin_ai_fresh", "linkedin_ai"}:
             command += ["scout_jobs_multi.py", "--linkedin", "--location", location, "--max-pages", max_pages]
-            if workflow == "linkedin_multi_fresh":
+            if workflow in {"linkedin_multi_fresh", "linkedin_multi"}:
                 command += ["--search-goal", search_goal]
                 if search_goal == "custom":
                     if not search_groups:
@@ -444,7 +445,7 @@ class DashboardRunController:
         else:
             raise ValueError("Unsupported workflow")
 
-        if workflow in {"linkedin_multi_fresh", "linkedin_ai_fresh", "linkedin_ai", "linkedin_single", "linkedin_process_only"}:
+        if workflow in {"linkedin_multi_fresh", "linkedin_multi", "linkedin_ai_fresh", "linkedin_ai", "linkedin_single", "linkedin_process_only"}:
             command += [
                 "--search-market",
                 search_market,
