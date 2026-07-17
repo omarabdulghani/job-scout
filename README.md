@@ -1,4 +1,4 @@
-# Job Scout
+# Job Scout: Autonomous Sourcing Pipeline
 
 Job Scout is a local, GUI-first job-search workspace. It searches approved job
 boards, filters and scores jobs against a private profile, updates a live
@@ -9,7 +9,7 @@ recovery and development, but normal daily use does not require them.
 
 ## Project Motivation
 
-I found manual job hunting to be highly inefficient and opaque. I wanted to learn modern AI-assisted development (Cursor/Claude Code) while solving a real problem, so I built an automated agent to scrape, score, and track job applications based on my exact profile. Treating this like a full-scale product build allowed me to master AI prompting, state management, and API integrations.
+I found manual job hunting to be highly inefficient and opaque. I wanted to learn modern AI-assisted development (Cursor/Claude Code) while solving a real problem, so I built an autonomous data pipeline to parse, score, and track job applications based on my exact profile. Treating this like a full-scale product build allowed me to master AI prompting, state management, and API integrations.
 
 ## Tech Stack
 
@@ -22,7 +22,7 @@ I found manual job hunting to be highly inefficient and opaque. I wanted to lear
 
 - **Resilient AI-Scoring Engine (`agent/brain.py`)**: Built a modular AI evaluation engine that parses job descriptions and falls back to different API providers seamlessly if one hits a rate limit or fails.
 - **Privacy-First Architecture**: Designed a local operational SQLite database and isolated `user_workspace` to ensure sensitive API keys, cookies, and private CV metadata are never pushed to the public repo.
-- **Asynchronous Workflows**: Engineered multi-query asynchronous extraction pipelines using Playwright to bypass common DOM bottlenecks while maintaining accurate scraping parameters.
+- **Asynchronous Workflows**: Engineered multi-query asynchronous extraction pipelines using Playwright to bypass common DOM bottlenecks while maintaining accurate parsing parameters.
 
 ## Start The App
 
