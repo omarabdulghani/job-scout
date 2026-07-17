@@ -3568,7 +3568,7 @@ class JobBrain:
 
         return {"score": score, "apply": apply, "human_review": human_review, "reasons": reasons}
 
-    def generate_cover_letter_reasoning(self, job: dict) -> str:
+    def generate_cover_letter_reasoning(self, job: dict, language: str = "en") -> str:
         """Generate a 1-2 sentence compelling reason for applying, using the default scoring backend."""
         profile = self.profile
         name = f"{profile.get('personal', {}).get('first_name', '')} {profile.get('personal', {}).get('last_name', '')}"
@@ -3580,20 +3580,33 @@ class JobBrain:
         except Exception:
             recent_role_text = "Not specified"
 
-        prompt = f"""You are generating a short, impactful text snippet to complete a specific sentence in a cover letter.
-
-The sentence is:
-"I am particularly drawn to the {job.get('title')} role at {job.get('company')} because it allows me to [AI_FILL]."
-
-Your SOLE task is to generate the exact text to replace `[AI_FILL]`.
-
-CONSTRAINTS:
-1. Output ONLY the exact text that replaces `[AI_FILL]`. Do not include the rest of the sentence, quotation marks, or conversational filler.
+        if language == "nl":
+            sentence_prefix = f'"Ik voel me bijzonder aangetrokken tot de rol van {job.get("title")} bij {job.get("company")}, omdat deze mij de kans biedt om [AI_FILL]."'
+            constraints = f"""1. Output ONLY the exact text that replaces `[AI_FILL]`. Do not include the rest of the sentence, quotation marks, or conversational filler.
+2. DYNAMIC LANGUAGE MATCHING: Detect the language of the Job Description. If it is in Dutch, the output MUST be entirely in Dutch. 
+3. GRAMMAR ALIGNMENT (DUTCH): If writing in Dutch, the output must grammatically complete the "om te" structure. It should list actions followed by whole infinitives at the end of clauses (e.g., "advertentiecampagnes te beheren, content via het CMS te coördineren en resultaten te analyseren").
+4. STRICT TECHNICAL MATCHING: Prioritize the core operational tools, systems, and tasks explicitly mentioned in the Job Description (such as online advertentiecampagnes, CRM, websites/CMS, or social media). 
+5. STRICTLY BANNED WORDS/PHRASES (and their Dutch translations): "drive impactful results", "multidisciplinary background", "grow professionally", "add value", "contribute to the team", "success", "my skills", "my experience", "impactvolle resultaten", "meerwaarde leveren".
+6. Keep the output strictly between 15 and 25 words. Do not repeat the company name or position name in your output.
+7. Do NOT include a period at the end of your output. The template already provides the ending punctuation."""
+        else:
+            sentence_prefix = f'"I am particularly drawn to the {job.get("title")} role at {job.get("company")} because it allows me to [AI_FILL]."'
+            constraints = f"""1. Output ONLY the exact text that replaces `[AI_FILL]`. Do not include the rest of the sentence, quotation marks, or conversational filler.
 2. The output MUST start with a lowercase action verb (e.g., "leverage", "combine", "manage", "apply") so it grammatically completes "because it allows me to...".
 3. STRICT TECHNICAL MATCHING: Extract 2 to 3 highly specific keywords or core responsibilities explicitly requested in the Job Description. Then, match those EXACT requirements to the applicant's relevant background (whether it's their IT foundation, data analysis, or marketing skills). DO NOT mention tools from the applicant's background (like Figma, GA4, UX design, or SEO) UNLESS they directly solve a problem explicitly mentioned in the Job Description. Prioritize the core operational tools and systems the job actually asks for.
 4. STRICTLY BANNED WORDS/PHRASES: "drive impactful results", "multidisciplinary background", "grow professionally", "add value", "contribute to the team", "success", "my skills", "my experience".
 5. Keep the output strictly between 15 and 25 words. Do not repeat the company name or position name in your output.
-6. Do NOT include a period at the end of your output. The template already provides the ending punctuation.
+6. Do NOT include a period at the end of your output. The template already provides the ending punctuation."""
+
+        prompt = f"""You are generating a short, impactful text snippet to complete a specific sentence in a cover letter.
+
+The sentence is:
+{sentence_prefix}
+
+Your SOLE task is to generate the exact text to replace `[AI_FILL]`.
+
+CONSTRAINTS:
+{constraints}
 
 JOB:
 Title: {job.get('title')}

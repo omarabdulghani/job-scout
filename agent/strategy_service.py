@@ -135,6 +135,8 @@ class StrategyService:
             "query_learning": deepcopy(linkedin.get("query_learning", {})),
             "cover_letter_html": preferences.get("cover_letter_html", ""),
             "cover_letter_css": preferences.get("cover_letter_css", ""),
+            "cover_letter_nl_html": preferences.get("cover_letter_nl_html", ""),
+            "cover_letter_nl_css": preferences.get("cover_letter_nl_css", ""),
         }
 
     def _merge_public_preferences(
@@ -185,6 +187,10 @@ class StrategyService:
             preferences["cover_letter_html"] = str(incoming.get("cover_letter_html") or "")
         if "cover_letter_css" in incoming:
             preferences["cover_letter_css"] = str(incoming.get("cover_letter_css") or "")
+        if "cover_letter_nl_html" in incoming:
+            preferences["cover_letter_nl_html"] = str(incoming.get("cover_letter_nl_html") or "")
+        if "cover_letter_nl_css" in incoming:
+            preferences["cover_letter_nl_css"] = str(incoming.get("cover_letter_nl_css") or "")
 
         if "query_learning" in incoming:
             linkedin["query_learning"] = deepcopy(incoming["query_learning"])

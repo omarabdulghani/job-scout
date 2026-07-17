@@ -1177,6 +1177,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         if self._path_without_query() == "/api/generate-cover-letter":
             payload = self._read_json_body(max_bytes=1024)
             job_id = payload.get("job_id")
+            lang = payload.get("lang", "en")
             if not job_id:
                 self._send_json({"ok": False, "error": "Missing job_id"}, status=400)
                 return
@@ -1207,14 +1208,17 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 prefs = self._strategy_service().payload().get("preferences", {})
                 
                 brain = JobBrain(profile, prefs)
-                reasoning = brain.generate_cover_letter_reasoning(target_job)
+                reasoning = brain.generate_cover_letter_reasoning(target_job, language=lang)
                 
                 with OPERATIONAL_STORE_LOCK:
                     with open(dashboard_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     for job in data.get("jobs", []):
                         if job.get("job_id") == job_id:
-                            job["cover_letter"] = reasoning
+                            if lang == "nl":
+                                job["cover_letter_nl"] = reasoning
+                            else:
+                                job["cover_letter"] = reasoning
                             break
                     with open(dashboard_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)

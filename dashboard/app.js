@@ -467,6 +467,9 @@ const DEFAULT_THEME = initialTheme();
       runAiQueriesSummary: document.getElementById("runAiQueriesSummary"),
       runAiQueriesList: document.getElementById("runAiQueriesList"),
       runResumeMode: document.getElementById("runResumeMode"),
+      
+      // Cover Letter elements
+      coverLetterLangToggle: document.getElementById("coverLetterLangToggle"),
       startRunButton: document.getElementById("startRunButton"),
       refreshRunControlButton: document.getElementById("refreshRunControlButton"),
       runStatusText: document.getElementById("runStatusText"),
@@ -1141,11 +1144,74 @@ const DEFAULT_THEME = initialTheme();
       els.coverLetterLivePreview.innerHTML = fullHtml;
     }
 
+    let currentCoverLetterLang = "en";
+
     function renderCoverLetterEditor() {
       const payload = state.strategyPayload || {};
       const preferences = payload.preferences || {};
-      els.coverLetterHtmlInput.value = preferences.cover_letter_html || "";
-      els.coverLetterCssInput.value = preferences.cover_letter_css || "";
+      const defaultNlTemplate = `<div class="cover-letter-wrapper">
+  <header class="cl-header">
+    <div class="cl-profile-pic">
+      <img src="/cover%20letter%20assets/my%20picture.jpg" alt="Profile Picture">
+    </div>
+    <div class="cl-contact-info">
+      <h1>Omar Abdulghani</h1>
+      <ul>
+        <li>
+          <img src="/cover%20letter%20assets/phone%20icon.png" alt="Phone">
+          <span>+31 63 64 9 55 99</span>
+        </li>
+        <li>
+          <img src="/cover%20letter%20assets/email%20icon.png" alt="Email">
+          <span>omarabdulgh@gmail.com</span>
+        </li>
+        <li>
+          <img src="/cover%20letter%20assets/location%20icon.png" alt="Location">
+          <span>Grote Beer 138, Amstelveen</span>
+        </li>
+        <li>
+          <img src="/cover%20letter%20assets/website%20icon.png" alt="Website">
+          <span class="cl-link">Portfolio &nbsp;<a href="https://omarabdulghani.com/portfolio">omarabdulghani.com/portfolio</a></span>
+        </li>
+      </ul>
+    </div>
+  </header>
+
+  <main class="cl-body">
+    <p>Beste [Company Name] Hiring Team,</p>
+    
+    <p>Met veel enthousiasme solliciteer ik naar de functie van [Position Name] bij [Company Name]. Als recent afgestudeerde in International Creative Business aan de Inholland Hogeschool (Haarlem), met een gespecialiseerde minor in Digital Marketing van de Rotterdam Business School en een tweejarige basis in Informatietechnologie, breng ik een multidisciplinaire achtergrond mee in digital marketing, UX/UI-design, webdevelopment en AI-native development. Hierdoor ben ik in staat om ideeën vloeiend te vertalen naar praktische digitale oplossingen.</p>
+    
+    <p>Mijn ervaring combineert professioneel werk met multidisciplinaire projecten voor externe partners. Ik heb nauw samengewerkt met creatieve teams om merkbeleving en onderzoek te vertalen naar functionele oplossingen voor cliënten als Patronaat, De FilmHallen en Amstelhof. Dit wordt aangevuld door mijn Digital Marketing en Web Development stage bij Park Plaza Hotels Europe (PPHE). In deze rol heb ik Figma UX/UI-concepten ontworpen die bedrijfsbreed zijn geïmplementeerd, gelokaliseerde content gecoptimaliseerd en dagelijkse CMS- en HTML-taken beheerd, wat mijn inzicht in hoe lay-out, consistentie en technische uitvoering de gebruikerservaring vormgeven, sterk heeft verdiept.</p>
+    
+    <p>Daarnaast bouw ik actief aan projecten met behulp van een AI-native development workflow. Door tools als Cursor, Claude en Antigravity in te zetten, kan ik functionele webapplicaties, automatiseringstools en interactieve games snel prototypen, ontwikkelen en uitrollen. Deze workflow stelt me in staat om snel te itereren, technische problemen efficiënt op te lossen en snel resultaat te leveren.</p>
+    
+    <p>U kunt al mijn projecten bekijken in mijn portfolio op <a href="https://omarabdulghani.com/portfolio">https://omarabdulghani.com/portfolio</a></p>
+    
+    <p>Ik voel me bijzonder aangetrokken tot de rol van [Position Name] bij [Company Name], omdat deze mij de kans biedt om [AI_FILL]. Ik ben er van overtuigd dat mijn combinatie van creativiteit, technische expertise en gestructureerd probleemoplossend vermogen een directe meerwaarde zal zijn voor uw team.</p>
+    
+    <p>Ik woon in Amstelveen, ben tweetalig in het Engels en Arabisch, en heb een intermediate (B1) lokaal taalniveau in het Nederlands. Daarnaast ben ik volledig bevoegd om in Nederland te werken zonder dat visumsponsoring vereist is.</p>
+    
+    <p>Hartelijk dank voor het overwegen van mijn sollicitatie. Ik kijk uit naar de mogelijkheid om te bespreken hoe mijn achtergrond en vaardigheden kunnen bijdragen aan uw team.</p>
+    
+    <p>Met vriendelijke groet,</p>
+    <br>
+    <p>Omar Abdulghani</p>
+  </main>
+</div>`;
+
+      if (currentCoverLetterLang === "nl") {
+          els.coverLetterHtmlInput.value = preferences.cover_letter_nl_html || defaultNlTemplate;
+          els.coverLetterCssInput.value = preferences.cover_letter_nl_css || preferences.cover_letter_css || "";
+          els.coverLetterLangToggle.textContent = "NL";
+          els.coverLetterLangToggle.classList.replace("secondary", "primary");
+      } else {
+          els.coverLetterHtmlInput.value = preferences.cover_letter_html || "";
+          els.coverLetterCssInput.value = preferences.cover_letter_css || "";
+          els.coverLetterLangToggle.textContent = "EN";
+          els.coverLetterLangToggle.classList.replace("primary", "secondary");
+      }
+      
       updateCoverLetterPreview();
       
       els.coverLetterStatus.style.display = "none";
@@ -1156,14 +1222,39 @@ const DEFAULT_THEME = initialTheme();
         els.coverLetterCssInput.addEventListener('input', updateCoverLetterPreview);
         els.coverLetterHtmlInput.dataset.listenersBound = "true";
       }
+      
+      if (els.coverLetterLangToggle && !els.coverLetterLangToggle.dataset.listenerBound) {
+        els.coverLetterLangToggle.addEventListener("click", () => {
+          // Save current text before switching
+          const payload = state.strategyPayload || {};
+          payload.preferences = payload.preferences || {};
+          if (currentCoverLetterLang === "nl") {
+              payload.preferences.cover_letter_nl_html = els.coverLetterHtmlInput.value;
+              payload.preferences.cover_letter_nl_css = els.coverLetterCssInput.value;
+              currentCoverLetterLang = "en";
+          } else {
+              payload.preferences.cover_letter_html = els.coverLetterHtmlInput.value;
+              payload.preferences.cover_letter_css = els.coverLetterCssInput.value;
+              currentCoverLetterLang = "nl";
+          }
+          renderCoverLetterEditor();
+        });
+        els.coverLetterLangToggle.dataset.listenerBound = "true";
+      }
     }
 
     async function saveCoverLetter() {
       if (!state.strategyPayload) return;
       const payload = JSON.parse(JSON.stringify(state.strategyPayload));
       payload.preferences = payload.preferences || {};
-      payload.preferences.cover_letter_html = els.coverLetterHtmlInput.value;
-      payload.preferences.cover_letter_css = els.coverLetterCssInput.value;
+      
+      if (currentCoverLetterLang === "nl") {
+          payload.preferences.cover_letter_nl_html = els.coverLetterHtmlInput.value;
+          payload.preferences.cover_letter_nl_css = els.coverLetterCssInput.value;
+      } else {
+          payload.preferences.cover_letter_html = els.coverLetterHtmlInput.value;
+          payload.preferences.cover_letter_css = els.coverLetterCssInput.value;
+      }
       
       els.saveCoverLetterButton.disabled = true;
       els.coverLetterStatus.style.display = "block";
@@ -1182,12 +1273,150 @@ const DEFAULT_THEME = initialTheme();
         renderCoverLetterEditor();
         els.coverLetterStatus.textContent = "Cover Letter templates saved successfully.";
         els.coverLetterStatus.className = "profile-status success";
-      } catch (error) {
+} catch (error) {
         els.coverLetterStatus.textContent = safe(error.message) || "Cover Letter could not be saved.";
         els.coverLetterStatus.className = "profile-status error";
       } finally {
         els.saveCoverLetterButton.disabled = false;
       }
+    }
+
+    function promptDownloadFormat() {
+      return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.style.padding = "20px";
+        dialog.style.borderRadius = "8px";
+        dialog.style.border = "1px solid #ccc";
+        dialog.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+        dialog.style.fontFamily = "system-ui, sans-serif";
+        dialog.innerHTML = `
+          <h3 style="margin-top:0; margin-bottom: 15px; color: #1a1a1a;">Download Cover Letter</h3>
+          <p style="margin-bottom: 20px; color: #555; font-size: 14px;">Choose the format you want to download:</p>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="btn-cancel" style="padding: 8px 16px; border: 1px solid #ccc; background: transparent; border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="btn-txt" style="padding: 8px 16px; border: 1px solid #2b5c9c; background: #f0f7ff; color: #2b5c9c; border-radius: 4px; cursor: pointer; font-weight: 600;">TXT (Text Only)</button>
+            <button id="btn-pdf" style="padding: 8px 16px; border: none; background: #2b5c9c; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">PDF (Full Layout)</button>
+          </div>
+        `;
+        document.body.appendChild(dialog);
+        
+        dialog.querySelector("#btn-cancel").addEventListener("click", () => { dialog.close(); resolve(null); });
+        dialog.querySelector("#btn-txt").addEventListener("click", () => { dialog.close(); resolve("txt"); });
+        dialog.querySelector("#btn-pdf").addEventListener("click", () => { dialog.close(); resolve("pdf"); });
+        
+        dialog.addEventListener("close", () => {
+          dialog.remove();
+          if (!dialog.returnValue) resolve(null);
+        });
+        
+        dialog.showModal();
+      });
+    }
+
+    function extractTextFromBody(htmlString) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlString, "text/html");
+      const bodyEl = doc.querySelector(".cl-body");
+      if (!bodyEl) return doc.body.innerText.trim();
+      
+      const paragraphs = bodyEl.querySelectorAll("p");
+      if (paragraphs.length > 0) {
+        return Array.from(paragraphs).map(p => p.innerText.trim()).join("\n\n");
+      }
+      return bodyEl.innerText.trim();
+    }
+
+    function downloadTxtFile(content, filename) {
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadCoverLetterNlButton(job) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "job-action danger-text"; // Red text styling
+      setIconText(btn, "file-text", "Cover Letter NL");
+      btn.title = "Download Dutch Cover Letter PDF";
+      btn.addEventListener("click", async () => {
+        const format = await promptDownloadFormat();
+        if (!format) return;
+        
+        btn.disabled = true;
+        if (job.cover_letter_nl) {
+          setIconText(btn, "clock", format === "txt" ? "Generating TXT..." : "Building PDF...");
+        } else {
+          setIconText(btn, "clock", "Generating AI Snippet...");
+        }
+        
+        try {
+          let preferences = state.strategyPayload?.preferences || null;
+          if (!preferences || !preferences.cover_letter_nl_html) {
+            const resp = await fetch('/api/strategy?t=' + Date.now(), { cache: 'no-store' });
+            const fresh = await resp.json();
+            state.strategyPayload = fresh;
+            preferences = fresh.preferences || {};
+          }
+
+          const htmlTemplate = preferences.cover_letter_nl_html || "";
+          const cssTemplate  = preferences.cover_letter_nl_css  || "";
+
+          if (!htmlTemplate) {
+            alert("Dutch Cover letter HTML template is empty. Please set it in the Cover Letter tab.");
+            return;
+          }
+
+          if (!job.cover_letter_nl) {
+            const apiResp = await fetch('/api/generate-cover-letter', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.job_id, lang: 'nl' })
+            });
+            const apiData = await apiResp.json();
+            if (apiData.ok && apiData.cover_letter) {
+              job.cover_letter_nl = apiData.cover_letter;
+            } else {
+              throw new Error(apiData.error || "Failed to generate Dutch cover letter AI snippet");
+            }
+          }
+
+          const safeCompany = safe(job.company);
+          const safeTitle = safe(job.title);
+          
+          let filledHtml = htmlTemplate
+            .replace(/\[COMPANY NAME\]/g, safeCompany)
+            .replace(/\[POSITION NAME\]/g, safeTitle)
+            .replace(/\[Company Name\]/g, safeCompany)
+            .replace(/\[Position Name\]/g, safeTitle)
+            .replace(/\[something specific about the company, team, product, mission, or role\]/g, job.cover_letter_nl || "")
+            .replace(/\[AI_FILL\]/g, job.cover_letter_nl || "");
+            
+          const profile = state.profilePayload || {};
+          const candidateName = profile.personal ? `${profile.personal.first_name} ${profile.personal.last_name}` : "Omar Abdulghani";
+          const filenameBase = `${candidateName} - ${safeCompany}, ${safeTitle}, Cover Letter (NL)`;
+
+          if (format === "txt") {
+            const txtContent = extractTextFromBody(filledHtml);
+            downloadTxtFile(txtContent, filenameBase + ".txt");
+          } else {
+            await generateCoverLetterPdf(filledHtml, cssTemplate, filenameBase + ".pdf");
+          }
+          
+        } catch (error) {
+          console.error("Cover Letter NL Download error:", error);
+          alert("Error: " + error.message);
+        } finally {
+          btn.disabled = false;
+          setIconText(btn, "file-text", "Cover Letter NL");
+        }
+      });
+      return btn;
     }
 
     function generateCoverLetterPdf(filledHtml, cssTemplate, filename) {
@@ -4110,6 +4339,7 @@ const DEFAULT_THEME = initialTheme();
         actionButton("Expired", "expired", job, status, "Mark job as expired")
       );
       row.append(downloadCoverLetterButton(job));
+      row.append(downloadCoverLetterNlButton(job));
       return row;
     }
 
@@ -4118,12 +4348,15 @@ const DEFAULT_THEME = initialTheme();
       btn.type = "button";
       btn.className = "job-action";
       setIconText(btn, "file-text", "Cover Letter");
-      btn.title = "Download Cover Letter PDF";
+      btn.title = "Download Cover Letter";
       btn.addEventListener("click", async () => {
+        const format = await promptDownloadFormat();
+        if (!format) return;
+        
         // Immediately disable the button and show accurate progress state
         btn.disabled = true;
         if (job.cover_letter) {
-          setIconText(btn, "clock", "Building PDF...");
+          setIconText(btn, "clock", format === "txt" ? "Generating TXT..." : "Building PDF...");
         } else {
           setIconText(btn, "clock", "Generating AI Snippet...");
         }
@@ -4174,9 +4407,14 @@ const DEFAULT_THEME = initialTheme();
           const safeCompany = (job.company || "Company").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
           const safeTitle = (job.title || "Position").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
           const candidateName = (window.globalData && window.globalData.candidate_name) || "[Candidate Name]";
-          const pdfFilename = `${candidateName} - ${safeCompany}, ${safeTitle}, Cover Letter.pdf`;
+          const filenameBase = `${candidateName} - ${safeCompany}, ${safeTitle}, Cover Letter`;
           
-          await generateCoverLetterPdf(filledHtml, cssTemplate, pdfFilename);
+          if (format === "txt") {
+            const txtContent = extractTextFromBody(filledHtml);
+            downloadTxtFile(txtContent, filenameBase + ".txt");
+          } else {
+            await generateCoverLetterPdf(filledHtml, cssTemplate, filenameBase + ".pdf");
+          }
         } catch (err) {
           console.error("PDF generation failed:", err);
           alert("PDF generation failed: " + err.message);
