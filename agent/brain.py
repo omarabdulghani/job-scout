@@ -984,7 +984,7 @@ class JobBrain:
                 if search_scope.get("search_market", "netherlands") == "netherlands"
                 else f"Conditional relocation to {market}; weigh role quality, salary, location, and working arrangement"
             ),
-            "portfolio_url": personal.get("portfolio_url", "https://www.omarabdulghani.com"),
+            "portfolio_url": personal.get("portfolio_url", "https://www.yourportfolio.com"),
             "client_project_experience": self.profile.get("client_project_experience", ""),
             "pphe_internship_detail": self._compact_scoring_text(
                 (self.profile.get("work_experience", [{}])[0] or {}).get("description", ""),
@@ -1006,10 +1006,10 @@ class JobBrain:
     def _build_opportunity_scope_summary(self) -> dict:
         search_scope = dict(self.preferences.get("_runtime_search_scope") or {})
         return {
-            "primary_goal": "Find professional starter opportunities that match Omar's academic merit, IT foundation, and creative skills.",
+            "primary_goal": "Find professional starter opportunities that match the candidate's academic merit, IT foundation, and creative skills.",
             "not_perfect_match_required": True,
             "do_not_limit_to_design_roles": True,
-            "favorite_domain_not_required": "The job does not need to be Omar's favorite design domain if it is realistic, professional, and career-building.",
+            "favorite_domain_not_required": "The job does not need to be the candidate's favorite design domain if it is realistic, professional, and career-building.",
             "natural_strength_roles": [
                 "UX/UI/product/digital design",
                 "brand/creative strategy",
@@ -1056,7 +1056,7 @@ class JobBrain:
             "lower_score_but_not_auto_reject": [
                 "recruitment/BDR/outbound sales unless low-pressure, English-friendly, training-based, and stable",
                 "heavy performance marketing or pure SEO",
-                "basic administrative, receptionist, retail sales assistant, front desk, or general customer support roles (score low, below 50, since they do not build on Omar's university degree)",
+                "basic administrative, receptionist, retail sales assistant, front desk, or general customer support roles (score low, below 50, since they do not build on the candidate's university degree)",
                 "low-paid internships",
             ],
             "junior_management_rule": "manager/ownership wording is OK unless clear senior evidence appears",
@@ -1330,7 +1330,7 @@ class JobBrain:
                 "candidate_profile": self._build_candidate_scoring_summary(query, ideal_text),
                 "opportunity_scope": self._build_opportunity_scope_summary(),
                 "scoring_rubric": {
-                    "goal": "realistic opportunity quality for Omar's future",
+                    "goal": "realistic opportunity quality for the candidate's future",
                     "score_dimensions": [
                         "realistic interview chance",
                         "career-growth value",
@@ -1370,7 +1370,7 @@ class JobBrain:
                 "search_query": query,
             },
             "scoring_rubric": {
-                "primary_goal": "realistic opportunity quality for Omar's future",
+                "primary_goal": "realistic opportunity quality for the candidate's future",
                 "score_dimensions": [
                     "realistic interview chance",
                     "career-growth value",
@@ -1865,7 +1865,7 @@ class JobBrain:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
         if backend == "openrouter":
-            headers["HTTP-Referer"] = "https://github.com/omarabdulghani/job-hunt"
+            headers["HTTP-Referer"] = "https://github.com/yourusername/job-hunt"
             headers["X-Title"] = "Job Hunt Agent"
         return headers
 
@@ -4086,7 +4086,7 @@ Name: {self.profile['personal']['first_name']} {self.profile['personal']['last_n
 Email: {self.profile['personal']['email']}
 Phone: {self.profile['personal']['phone']}
 Location: {self.profile['personal']['location']['city']}, {self.profile['personal']['location']['country']}
-CV path: {self.profile.get('cv_path', 'cv/Omar Abdulghani - CV Resume (English).pdf')}
+CV path: {self.profile.get('cv_path', 'cv/Your Name - CV Resume.pdf')}
 Target salary: {self.profile['salary']['target']} {self.profile['salary']['currency']}
 Skills: {', '.join(self.profile.get('skills', [])[:12])}
 Current role: {self.profile['work_experience'][0]['title']} at {self.profile['work_experience'][0]['company']}

@@ -27,7 +27,7 @@ from agent.user_workspace import load_user_config
 load_workspace_env()
 console = Console()
 
-DEFAULT_CV_PATH = Path("cv/Omar Abdulghani - CV Resume (English).pdf")
+DEFAULT_CV_PATH = Path("cv/Your Name - CV Resume (English).pdf")
 REQUIRED_PROFILE_FIELDS = [
     "personal.first_name",
     "personal.last_name",

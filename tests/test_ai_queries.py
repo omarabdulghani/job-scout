@@ -51,7 +51,7 @@ class AiQueriesTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tempdir:
                     root = Path(tempdir)
                     strategy_file = root / "job_strategy.txt"
-                    strategy_file.write_text("Omar's Opportunity-First strategy details", encoding="utf-8")
+                    strategy_file.write_text("Candidate's Opportunity-First strategy details", encoding="utf-8")
                     
                     mock_ws.return_value.strategy_path = strategy_file
                     
@@ -66,7 +66,7 @@ class AiQueriesTests(unittest.TestCase):
                         # Check mock parameters to see if strategy and exclusions were included in prompt
                         prompt_arg = mock_scoring.call_args[0][0]
                         self.assertIn("John Doe", prompt_arg)
-                        self.assertIn("Omar's Opportunity-First strategy", prompt_arg)
+                        self.assertIn("Candidate's Opportunity-First strategy", prompt_arg)
                         self.assertIn("customer support", prompt_arg)
                         self.assertIn("dutch_nuanced", prompt_arg)
                         

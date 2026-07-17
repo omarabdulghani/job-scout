@@ -546,7 +546,7 @@ class JobAgent:
                     params.get("selector", ""),
                     params.get("path") or self.profile.get(
                         "cv_path",
-                        "cv/Omar Abdulghani - CV Resume (English).pdf",
+                        "cv/Your Name - CV Resume (English).pdf",
                     )
                 )
             elif action == "scroll_down":

@@ -4173,7 +4173,7 @@ const DEFAULT_THEME = initialTheme();
 
           const safeCompany = (job.company || "Company").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
           const safeTitle = (job.title || "Position").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-          const pdfFilename = `Omar Abdulghani - ${safeCompany}, ${safeTitle}, Cover Letter.pdf`;
+          const pdfFilename = `[Candidate Name] - ${safeCompany}, ${safeTitle}, Cover Letter.pdf`;
           
           await generateCoverLetterPdf(filledHtml, cssTemplate, pdfFilename);
         } catch (err) {

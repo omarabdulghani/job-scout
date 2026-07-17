@@ -13,7 +13,7 @@ class ApplicationAssistantServiceTests(unittest.TestCase):
         (root / "config" / "profile.json").write_text(
             """{
               "cv_path": "",
-              "personal": {"first_name": "Omar", "last_name": "Abdulghani"},
+              "personal": {"first_name": "John", "last_name": "Doe"},
               "about_me": "Creative business graduate with digital experience.",
               "skills": ["Figma", "Research", "Content"],
               "work_experience": [{"title": "Digital Marketing Intern", "company": "PPHE"}],

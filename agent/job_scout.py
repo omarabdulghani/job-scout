@@ -4690,7 +4690,7 @@ class LinkedInJobScout:
             if lower >= 5:
                 return {
                     "reject": True,
-                    "reason": f"Role requires {phrase}, which is above Omar's early-career range",
+                    "reason": f"Role requires {phrase}, which is above the candidate's early-career range",
                 }
             if lower >= 4 and (strict_context or senior_or_domain_heavy_context):
                 return {
@@ -5365,7 +5365,7 @@ class LinkedInJobScout:
         if fluent_marker:
             return [f"Dutch risk kept for AI review: {fluent_marker}"]
         if self._contains_term(combined_text, "dutch and english"):
-            return ["Dutch and English mentioned; Omar is English-fluent and B1/intermediate Dutch"]
+            return ["Dutch and English mentioned; Candidate is English-fluent and B1/intermediate Dutch"]
         return []
 
     def _contains_netherlands_marker(self, text: str) -> bool:
