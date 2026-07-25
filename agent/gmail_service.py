@@ -129,13 +129,26 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
                 company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
 
     # 7. Clean summary
-    if company and summary == subject and category in ["Applied", "Interview", "Rejected"]:
+    if company and (summary == subject or not summary or summary == "Email received."):
         if category == "Applied":
             summary = f"Application confirmed for a role at {company}."
         elif category == "Interview":
             summary = f"{company} invited you to an interview."
         elif category == "Rejected":
             summary = f"{company} decided not to move forward with your application."
+        elif category == "Other":
+            if any(k in text for k in ["security code", "login code", "verification code", "password"]):
+                summary = f"Security code / verification received from {company}."
+            elif any(k in text for k in ["report", "received your report"]):
+                summary = f"Report acknowledgment received from {company}."
+            elif any(k in text for k in ["complete the application", "action required", "complete your"]):
+                summary = f"Application action required by {company}."
+            else:
+                summary = f"Notification / update received from {company}."
+        elif category == "Personal":
+            summary = f"Personal correspondence or notice from {company}."
+        elif category == "Promotions":
+            summary = f"Promotional update or offer from {company}."
 
     analysis["category"] = category
     analysis["company_name"] = company
@@ -211,15 +224,17 @@ class GmailService:
                     
                     old_cat = analysis.get("category")
                     old_comp = analysis.get("company_name")
+                    old_sum = analysis.get("summary")
                     
                     body_text = data.get("body", "") or snippet or ""
                     analysis = _refine_email_analysis(subject or "", sender or "", recipient or "", body_text, is_outbound, analysis)
                     new_cat = analysis.get("category", "Other")
                     new_comp = analysis.get("company_name")
+                    new_sum = analysis.get("summary")
                     
                     data["analysis"] = analysis
                     
-                    if old_cat != new_cat or old_comp != new_comp:
+                    if old_cat != new_cat or old_comp != new_comp or old_sum != new_sum:
                         new_payload = json.dumps(data)
                         conn.execute("UPDATE emails SET category = ?, company_name = ?, payload_json = ? WHERE message_id = ?",
                                      (new_cat, new_comp, new_payload, msg_id))

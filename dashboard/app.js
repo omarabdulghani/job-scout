@@ -7023,8 +7023,8 @@ const DEFAULT_THEME = initialTheme();
         
         const cat = (email.analysis && email.analysis.category) || "Other";
         let summaryText = (email.analysis && email.analysis.summary) || "";
-        if (!summaryText || summaryText === email.subject) {
-            summaryText = email.snippet || (email.body ? email.body.substring(0, 150) + "..." : "");
+        if (!summaryText) {
+            summaryText = email.subject || email.snippet || "";
         }
         
         const { displaySender, initialsSource } = getEmailDisplayInfo(email);
