@@ -6797,6 +6797,47 @@ const DEFAULT_THEME = initialTheme();
       return senderStr.trim();
     };
 
+    const normalizeBrandName = (name) => {
+        if (!name || typeof name !== 'string') return "";
+        let clean = name.trim();
+        if (!clean || clean.toLowerCase() === 'null' || clean.toLowerCase() === 'none') return "";
+        
+        const map = {
+            "rechtspraak": "De Rechtspraak",
+            "de rechtspraak": "De Rechtspraak",
+            "bol": "Bol",
+            "bol.com": "Bol",
+            "nike": "NIKE",
+            "nike, inc.": "NIKE",
+            "nike inc": "NIKE",
+            "yardi": "Yardi",
+            "yardi systems": "Yardi",
+            "jaarbeurs": "Jaarbeurs",
+            "royal dutch jaarbeurs": "Jaarbeurs",
+            "déhora consultancy": "Déhora",
+            "dehora consultancy": "Déhora",
+            "déhora": "Déhora",
+            "dehora": "Déhora",
+            "excellence recruitment": "Excellence AG",
+            "excellence ag": "Excellence AG",
+            "het abc": "Het ABC",
+            "tool2match": "Tool2Match",
+            "gemeente amstelveen": "Gemeente Amstelveen",
+            "axioncontinu": "AxionContinu",
+            "hunkemoller": "Hunkemöller",
+            "hunkemöller": "Hunkemöller"
+        };
+        
+        const lower = clean.toLowerCase();
+        if (map[lower]) return map[lower];
+        
+        clean = clean.replace(/(\s+|,)+(Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$/i, "").trim();
+        if (clean === clean.toLowerCase() && clean.length > 1) {
+            clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+        }
+        return clean;
+    };
+
     const _normStr = (str) => str ? str.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
     let knownCompanies = new Map();
 
@@ -6848,13 +6889,10 @@ const DEFAULT_THEME = initialTheme();
         const data = await res.json();
         allEmails = data.emails || [];
         
-        // Clean up LLM artifacts
+        // Clean up LLM artifacts and normalize company names
         allEmails.forEach(e => {
             if (e.analysis && typeof e.analysis.company_name === 'string') {
-                const ln = e.analysis.company_name.toLowerCase();
-                if (ln === 'null' || ln === 'none') {
-                    e.analysis.company_name = "";
-                }
+                e.analysis.company_name = normalizeBrandName(e.analysis.company_name);
             }
         });
         
@@ -7112,10 +7150,10 @@ const DEFAULT_THEME = initialTheme();
         const companyEl = card.querySelector(".job-company");
         if (!titleEl || !companyEl) return;
         
-        const company = companyEl.textContent.trim().toLowerCase();
+        const company = normalizeBrandName(companyEl.textContent).toLowerCase();
         
         // Find matching email
-        const matchingEmail = emails.find(e => e.analysis && e.analysis.company_name && e.analysis.company_name.toLowerCase() === company);
+        const matchingEmail = emails.find(e => e.analysis && e.analysis.company_name && normalizeBrandName(e.analysis.company_name).toLowerCase() === company);
         
         if (matchingEmail) {
           const oldBadge = titleEl.querySelector(".gmail-badge");

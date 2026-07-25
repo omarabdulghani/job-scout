@@ -31,6 +31,110 @@ def _clean_header(header_val: str) -> str:
     except Exception:
         return str(header_val).strip()
 
+def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict) -> dict:
+    category = analysis.get("category", "Other")
+    company = analysis.get("company_name")
+    summary = analysis.get("summary", subject)
+    
+    text = f"{subject} {sender} {recipient} {body[:1000]}".lower()
+
+    # 1. Expanded ATS & Person Name Ban List
+    ats_names = {
+        "greenhouse", "lever", "workday", "homerun", "recruitee", "dayforce", "hroffice", 
+        "no-reply", "noreply", "hr account", "werken", "hr admin", "testgorilla", 
+        "luna van der vos", "marieke altenburg", "maaike leemkuil", "ashby", 
+        "smartrecruiters", "jobvite", "personio", "workable", "icims", "successfactors",
+        "rutgers, gerwin", "jim goslinga", "mendon people", "pinpoint"
+    }
+    
+    if company and (any(ats in company.lower() for ats in ats_names) or "omar abdulghani" in company.lower()):
+        company = None
+
+    # 2. Heuristic Category Overrides (High Priority)
+    if any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further", "isn't progressing"]):
+        category = "Rejected"
+    elif any(k in text for k in [
+        "login code", "security code", "verification code", "new account", "account creation", 
+        "account created", "applicant registration", "set your new password", "reset your password", 
+        "password for the portal", "je persoonlijke omgeving", "inschrijving website", 
+        "can we keep your information", "gdpr", "bewaartermijn", "gegevens bewaren"
+    ]):
+        category = "Other"
+    elif any(k in text for k in ["thank you for applying", "thanks for applying", "application received", "application confirmed", "bedankt voor je sollicitatie", "bevestiging sollicitatie", "your application at", "your application to", "we have received your application", "application submitted", "started your job application", "projectcoördinator", "solliciteer ik", "sollicitatie naar", "mijn sollicitatie", "graag solliciteer"]):
+        if category not in ["Rejected", "Interview"]:
+            category = "Applied"
+    elif any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link", "vervolg op ons gesprek"]):
+        if category not in ["Rejected", "Other"]:
+            category = "Interview"
+    elif "samsung" in text and "survey" in text:
+        category = "Applied"
+    elif "dayforce" in text and any(k in text for k in ["login code", "new account", "registration"]):
+        category = "Other"
+        company = None
+
+    # 3. Prevent "gemeente" collision with job keywords
+    if category == "Personal" and any(k in text for k in ["sollicitatie", "gesprek", "cv", "portfolio", "kennismaking", "interview", "application"]):
+        category = "Interview" if any(k in text for k in ["gesprek", "kennismaking", "interview"]) else "Applied"
+
+    # 4. Domain-to-Company & Subject Override Mapping
+    domain_map = {
+        "hetabc.nl": "Het ABC",
+        "tool2match.nl": "Tool2Match",
+        "amstelveen.nl": "Gemeente Amstelveen",
+        "excellence.ag": "Excellence AG",
+        "excellence.de": "Excellence AG",
+        "thdv.nl": "Tot Heil des Volks",
+        "samsung.com": "Samsung",
+        "deptagency.com": "DEPT",
+        "jaarbeurs.nl": "Jaarbeurs",
+        "hunkemoller": "Hunkemöller",
+        "axioncontinu.nl": "AxionContinu",
+        "lvnl.nl": "Luchtverkeersleiding Nederland"
+    }
+    
+    target_email = recipient if is_outbound else sender
+    for dom, canonical_comp in domain_map.items():
+        if dom in target_email.lower() or dom in text:
+            company = canonical_comp
+            break
+
+    if "hunkemöller" in text or "hunkemoller" in text or "hkm@myworkday" in target_email.lower():
+        company = "Hunkemöller"
+        if category in ["Other", "Personal"]:
+            category = "Applied"
+
+    # 5. Extract company from regex if still missing
+    if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
+        for scan_text in [subject, body[:600]]:
+            m_comp = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text, re.IGNORECASE)
+            if m_comp:
+                cand = m_comp.group(1).replace('®', '').replace('™', '').strip()
+                if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
+                    company = cand
+                    break
+
+    # 6. Fallback sender name extraction
+    if not company and category in ["Applied", "Interview", "Rejected"]:
+        sender_clean = _clean_header(target_email)
+        if "<" in sender_clean:
+            name_part = sender_clean.split("<")[0].replace('"', '').strip()
+            if name_part and not any(ats in name_part.lower() for ats in ats_names) and "omar abdulghani" not in name_part.lower():
+                company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
+
+    # 7. Clean summary
+    if company and summary == subject and category in ["Applied", "Interview", "Rejected"]:
+        if category == "Applied":
+            summary = f"Application confirmed for a role at {company}."
+        elif category == "Interview":
+            summary = f"{company} invited you to an interview."
+        elif category == "Rejected":
+            summary = f"{company} decided not to move forward with your application."
+
+    analysis["category"] = category
+    analysis["company_name"] = company
+    analysis["summary"] = summary
+    return analysis
+
 def _fallback_analysis(subject: str, sender: str, body: str) -> dict:
     text = f"{subject} {sender} {body}".lower()
     
@@ -48,42 +152,7 @@ def _fallback_analysis(subject: str, sender: str, body: str) -> dict:
     else:
         cat = "Other"
 
-    # 2. Company Name heuristics
-    company = None
-    ats_names = {"greenhouse", "lever", "workday", "homerun", "recruitee", "dayforce", "hroffice", "no-reply", "noreply", "hr account", "werken"}
-    
-    # Try extracting company from body or subject e.g. "bij Praxis", "at Déhora"
-    for scan_text in [subject, body[:600]]:
-        m = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at)\s+([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n)', scan_text)
-        if m:
-            cand = m.group(1).strip()
-            if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
-                company = cand
-                break
-
-    # If still not found, try extracting from sender e.g. "Accenture Careers <...>" -> "Accenture"
-    if not company:
-        sender_clean = _clean_header(sender)
-        if "<" in sender_clean:
-            name_part = sender_clean.split("<")[0].replace('"', '').strip()
-            if name_part and not any(ats in name_part.lower() for ats in ats_names) and "omar abdulghani" not in name_part.lower():
-                company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
-
-    # 3. Clean summary
-    if company and cat == "Applied":
-        summary = f"Application confirmed for a role at {company}."
-    elif company and cat == "Interview":
-        summary = f"{company} invited you to an interview."
-    elif company and cat == "Rejected":
-        summary = f"{company} decided not to move forward with your application."
-    else:
-        summary = subject if subject else "Email received."
-    
-    return {
-        "category": cat,
-        "company_name": company,
-        "summary": summary
-    }
+    return _refine_email_analysis(subject, sender, "", body, False, {"category": cat, "company_name": None, "summary": subject if subject else "Email received."})
 
 
 class GmailService:
@@ -115,6 +184,49 @@ class GmailService:
 
     def _connect_db(self):
         return sqlite3.connect(self.db_path)
+
+    def repair_existing_emails(self, conn=None):
+        close_conn = False
+        if conn is None:
+            conn = self._connect_db()
+            close_conn = True
+        try:
+            rows = conn.execute("SELECT message_id, subject, sender, snippet, payload_json FROM emails").fetchall()
+            updated = 0
+            for msg_id, subject, sender, snippet, payload_str in rows:
+                if not payload_str:
+                    continue
+                try:
+                    data = json.loads(payload_str)
+                    recipient = data.get("recipient", "")
+                    analysis = data.get("analysis", {})
+                    is_outbound = data.get("is_outbound", False)
+                    
+                    old_cat = analysis.get("category")
+                    old_comp = analysis.get("company_name")
+                    
+                    body_text = data.get("body", "") or snippet or ""
+                    analysis = _refine_email_analysis(subject or "", sender or "", recipient or "", body_text, is_outbound, analysis)
+                    new_cat = analysis.get("category", "Other")
+                    new_comp = analysis.get("company_name")
+                    
+                    data["analysis"] = analysis
+                    
+                    if old_cat != new_cat or old_comp != new_comp:
+                        new_payload = json.dumps(data)
+                        conn.execute("UPDATE emails SET category = ?, company_name = ?, payload_json = ? WHERE message_id = ?",
+                                     (new_cat, new_comp, new_payload, msg_id))
+                        updated += 1
+                except Exception:
+                    continue
+            if updated > 0:
+                conn.commit()
+                _safe_log(f"Repaired {updated} email records in database.")
+        except Exception as e:
+            _safe_log(f"Error repairing email database: {e}")
+        finally:
+            if close_conn:
+                conn.close()
 
     def _clean_html(self, html_content: str) -> str:
         soup = BeautifulSoup(html_content, "html.parser")
@@ -334,6 +446,7 @@ Return ONLY JSON format:
             loop_index = 0
             
             with self._connect_db() as conn:
+                self.repair_existing_emails(conn)
                 for eid in email_ids:
                     loop_index += 1
                     if progress_callback:
@@ -413,31 +526,10 @@ Return ONLY JSON format:
                                 has_attachments, has_calendar_invite, thread_context
                             )
                             
+                            analysis = _refine_email_analysis(subject, sender, recipient, body, is_outbound, analysis)
                             category = analysis.get("category", "Other")
                             company = analysis.get("company_name")
                             summary = analysis.get("summary", subject)
-                            
-                            # Filter out ATS platform software names or user name
-                            ats_names = {"greenhouse", "lever", "workday", "homerun", "recruitee", "dayforce", "hroffice", "no-reply", "noreply", "hr account", "werken"}
-                            if company and (any(ats in company.lower() for ats in ats_names) or "omar abdulghani" in company.lower()):
-                                company = None
-                                
-                            if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
-                                for scan_text in [subject, body[:600]]:
-                                    m_comp = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at)\s+([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n)', scan_text)
-                                    if m_comp:
-                                        cand = m_comp.group(1).strip()
-                                        if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
-                                            company = cand
-                                            break
-
-                            if company and summary == subject and category in ["Applied", "Interview", "Rejected"]:
-                                if category == "Applied":
-                                    summary = f"Application confirmed for a role at {company}."
-                                elif category == "Interview":
-                                    summary = f"{company} invited you to an interview."
-                                elif category == "Rejected":
-                                    summary = f"{company} decided not to move forward with your application."
                             
                             linked_job_key = None
                             linked_job_title = None

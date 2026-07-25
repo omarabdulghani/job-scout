@@ -1087,6 +1087,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 limit = self._query_int("limit", 2000)
                 offset = self._query_int("offset", 0)
                 with sqlite3.connect(db_path) as conn:
+                    try:
+                        from agent.gmail_service import GmailService
+                        GmailService(self.user_workspace.root).repair_existing_emails(conn)
+                    except Exception:
+                        pass
                     rows = conn.execute("SELECT message_id, payload_json FROM emails ORDER BY COALESCE(parsed_timestamp, 0) DESC, date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
                     total = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
                 emails = []
