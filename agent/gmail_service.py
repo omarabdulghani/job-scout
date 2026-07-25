@@ -54,7 +54,10 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
         company = None
 
     # 2. Heuristic Category Overrides (High Priority)
-    if any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further", "isn't progressing"]):
+    if any(k in text for k in ["herhaalrecept", "recept", "amitriptyline", "medicatie", "medicijn", "apotheek", "huisarts", "tandarts", "ziekenhuis", "praktijk", "voorschrift", "prescription", "refill", "pharmacy", "clinic", "doctor", "tandheelkunde"]):
+        category = "Personal"
+        company = None
+    elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further", "isn't progressing"]):
         category = "Rejected"
     elif any(k in text for k in [
         "login code", "security code", "verification code", "new account", "account creation", 
@@ -159,14 +162,14 @@ def _fallback_analysis(subject: str, sender: str, body: str) -> dict:
     text = f"{subject} {sender} {body}".lower()
     
     # 1. Category heuristics
-    if any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link"]):
+    if any(k in text for k in ["herhaalrecept", "recept", "amitriptyline", "medicatie", "medicijn", "apotheek", "huisarts", "tandarts", "ziekenhuis", "praktijk", "voorschrift", "prescription", "refill", "pharmacy", "clinic", "doctor", "tandheelkunde", "gemeente", "belasting", "municipality", "security alert", "account alert", "google ai pro"]):
+        cat = "Personal"
+    elif any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link"]):
         cat = "Interview"
     elif any(k in text for k in ["thank you for applying", "thanks for applying", "application received", "application confirmed", "bedankt voor je sollicitatie", "bevestiging sollicitatie", "your application at", "your application to", "we have received your application", "application submitted", "started your job application"]):
         cat = "Applied"
     elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further"]):
         cat = "Rejected"
-    elif any(k in text for k in ["gemeente", "belasting", "municipality", "security alert", "account alert", "google ai pro"]):
-        cat = "Personal"
     elif any(k in text for k in ["discount", "newsletter", "special offer", "unlimited", "sale", "pricing"]):
         cat = "Promotions"
     else:
