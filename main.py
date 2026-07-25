@@ -116,6 +116,7 @@ async def main():
         help="Validate enabled job boards without applying",
     )
     parser.add_argument("--stats", action="store_true", help="Show stats and exit")
+    parser.add_argument("--selected-jobs-file", type=str, help="Path to selected jobs JSON file")
     args = parser.parse_args()
 
     if args.stats:
@@ -195,7 +196,14 @@ async def main():
 
     try:
         await browser.start()
-        agent = JobAgent(profile, preferences, browser, tracker, runtime_mode=mode_text.lower().replace(" ", "_"))
+        agent = JobAgent(
+            profile,
+            preferences,
+            browser,
+            tracker,
+            runtime_mode=mode_text.lower().replace(" ", "_"),
+            selected_jobs_file=getattr(args, "selected_jobs_file", None),
+        )
         if args.validate_boards:
             await agent.validate_boards()
         else:

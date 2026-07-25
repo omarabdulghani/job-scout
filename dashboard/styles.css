@@ -1040,6 +1040,7 @@
 
     .field {
       display: grid;
+      align-content: start;
       gap: 6px;
       min-width: 0;
     }
@@ -1082,6 +1083,15 @@
       padding: 10px 11px;
       color: var(--ink);
       background: var(--surface-plain);
+    }
+
+    .field select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 32px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
     }
 
     .field textarea {
@@ -1576,6 +1586,22 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--surface-2);
+    }
+
+    .career-lane-tab:hover {
+      background: var(--surface-3);
+    }
+    
+    .career-lane-tab .tab-badge {
+      background: var(--surface-2);
+      color: var(--text-secondary);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 4px;
+      font-weight: 600;
+      border: 1px solid var(--line);
+      line-height: 1;
     }
 
     .run-history-item:hover {
@@ -2569,6 +2595,183 @@
       background: var(--amber-soft);
     }
 
+    .badge.worth-a-shot {
+      color: var(--risk-ink);
+      border-color: var(--amber-border);
+      background: var(--amber-soft);
+      font-weight: 600;
+    }
+
+    /* Checkbox & Card Selection */
+    .card-select-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid var(--line, #465d77);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+      position: relative;
+      background: var(--surface-1, #0f172a);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .card-select-checkbox:hover {
+      border-color: var(--accent, #3b82f6);
+    }
+
+    .card-select-checkbox:checked {
+      background: var(--accent, #3b82f6);
+      border-color: var(--accent, #3b82f6);
+    }
+
+    .card-select-checkbox:checked::after {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 1px;
+      width: 5px;
+      height: 9px;
+      border: solid #ffffff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .job.selected,
+    .compact-job.selected {
+      border-color: var(--accent, #3b82f6) !important;
+      box-shadow: 0 0 0 1px var(--accent, #3b82f6), 0 4px 12px rgba(59, 130, 246, 0.15) !important;
+    }
+
+    /* Floating Bulk Action Bar */
+    .bulk-action-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 18px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      border-radius: 12px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 0 20px rgba(59, 130, 246, 0.2);
+      animation: bulkBarSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes bulkBarSlideUp {
+      from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+    }
+
+    .bulk-action-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bulk-count-badge {
+      background: #3b82f6;
+      color: #ffffff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.02em;
+    }
+
+    .bulk-action-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bulk-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .bulk-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .bulk-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .bulk-btn-primary {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border-color: #f59e0b;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .bulk-btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #fbbf24, #d97706);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    }
+
+    .bulk-btn-subtle {
+      background: transparent;
+      border-color: transparent;
+      color: #94a3b8;
+    }
+
+    .bulk-btn-subtle:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .bulk-btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    .bulk-btn-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .bulk-btn-close:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     .badge.international-detail {
       color: var(--muted);
       border-color: var(--line);
@@ -2946,7 +3149,7 @@
       font-size: 0.9rem;
     }
 
-    .hidden {
+    .hidden, [hidden] {
       display: none !important;
     }
 
@@ -3435,4 +3638,277 @@
         border-width: 0;
         transform: scale(0.95);
       }
+    }
+    
+    /* Gmail Inbox List */
+    .inbox-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    
+    .email-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      transition: border-color 0.2s ease, background 0.15s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+    .email-card:hover {
+      border-color: var(--blue);
+      background: var(--surface-2);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .email-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--blue);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .email-body-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .email-header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      gap: 12px; 
+      margin-bottom: 4px;
+    }
+    .email-meta-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .email-meta-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .email-sender { 
+      font-weight: 600; 
+      font-size: 14px; 
+      color: var(--ink); 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+    }
+    .email-company-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .email-date { 
+      font-size: 12px; 
+      color: var(--muted); 
+      white-space: nowrap; 
+    }
+    
+    .email-flags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .email-flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--surface-2);
+      color: var(--text-secondary);
+      border: 1px solid var(--line);
+    }
+    .email-flag .icon {
+      width: 12px;
+      height: 12px;
+    }
+    .email-flag.has-attachment {
+      background: rgba(168, 85, 247, 0.1);
+      color: #a855f7;
+      border-color: rgba(168, 85, 247, 0.2);
+    }
+    .email-flag.has-calendar {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, 0.2);
+    }
+    .email-flag.is-forwarded, .email-flag.is-reply {
+      background: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+      border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    .email-subject { 
+      font-size: 15px; 
+      font-weight: 700; 
+      color: var(--ink); 
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .email-snippet { 
+      font-size: 13px; 
+      color: var(--muted); 
+      line-height: 1.5; 
+      display: -webkit-box; 
+      -webkit-line-clamp: 2; 
+      -webkit-box-orient: vertical; 
+      overflow: hidden; 
+    }
+
+    .email-category { 
+      padding: 3px 10px; 
+      border-radius: 12px; 
+      font-size: 11px; 
+      font-weight: 700; 
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: var(--surface-2);
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+    .email-category.Interview, .email-avatar.Interview { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+    .email-category.Applied, .email-avatar.Applied { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
+    .email-category.Rejected, .email-avatar.Rejected { background: rgba(248, 113, 113, 0.15); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+    .email-category.Personal, .email-avatar.Personal { background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3); }
+    .email-category.Promotions, .email-avatar.Promotions { background: rgba(251, 146, 60, 0.15); color: #fb923c; border-color: rgba(251, 146, 60, 0.3); }
+
+    .email-interview-banner {
+      margin: 8px 0; 
+      padding: 10px 14px; 
+      background: rgba(52, 211, 153, 0.1); 
+      border: 1px solid rgba(52, 211, 153, 0.3); 
+      border-radius: 8px; 
+      display: flex; 
+      align-items: center; 
+      gap: 10px;
+    }
+    
+    /* Email Grouping Styles */
+    .email-group-container {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .email-group-container:hover {
+      border-color: var(--blue);
+    }
+    
+    .email-group-header {
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      background: var(--surface-2);
+      user-select: none;
+      border-bottom: 1px solid transparent;
+      transition: background 0.2s ease;
+    }
+    
+    .email-group-header:hover {
+      background: var(--surface-3);
+    }
+    
+    .email-group-container.expanded .email-group-header {
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-3);
+    }
+    
+    .email-group-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .email-group-badge {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 99px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    
+    .email-group-icon {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      color: var(--muted);
+      width: 16px;
+      height: 16px;
+    }
+    
+    .email-group-container.expanded .email-group-icon {
+      transform: rotate(180deg);
+    }
+    
+    .email-group-content {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .email-group-container.expanded .email-group-content {
+      grid-template-rows: 1fr;
+    }
+    
+    .email-group-inner {
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .email-group-container.expanded .email-group-inner {
+      opacity: 1;
+    }
+    
+    /* When inside a group, emails shouldn't have bottom margins or thick borders */
+    .email-group-inner .email-card {
+      border: none;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      margin: 0;
+      box-shadow: none;
+    }
+    .email-group-inner .email-card:last-child {
+      border-bottom: none;
     }

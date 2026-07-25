@@ -32,6 +32,7 @@ export const QUICK_PRESETS = [
   ["irrelevant", "Irrelevant"],
   ["expired", "Expired"],
   ["no_action", "No Action"],
+  ["worth_a_shot", "Worth a Shot"],
 ];
 
 export const QUICK_PRESET_ICONS = Object.freeze({
@@ -48,6 +49,7 @@ export const QUICK_PRESET_ICONS = Object.freeze({
   irrelevant: "archive",
   expired: "clock",
   no_action: "minus-circle",
+  worth_a_shot: "zap",
 });
 
 export const SUMMARY_ICONS = Object.freeze({
@@ -91,7 +93,7 @@ export function buildJobsQuery(filters, offset, now = Date.now()) {
     status: filters.actionScope === "needs_action"
       ? "unreviewed"
       : (filters.manualStatus === "all" ? "" : filters.manualStatus),
-    preset: ["dutch_risk", "remote_hybrid", "remote_only", "hybrid_only", "local_only"].includes(filters.quickPreset)
+    preset: ["dutch_risk", "remote_hybrid", "remote_only", "hybrid_only", "local_only", "worth_a_shot"].includes(filters.quickPreset)
       ? filters.quickPreset
       : "",
     sort: filters.sort,

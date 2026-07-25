@@ -41,6 +41,7 @@ class JobAgent:
         browser: BrowserController,
         tracker: ApplicationTracker,
         runtime_mode: str = "apply",
+        selected_jobs_file: str | None = None,
     ):
         self.profile = profile
         self.preferences = preferences
@@ -48,6 +49,7 @@ class JobAgent:
         self.tracker = tracker
         self.brain = JobBrain(profile, preferences)
         self.runtime_mode = runtime_mode
+        self.selected_jobs_file = selected_jobs_file
 
         application_behavior = self.preferences.get("application_behavior", {})
         self.browser.set_human_delays(
@@ -140,9 +142,13 @@ class JobAgent:
             console.print(
                 f"\nApplying to: [bold]{job['title']}[/bold] at [cyan]{job['company']}[/cyan]"
             )
-            console.print(f"   Score: {job['match_score']} | Source: {job['source']}")
+            console.print(f"   Score: {job['match_score']} | Source: {job.get('source', 'linkedin')}")
 
-            success = await self._apply_to_job(job)
+            result = await self._apply_to_job(job)
+            if result == "roadblock":
+                console.print("[bold red][ROADBLOCK] Hit LinkedIn limit or roadblock. Halting batch safely — remaining un-attempted jobs stay unreviewed.[/bold red]")
+                break
+            success = bool(result)
 
             if success:
                 applied += 1
@@ -209,8 +215,104 @@ class JobAgent:
         console.print(f"Validation finished in {self._format_elapsed(perf_counter() - started_at)}")
         return results
 
+    def _load_local_unreviewed_jobs(self) -> list:
+        """Load unreviewed jobs directly from local database without running search queries."""
+        import json
+        from pathlib import Path
+
+        target_keys = set()
+        if self.selected_jobs_file:
+            sel_path = Path(self.selected_jobs_file)
+            if sel_path.exists():
+                try:
+                    sel_data = json.loads(sel_path.read_text(encoding="utf-8"))
+                    keys_list = sel_data.get("selected_keys", []) if isinstance(sel_data, dict) else []
+                    target_keys = set(keys_list)
+                    if target_keys:
+                        console.print(f"[cyan][TARGETED APPLY MODE][/cyan] Filtered to apply specifically to {len(target_keys)} selected job(s).")
+                except Exception as exc:
+                    console.print(f"[yellow]Could not parse selected jobs file: {exc}[/yellow]")
+
+        paths = [
+            Path("data/recommended_jobs_dashboard_data.json"),
+            Path("data/user_workspace/dashboard_data.json"),
+            Path("data/recommended_jobs_dashboard.json"),
+        ]
+        all_jobs = []
+        
+        db_path = Path("data/user_workspace/job_scout.db")
+        if db_path.exists():
+            try:
+                import sqlite3
+                with sqlite3.connect(db_path) as conn:
+                    for row in conn.execute("SELECT payload_json FROM jobs"):
+                        if not row[0]: continue
+                        try:
+                            job = json.loads(row[0])
+                            status = job.get("manual_status", "unreviewed")
+                            if status not in {"unreviewed", "qualified"}:
+                                continue
+                            raw_job_key = str(job.get("job_key") or "")
+                            raw_job_id = str(job.get("job_id") or "")
+                            raw_url = str(job.get("url", ""))
+                            if target_keys:
+                                matched = False
+                                for tk in target_keys:
+                                    if (raw_job_key and raw_job_key == tk) or \
+                                       (raw_job_id and (raw_job_id == tk or raw_job_id in tk)) or \
+                                       (raw_url and raw_url == tk):
+                                        matched = True
+                                        break
+                                if matched:
+                                    all_jobs.append(job)
+                            else:
+                                all_jobs.append(job)
+                        except Exception:
+                            pass
+            except Exception as exc:
+                console.print(f"[yellow]Warning loading job_scout.db: {exc}[/yellow]")
+                
+        for path in paths:
+            if all_jobs:
+                break
+            if path.exists():
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
+                    for job in jobs:
+                        if not isinstance(job, dict):
+                            continue
+                        status = job.get("manual_status", "unreviewed")
+                        if status not in {"unreviewed", "qualified"}:
+                            continue
+                        raw_job_key = str(job.get("job_key") or "")
+                        raw_job_id = str(job.get("job_id") or "")
+                        raw_url = str(job.get("url", ""))
+                        if target_keys:
+                            matched = False
+                            for tk in target_keys:
+                                if (raw_job_key and raw_job_key == tk) or \
+                                   (raw_job_id and (raw_job_id == tk or raw_job_id in tk)) or \
+                                   (raw_url and raw_url == tk):
+                                    matched = True
+                                    break
+                            if matched:
+                                all_jobs.append(job)
+                        else:
+                            all_jobs.append(job)
+                except Exception as exc:
+                    console.print(f"[yellow]Warning loading {path}: {exc}[/yellow]")
+                    continue
+            if all_jobs:
+                break
+        return all_jobs
+
     async def _collect_jobs(self) -> list:
-        """Collect jobs from all enabled job boards."""
+        """Collect jobs from all enabled job boards or local storage."""
+        if self.runtime_mode in {"apply", "auto_apply_selected", "process_only"}:
+            console.print("[cyan][APPLY-ONLY MODE][/cyan] Reading unreviewed jobs directly from local database (no search scouting).")
+            return self._load_local_unreviewed_jobs()
+
         all_jobs = []
         boards = self.preferences.get("job_boards", {})
 
@@ -257,8 +359,22 @@ class JobAgent:
     async def _apply_to_job(self, job: dict) -> bool:
         """Full application flow for a single job."""
         try:
-            if job["source"] == "linkedin":
+            # Deduce source if missing to ensure proper routing
+            if not job.get("source"):
+                url = str(job.get("url") or job.get("link") or "").lower()
+                if "linkedin.com" in url:
+                    job["source"] = "linkedin"
+
+            source = job.get("source", "linkedin").lower()
+            if source == "linkedin":
                 job = await self.linkedin.get_job_details(job)
+                if await self.linkedin.is_linkedin_limit_roadblock():
+                    console.print("   [bold red][ROADBLOCK] LinkedIn daily limit or captcha detected. Halting batch safely.[/bold red]")
+                    return "roadblock"
+                if await self.linkedin.is_job_expired_on_page():
+                    console.print(f"   [yellow]Job is expired on LinkedIn:[/yellow] {job.get('title')}")
+                    self.tracker.record_application(job, "expired", "LinkedIn job listing is closed/expired")
+                    return False
                 if job.get("already_applied"):
                     console.print("   Skipping LinkedIn job because it is already marked as applied")
                     self.tracker.record_application(
@@ -309,7 +425,7 @@ class JobAgent:
 
         if should_submit_cover_letter and should_generate_cover_letter:
             try:
-                cover_letter = self.brain.generate_cover_letter(job)
+                cover_letter = self.brain.generate_cover_letter_reasoning(job)
             except Exception as exc:
                 console.print(f"   Cover letter generation failed: {exc}")
 
@@ -354,6 +470,33 @@ class JobAgent:
             reason = result.get("reason", reason)
 
         self.tracker.record_application(job, status, reason)
+        
+        # Sync to dashboard operational store if available
+        try:
+            from agent.operational_store import OperationalStore
+            from agent.dashboard_user_state import DashboardUserStateStore, build_job_key
+            import os
+            from pathlib import Path
+            root = Path(os.getcwd())
+            dashboard_path = root / "data" / "recommended_jobs_dashboard_data.json"
+            user_state_path = root / "data" / "recommended_jobs_dashboard_user_state.json"
+            db_path = root / "data" / "user_workspace" / "job_scout.db"
+            
+            if db_path.exists():
+                job_key = build_job_key(job)
+                state_store = DashboardUserStateStore(user_state_path)
+                record = state_store.set_status(job, status)
+                op_store = OperationalStore(db_path)
+                op_store.update_job_status(
+                    job_key=job_key,
+                    status=status,
+                    record=record if status != "unreviewed" else None,
+                    dashboard_path=dashboard_path,
+                    user_state_path=user_state_path,
+                )
+        except Exception as exc:
+            console.print(f"   [yellow]Warning: Could not sync dashboard status: {exc}[/yellow]")
+
         return status == "applied"
 
     async def _linkedin_easy_apply_flow(self, job: dict) -> dict:

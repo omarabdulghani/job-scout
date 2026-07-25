@@ -573,6 +573,19 @@ class OperationalStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_collected_jobs_analyzed
                     ON collected_jobs(analyzed_at);
+                CREATE TABLE IF NOT EXISTS emails (
+                    message_id TEXT PRIMARY KEY,
+                    date TEXT,
+                    sender TEXT,
+                    subject TEXT,
+                    category TEXT,
+                    company_name TEXT,
+                    snippet TEXT,
+                    read_status INTEGER,
+                    payload_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_emails_date
+                    ON emails(date DESC);
                 """
             )
             self._ensure_column(connection, "jobs", "domain_category", "TEXT")
@@ -587,8 +600,11 @@ class OperationalStore:
             self._ensure_column(connection, "jobs", "employment_types_text", "TEXT")
             self._ensure_column(connection, "jobs", "flexible_hours", "INTEGER")
             self._ensure_column(connection, "jobs", "sponsorship_status", "TEXT")
+            self._ensure_column(connection, "emails", "parsed_timestamp", "INTEGER")
             connection.executescript(
                 """
+                CREATE INDEX IF NOT EXISTS idx_emails_timestamp
+                    ON emails(parsed_timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_jobs_run_processed
                     ON jobs(run_id, processed_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_jobs_domain
@@ -615,6 +631,22 @@ class OperationalStore:
                     ON jobs(processed_at DESC, score DESC);
                 """
             )
+            
+            try:
+                emails_to_backfill = connection.execute("SELECT message_id, date FROM emails WHERE parsed_timestamp IS NULL").fetchall()
+                if emails_to_backfill:
+                    import email.utils
+                    for msg_id, date_str in emails_to_backfill:
+                        try:
+                            parsed_tuple = email.utils.parsedate_tz(date_str)
+                            if parsed_tuple:
+                                ts = int(email.utils.mktime_tz(parsed_tuple))
+                                connection.execute("UPDATE emails SET parsed_timestamp = ? WHERE message_id = ?", (ts, msg_id))
+                        except Exception:
+                            pass
+                    connection.commit()
+            except Exception:
+                pass
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -778,6 +810,35 @@ class OperationalStore:
             clauses.append(
                 "NOT (lower(location) LIKE '%remote%' OR lower(payload_json) LIKE '%remote%' OR lower(payload_json) LIKE '%from home%') "
                 "AND NOT (lower(location) LIKE '%hybrid%' OR lower(payload_json) LIKE '%hybrid%' OR lower(payload_json) LIKE '%thuis%')"
+            )
+        elif preset == "worth_a_shot":
+            # Only LOW_PROBABILITY and REJECTED jobs
+            clauses.append("decision_category IN ('LOW_PROBABILITY', 'REJECTED')")
+            # Exclude hard rejection reasons
+            clauses.append(
+                "NOT ("
+                "lower(payload_json) LIKE '%rejected_irrelevant%' "
+                "OR lower(payload_json) LIKE '%rejected_excluded%' "
+                "OR lower(payload_json) LIKE '%rejected_outside_netherlands%' "
+                "OR lower(payload_json) LIKE '%rejected_outside_search_market%' "
+                "OR lower(payload_json) LIKE '%rejected_market_eligibility%' "
+                "OR lower(payload_json) LIKE '%skipped_preopen_irrelevant%' "
+                "OR lower(payload_json) LIKE '%skipped_preopen_outside_netherlands%'"
+                ")"
+            )
+            # Must have at least one positive signal
+            clauses.append(
+                "("
+                "apply_method = 'easy_apply' "
+                "OR lower(title) LIKE '%ux%' OR lower(title) LIKE '%ui%' "
+                "OR lower(title) LIKE '%product%' OR lower(title) LIKE '%designer%' "
+                "OR lower(title) LIKE '%creative%' OR lower(title) LIKE '%marketing%' "
+                "OR lower(title) LIKE '%digital%' OR lower(title) LIKE '%brand%' "
+                "OR lower(title) LIKE '%content%' OR lower(title) LIKE '%web%' "
+                "OR lower(title) LIKE '%frontend%' OR lower(title) LIKE '%front-end%' "
+                "OR domain_category = 'ux_product_design' "
+                "OR career_lane = 'primary'"
+                ")"
             )
         return clauses, parameters
 

@@ -124,7 +124,7 @@ class ApplicationAssistantService:
 
     def ai_cover_letter_draft(self, job: dict[str, Any]) -> str:
         profile, preferences = self.workspace.load_config()
-        return JobBrain(profile, preferences).generate_cover_letter(job).strip()
+        return JobBrain(profile, preferences).generate_cover_letter_reasoning(job).strip()
 
     def answer_question(self, question: str, context: str = "") -> dict[str, Any]:
         cleaned_question = str(question or "").strip()

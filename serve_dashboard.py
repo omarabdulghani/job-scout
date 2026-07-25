@@ -46,6 +46,8 @@ from agent.user_workspace import UserWorkspace
 
 CLEAN_EXPIRED_STATUS = "Not running"
 CLEAN_EXPIRED_PROCESS = None
+GMAIL_SYNC_STATUS = {"status": "idle", "new_emails": 0, "error": None}
+GMAIL_SYNC_CANCEL = False
 OPERATIONAL_STORE_LOCK = threading.Lock()
 
 def _run_clean_expired_background(targets: list[str], scan_mode: str = "SKIP_ACTIVE"):
@@ -113,6 +115,7 @@ class DashboardRunController:
         "linkedin_process_only": "LinkedIn process-only",
         "indeed_description": "Indeed description extraction",
         "validate_boards": "Validate job boards (no applications)",
+        "auto_apply_selected": "Auto-Apply selected Easy Apply jobs",
     }
     MAX_PAGE_CHOICES = {"1", "2", "3", "4", "all"}
     BROWSER_CHOICES = {"chromium", "firefox"}
@@ -439,6 +442,25 @@ class DashboardRunController:
         elif workflow == "validate_boards":
             return (
                 [sys.executable, "main.py", "--validate-boards"],
+                workflow,
+                self.WORKFLOW_LABELS[workflow],
+            )
+        elif workflow == "auto_apply_selected":
+            selected_keys = payload.get("selected_job_keys")
+            selected_file = self.root / "data" / "selected_jobs_to_apply.json"
+            if isinstance(selected_keys, list) and selected_keys:
+                selected_file.parent.mkdir(parents=True, exist_ok=True)
+                selected_file.write_text(json.dumps({"selected_keys": selected_keys}, indent=2), encoding="utf-8")
+            elif selected_file.exists():
+                try:
+                    selected_file.unlink()
+                except OSError:
+                    pass
+            cmd = [sys.executable, "main.py"]
+            if selected_file.exists():
+                cmd.extend(["--selected-jobs-file", str(selected_file)])
+            return (
+                cmd,
                 workflow,
                 self.WORKFLOW_LABELS[workflow],
             )
@@ -1004,6 +1026,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         if self._path_without_query() == "/api/strategy":
             self._send_json(self._strategy_service().payload())
             return
+
+        if self._path_without_query() == "/api/gmail-settings":
+            self._send_json(self._get_gmail_settings())
+            return
         if self._path_without_query() == "/api/ai-settings":
             self._send_json(self._ai_settings_service().payload())
             return
@@ -1054,11 +1080,32 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._application_assistant_service().payload(dashboard.get("jobs", []))
             )
             return
-        if self._path_without_query() == "/api/maintenance":
-            self._send_json(self._maintenance_service().payload())
+        if self._path_without_query() == "/api/gmail/emails":
+            try:
+                import sqlite3
+                db_path = self.user_workspace.root / "data" / "user_workspace" / "job_scout.db"
+                limit = self._query_int("limit", 2000)
+                offset = self._query_int("offset", 0)
+                with sqlite3.connect(db_path) as conn:
+                    rows = conn.execute("SELECT message_id, payload_json FROM emails ORDER BY COALESCE(parsed_timestamp, 0) DESC, date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+                    total = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+                emails = []
+                for row in rows:
+                    if row[1]:
+                        email_data = json.loads(row[1])
+                        email_data["message_id"] = row[0]
+                        emails.append(email_data)
+                self._send_json({"emails": emails, "total": total})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
             return
+
+
         if self._path_without_query() == "/api/legacy-tools":
             self._send_json(self._legacy_tools_service().payload())
+            return
+        if self._path_without_query() == "/api/maintenance":
+            self._send_json(self._maintenance_service().payload())
             return
         if self._path_without_query() == "/api/log-file":
             name = self._query_value("name")
@@ -1137,6 +1184,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 "history": history
             })
             return
+        if self._path_without_query() == "/api/gmail/sync-status":
+            self._send_json(GMAIL_SYNC_STATUS)
+            return
+
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -1231,6 +1282,115 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": str(e)}, status=500)
             return
 
+        if self._path_without_query() == "/api/gmail/clear":
+            try:
+                import sqlite3
+                db_path = self.user_workspace.root / "data" / "user_workspace" / "job_scout.db"
+                with sqlite3.connect(db_path) as conn:
+                    conn.execute("DELETE FROM emails")
+                    conn.commit()
+                self._send_json({"ok": True, "message": "All synced emails cleared."})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+            return
+        if self._path_without_query() == "/api/gmail/sync":
+            try:
+                payload = self._read_json_body()
+                days = int(payload.get("days", 7))
+                root_path = str(self.user_workspace.root)
+
+                if GMAIL_SYNC_STATUS.get("status") == "running":
+                    self._send_json({"status": "running", "new_emails": GMAIL_SYNC_STATUS.get("new_emails", 0)})
+                    return
+
+                def _run_sync():
+                    global GMAIL_SYNC_STATUS, GMAIL_SYNC_CANCEL
+                    GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "processed": 0, "total": 0, "error": None}
+                    GMAIL_SYNC_CANCEL = False
+                    
+                    def _progress(current, total, new_cnt):
+                        global GMAIL_SYNC_STATUS
+                        GMAIL_SYNC_STATUS["processed"] = current
+                        GMAIL_SYNC_STATUS["total"] = total
+                        GMAIL_SYNC_STATUS["new_emails"] = new_cnt
+                        
+                    try:
+                        from agent.gmail_service import GmailService
+                        service = GmailService(root_path)
+                        res = service.sync_emails(days_back=days, cancel_check=lambda: GMAIL_SYNC_CANCEL, progress_callback=_progress)
+                        if "error" in res:
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": 0}
+                        else:
+                            GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
+                    except Exception as exc:
+                        GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
+
+                threading.Thread(target=_run_sync, daemon=True).start()
+                self._send_json({"status": "started", "new_emails": 0})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        if self._path_without_query() == "/api/gmail/sync-test":
+            try:
+                root_path = str(self.user_workspace.root)
+
+                if GMAIL_SYNC_STATUS.get("status") == "running":
+                    self._send_json({"status": "running", "new_emails": GMAIL_SYNC_STATUS.get("new_emails", 0)})
+                    return
+
+                def _run_sync_test():
+                    global GMAIL_SYNC_STATUS, GMAIL_SYNC_CANCEL
+                    GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "error": None}
+                    GMAIL_SYNC_CANCEL = False
+                    try:
+                        from agent.gmail_service import GmailService
+                        service = GmailService(root_path)
+                        # Call sync_emails with max_emails=1 for testing
+                        res = service.sync_emails(days_back=7, max_emails=1, cancel_check=lambda: GMAIL_SYNC_CANCEL)
+                        if "error" in res:
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": 0}
+                        else:
+                            GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
+                    except Exception as exc:
+                        GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
+
+                threading.Thread(target=_run_sync_test, daemon=True).start()
+                self._send_json({"status": "started", "new_emails": 0})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        if self._path_without_query() == "/api/gmail/sync-cancel":
+            global GMAIL_SYNC_CANCEL
+            GMAIL_SYNC_CANCEL = True
+            self._send_json({"ok": True, "message": "Cancellation requested."})
+            return
+
+
+
+        if self._path_without_query() == "/api/gmail/test-connection":
+            try:
+                import imaplib
+                from dotenv import load_dotenv
+                env_path = self.user_workspace.root / "data" / ".env"
+                load_dotenv(env_path, override=True)
+                import os
+                addr = os.getenv("GMAIL_ADDRESS", "").strip()
+                pwd = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+                if not addr or not pwd:
+                    self._send_json({"ok": False, "error": "Gmail credentials not configured."}, status=400)
+                    return
+                mail = imaplib.IMAP4_SSL("imap.gmail.com")
+                mail.login(addr, pwd)
+                mail.logout()
+                self._send_json({"ok": True, "message": "Connection successful!"})
+            except imaplib.IMAP4.error as e:
+                self._send_json({"ok": False, "error": f"Authentication failed: {e}"}, status=401)
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, status=500)
+            return
+
         if self._path_without_query() == "/api/restart-server":
             self._send_json({"ok": True})
             def restart_process():
@@ -1297,6 +1457,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             "/api/strategy",
             "/api/ai-settings",
             "/api/ai-settings/test",
+            "/api/gmail-settings",
             "/api/board-settings",
             "/api/application",
             "/api/application-assistant",
@@ -1317,6 +1478,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         str(payload.get("provider") or ""),
                         payload.get("provider_settings")
                     )
+
+                elif self._path_without_query() == "/api/gmail-settings":
+                    data = self._save_gmail_settings(payload)
                 elif self._path_without_query() == "/api/ai-settings":
                     data = self._ai_settings_service().save(payload)
                 elif self._path_without_query() == "/api/board-settings":
@@ -1499,6 +1663,45 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     location=metadata.get("location", ""),
                 )
                 self._send_json({"ok": True, "record": record})
+            except ValueError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
+        if self._path_without_query() == "/api/bulk-job-status":
+            try:
+                payload = self._read_json_body()
+                jobs = payload.get("jobs", [])
+                status = payload.get("status", "")
+                if not status or not isinstance(jobs, list):
+                    raise ValueError("status and jobs array are required")
+                
+                store = DashboardUserStateStore(self.user_state_path)
+                updated_keys = []
+                for job in jobs:
+                    if not isinstance(job, dict):
+                        continue
+                    job_key = build_job_key(job)
+                    if status == "expired" and self.operational_store:
+                        self.operational_store.true_amnesia_delete(
+                            job_key,
+                            self.dashboard_data_path,
+                            self.user_state_path
+                        )
+                    else:
+                        record = store.set_status(job, status)
+                        if self.operational_store:
+                            self.operational_store.update_job_status(
+                                job_key=job_key,
+                                status=status,
+                                record=record if status != "unreviewed" else None,
+                                dashboard_path=self.dashboard_data_path,
+                                user_state_path=self.user_state_path,
+                            )
+                    updated_keys.append(job_key)
+                
+                self._send_json({"ok": True, "count": len(updated_keys), "updated_keys": updated_keys})
             except ValueError as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
             except Exception as exc:
@@ -1689,6 +1892,40 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         if not self.user_workspace:
             raise RuntimeError("User workspace is unavailable")
         return StrategyService(self.user_workspace)
+
+    def _get_gmail_settings(self) -> dict:
+        import os
+        from dotenv import load_dotenv
+        env_path = self.user_workspace.root / "data" / ".env"
+        load_dotenv(env_path)
+        return {
+            "address": os.getenv("GMAIL_ADDRESS", ""),
+            "passwordConfigured": bool(os.getenv("GMAIL_APP_PASSWORD", "").strip())
+        }
+
+    def _save_gmail_settings(self, payload: dict) -> dict:
+        import os
+        from dotenv import set_key
+        env_path = self.user_workspace.root / "data" / ".env"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        if not env_path.exists():
+            env_path.touch()
+        
+        address = payload.get("address", "").strip()
+        password = payload.get("password", "").strip()
+        
+        if address:
+            set_key(str(env_path), "GMAIL_ADDRESS", address)
+        if password:
+            set_key(str(env_path), "GMAIL_APP_PASSWORD", password)
+            
+        # Clear os.environ cache to ensure getenv picks it up later in same process if needed
+        if address:
+            os.environ["GMAIL_ADDRESS"] = address
+        if password:
+            os.environ["GMAIL_APP_PASSWORD"] = password
+            
+        return self._get_gmail_settings()
 
     def _ai_settings_service(self) -> AISettingsService:
         if not self.user_workspace:

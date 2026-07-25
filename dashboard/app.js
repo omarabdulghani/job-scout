@@ -99,6 +99,7 @@ const DEFAULT_THEME = initialTheme();
       toastTimer: null,
       manualUndoStack: [],
       expandedFreshRuns: new Set(),
+      selectedJobKeys: new Set(),
       runHistoryExpanded: false,
       lastFocusedBeforeModal: null,
       mobileNavLastFocus: null,
@@ -1399,8 +1400,13 @@ const DEFAULT_THEME = initialTheme();
             .replace(/\[something specific about the company, team, product, mission, or role\]/g, job.cover_letter_nl || "")
             .replace(/\[AI_FILL\]/g, job.cover_letter_nl || "");
             
-          const profile = state.profilePayload || {};
-          const candidateName = profile.personal ? `${profile.personal.first_name} ${profile.personal.last_name}` : "Omar Abdulghani";
+          if (!state.profilePayload) {
+            await loadProfileData();
+          }
+          const payload = state.profilePayload || {};
+          const profile = payload.profile || payload;
+          const personal = profile.personal || {};
+          const candidateName = (personal.first_name ? `${personal.first_name} ${personal.last_name}` : "Omar Abdulghani").trim();
           const filenameBase = `${candidateName} - ${safeCompany}, ${safeTitle}, Cover Letter (NL)`;
 
           if (format === "txt") {
@@ -3538,6 +3544,7 @@ const DEFAULT_THEME = initialTheme();
           if (state.filters.flag !== "all" && !(Array.isArray(job.flags) && job.flags.includes(state.filters.flag))) return false;
           if (state.filters.quickPreset === "dutch_risk" && !hasDutchRisk(job)) return false;
           if (state.filters.quickPreset === "remote_hybrid" && !isRemoteOrHybrid(job)) return false;
+          if (state.filters.quickPreset === "worth_a_shot" && !isWorthAShot(job)) return false;
           return true;
         })
         .sort((a, b) => {
@@ -3876,6 +3883,17 @@ const DEFAULT_THEME = initialTheme();
     }
 
     function applyQuickPreset(key) {
+      if (key === "easy_apply") {
+        if (state.filters.applyMethod === "easy_apply") {
+          state.filters.applyMethod = "all";
+        } else {
+          state.filters.applyMethod = "easy_apply";
+        }
+        syncFilterOptions();
+        loadJobs();
+        return;
+      }
+
       if (isQuickPresetActive(key)) {
         state.filters.quickPreset = "";
         if (key === "needs_action") {
@@ -3885,10 +3903,7 @@ const DEFAULT_THEME = initialTheme();
         } else if (key === "apply_first" || key === "good_options") {
           state.filters.decision = "all";
           state.filters.actionScope = "all";
-        } else if (key === "easy_apply") {
-          state.filters.applyMethod = "all";
-          state.filters.actionScope = "all";
-        } else if (key === "applied" || key === "irrelevant" || key === "expired" || key === "no_action") {
+        } else if (key === "applied" || key === "irrelevant" || key === "expired" || key === "no_action" || key === "worth_a_shot") {
           state.filters.manualStatus = "all";
         }
       } else {
@@ -3910,9 +3925,6 @@ const DEFAULT_THEME = initialTheme();
           state.filters.actionScope = "needs_action";
           state.filters.decision = "GOOD_OPTIONS";
           state.filters.manualStatus = "all";
-        } else if (key === "easy_apply") {
-          state.filters.applyMethod = "easy_apply";
-          state.filters.actionScope = "needs_action";
         } else if (key === "applied") {
           state.filters.actionScope = "all";
           state.filters.manualStatus = "applied";
@@ -3923,6 +3935,9 @@ const DEFAULT_THEME = initialTheme();
           state.filters.actionScope = "all";
           state.filters.manualStatus = "expired";
         } else if (key === "no_action") {
+          state.filters.actionScope = "all";
+          state.filters.manualStatus = "unreviewed";
+        } else if (key === "worth_a_shot") {
           state.filters.actionScope = "all";
           state.filters.manualStatus = "unreviewed";
         } else {
@@ -4177,11 +4192,15 @@ const DEFAULT_THEME = initialTheme();
       article.className = "compact-job " + safe(job.decision_category) + " manual-" + status;
       article.dataset.jobKey = safe(job.job_key) || jobIdentity(job);
 
+      const key = safe(job.job_key) || jobIdentity(job);
+      if (state.selectedJobKeys.has(key)) article.classList.add("selected");
+
       const main = document.createElement("div");
       main.className = "compact-main";
 
       const titleLine = document.createElement("div");
       titleLine.className = "compact-title";
+      titleLine.append(createCardCheckbox(job));
       const link = document.createElement(job.url ? "a" : "span");
       link.textContent = safe(job.title) || "Untitled job";
       if (job.url) {
@@ -4226,6 +4245,9 @@ const DEFAULT_THEME = initialTheme();
 
       const badges = document.createElement("div");
       badges.className = "badges";
+      if (isWorthAShot(job)) {
+        badges.append(badge("⚡ Worth a Shot", "worth-a-shot"));
+      }
       badges.append(careerLaneBadge(job));
       badges.append(...searchGroupBadges(job));
       badges.append(badge(job.domain_label || labelize(job.domain_category), "domain"));
@@ -4245,13 +4267,15 @@ const DEFAULT_THEME = initialTheme();
     function jobCard(job) {
       const article = document.createElement("article");
       const status = manualStatus(job);
-      article.className = "job " + safe(job.decision_category) + " manual-" + status;
-      article.dataset.jobKey = safe(job.job_key) || jobIdentity(job);
+      const key = safe(job.job_key) || jobIdentity(job);
+      article.className = "job " + safe(job.decision_category) + " manual-" + status + (state.selectedJobKeys.has(key) ? " selected" : "");
+      article.dataset.jobKey = key;
 
       const titleRow = document.createElement("div");
       titleRow.className = "job-title";
       const titleMain = document.createElement("div");
       titleMain.className = "job-title-main";
+      titleMain.append(createCardCheckbox(job));
       const link = document.createElement(job.url ? "a" : "span");
       link.textContent = safe(job.title) || "Untitled job";
       if (job.url) {
@@ -4294,6 +4318,9 @@ const DEFAULT_THEME = initialTheme();
 
       const eligibilityGroup = document.createElement("div");
       eligibilityGroup.className = "badges eligibility-badges";
+      if (isWorthAShot(job)) {
+        eligibilityGroup.append(badge("⚡ Worth a Shot", "worth-a-shot"));
+      }
       eligibilityGroup.append(...eligibilityBadges(job));
 
       const detailsGroup = document.createElement("div");
@@ -4408,7 +4435,13 @@ const DEFAULT_THEME = initialTheme();
 
           const safeCompany = (job.company || "Company").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
           const safeTitle = (job.title || "Position").replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-          const candidateName = (window.globalData && window.globalData.candidate_name) || "[Candidate Name]";
+          if (!state.profilePayload) {
+            await loadProfileData();
+          }
+          const payload = state.profilePayload || {};
+          const profile = payload.profile || payload;
+          const personal = profile.personal || {};
+          const candidateName = (personal.first_name ? `${personal.first_name} ${personal.last_name}` : "Omar Abdulghani").trim();
           const filenameBase = `${candidateName} - ${safeCompany}, ${safeTitle}, Cover Letter`;
           
           if (format === "txt") {
@@ -4769,6 +4802,7 @@ const DEFAULT_THEME = initialTheme();
         if (state.filters.quickPreset === "remote_only" && !isRemoteOnly(job)) return false;
         if (state.filters.quickPreset === "hybrid_only" && !isHybridOnly(job)) return false;
         if (state.filters.quickPreset === "local_only" && (isRemoteOnly(job) || isHybridOnly(job))) return false;
+        if (state.filters.quickPreset === "worth_a_shot" && !isWorthAShot(job)) return false;
 
         return true;
       });
@@ -4817,6 +4851,217 @@ const DEFAULT_THEME = initialTheme();
 
     function isHybridOnly(job) {
       return /hybrid|thuis/i.test(searchBlob(job)) || (job.workplace_type || "").toLowerCase().includes("hybrid");
+    }
+
+    function isWorthAShot(job) {
+      const decision = safe(job.decision_category);
+      if (decision !== "LOW_PROBABILITY" && decision !== "REJECTED") return false;
+
+      const status = (safe(job.terminal_status) || safe(job.reason)).toLowerCase();
+      const hardReasons = [
+        "rejected_irrelevant", "rejected_excluded",
+        "rejected_outside_netherlands", "rejected_outside_search_market",
+        "rejected_market_eligibility",
+        "skipped_preopen_irrelevant", "skipped_preopen_outside_netherlands"
+      ];
+      if (hardReasons.some(r => status.includes(r))) return false;
+
+      const titleLower = safe(job.title).toLowerCase();
+      const targetKeywords = /\b(ux|ui|product|designer|creative|marketing|digital|brand|content|web|frontend|front-end)\b/i;
+      const hasEasyApply = applyMethod(job) === "easy_apply";
+      const hasTitleMatch = targetKeywords.test(titleLower);
+      const hasCreativeDomain = /ux|product.design|creative/i.test(safe(job.domain_category) + " " + safe(job.domain_label));
+      const isPrimaryCareer = safe(job.career_lane).toLowerCase() === "primary";
+
+      return hasEasyApply || hasTitleMatch || hasCreativeDomain || isPrimaryCareer;
+    }
+
+    function createCardCheckbox(job) {
+      const key = safe(job.job_key) || jobIdentity(job);
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "card-select-checkbox";
+      checkbox.checked = state.selectedJobKeys.has(key);
+      checkbox.title = "Select job for bulk action";
+      checkbox.addEventListener("change", (e) => {
+        e.stopPropagation();
+        if (checkbox.checked) {
+          state.selectedJobKeys.add(key);
+        } else {
+          state.selectedJobKeys.delete(key);
+        }
+        syncCardSelectionState();
+        renderBulkActionBar();
+      });
+      return checkbox;
+    }
+
+    function syncCardSelectionState() {
+      const cards = document.querySelectorAll("[data-job-key]");
+      for (const card of cards) {
+        const key = card.dataset.jobKey;
+        const isSelected = state.selectedJobKeys.has(key);
+        card.classList.toggle("selected", isSelected);
+        const cb = card.querySelector(".card-select-checkbox");
+        if (cb) cb.checked = isSelected;
+      }
+    }
+
+    function renderBulkActionBar() {
+      let bar = document.getElementById("bulkActionBar");
+      const count = state.selectedJobKeys.size;
+
+      if (count === 0) {
+        if (bar) bar.remove();
+        syncCardSelectionState();
+        return;
+      }
+
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "bulkActionBar";
+        bar.className = "bulk-action-bar";
+        document.body.append(bar);
+      }
+
+      bar.replaceChildren();
+
+      const infoGroup = document.createElement("div");
+      infoGroup.className = "bulk-action-info";
+
+      const countBadge = document.createElement("span");
+      countBadge.className = "bulk-count-badge";
+      countBadge.textContent = `${count} Selected`;
+
+      const selectAllBtn = document.createElement("button");
+      selectAllBtn.type = "button";
+      selectAllBtn.className = "bulk-btn bulk-btn-subtle";
+      const visibleList = filteredJobs();
+      const allVisibleSelected = visibleList.length > 0 && visibleList.every(j => state.selectedJobKeys.has(safe(j.job_key) || jobIdentity(j)));
+      setIconText(selectAllBtn, allVisibleSelected ? "minus-square" : "check-square", allVisibleSelected ? "Deselect All" : "Select All Visible");
+      selectAllBtn.addEventListener("click", () => {
+        if (allVisibleSelected) {
+          for (const j of visibleList) {
+            state.selectedJobKeys.delete(safe(j.job_key) || jobIdentity(j));
+          }
+        } else {
+          for (const j of visibleList) {
+            state.selectedJobKeys.add(safe(j.job_key) || jobIdentity(j));
+          }
+        }
+        syncCardSelectionState();
+        renderBulkActionBar();
+      });
+
+      infoGroup.append(countBadge, selectAllBtn);
+
+      const actionsGroup = document.createElement("div");
+      actionsGroup.className = "bulk-action-buttons";
+
+      const allJobsMap = new Map(jobs().map(j => [safe(j.job_key) || jobIdentity(j), j]));
+      const selectedJobs = Array.from(state.selectedJobKeys).map(k => allJobsMap.get(k)).filter(Boolean);
+      const easyApplySelected = selectedJobs.filter(j => applyMethod(j) === "easy_apply");
+      const maxPerRun = numeric(state.strategyPayload?.preferences?.max_applications_per_run) || 50;
+      const batchCount = Math.min(easyApplySelected.length, maxPerRun);
+
+      const applyBtn = document.createElement("button");
+      applyBtn.type = "button";
+      applyBtn.className = "bulk-btn bulk-btn-primary";
+      const applyLabel = easyApplySelected.length > maxPerRun
+        ? `⚡ Auto-Apply (${batchCount} of ${easyApplySelected.length} Easy Apply)`
+        : `⚡ Auto-Apply (${easyApplySelected.length} Easy Apply)`;
+      setIconText(applyBtn, "zap", applyLabel);
+      applyBtn.disabled = easyApplySelected.length === 0;
+      applyBtn.addEventListener("click", () => triggerBulkAutoApply(easyApplySelected, maxPerRun));
+
+      const appliedBtn = document.createElement("button");
+      appliedBtn.type = "button";
+      appliedBtn.className = "bulk-btn";
+      setIconText(appliedBtn, "check", "Mark Applied");
+      appliedBtn.addEventListener("click", () => executeBulkJobStatusUpdate(selectedJobs, "applied"));
+
+      const irrelevantBtn = document.createElement("button");
+      irrelevantBtn.type = "button";
+      irrelevantBtn.className = "bulk-btn bulk-btn-danger";
+      setIconText(irrelevantBtn, "archive", "Mark Irrelevant");
+      irrelevantBtn.addEventListener("click", () => executeBulkJobStatusUpdate(selectedJobs, "irrelevant"));
+
+      const expiredBtn = document.createElement("button");
+      expiredBtn.type = "button";
+      expiredBtn.className = "bulk-btn bulk-btn-danger";
+      setIconText(expiredBtn, "clock", "Mark Expired");
+      expiredBtn.addEventListener("click", () => executeBulkJobStatusUpdate(selectedJobs, "expired"));
+
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "bulk-btn-close";
+      closeBtn.title = "Clear selection";
+      closeBtn.append(createIcon("x", "icon icon-sm"));
+      closeBtn.addEventListener("click", () => {
+        state.selectedJobKeys.clear();
+        syncCardSelectionState();
+        renderBulkActionBar();
+      });
+
+      actionsGroup.append(applyBtn, appliedBtn, irrelevantBtn, expiredBtn, closeBtn);
+      bar.append(infoGroup, actionsGroup);
+      syncCardSelectionState();
+    }
+
+    async function executeBulkJobStatusUpdate(selectedJobs, targetStatus) {
+      if (!selectedJobs.length) return;
+      if (!window.confirm(`Are you sure you want to mark ${selectedJobs.length} selected job(s) as ${targetStatus}?`)) return;
+
+      try {
+        const response = await fetch("/api/bulk-job-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobs: selectedJobs, status: targetStatus })
+        });
+        const result = await response.json();
+        if (!result.ok) throw new Error(result.error || "Bulk update failed");
+        
+        showToast(`✅ Successfully marked ${result.count || selectedJobs.length} job(s) as ${targetStatus}!`);
+        state.selectedJobKeys.clear();
+        renderBulkActionBar();
+        await loadJobs();
+      } catch (err) {
+        console.error("Bulk status update failed:", err);
+        alert("Bulk status update failed: " + err.message);
+      }
+    }
+
+    async function triggerBulkAutoApply(easyApplyJobs, maxPerRun = 50) {
+      if (!easyApplyJobs.length) {
+        showToast("No selected jobs are Easy Apply eligible.");
+        return;
+      }
+      const totalSelected = easyApplyJobs.length;
+      const runCount = Math.min(totalSelected, maxPerRun);
+      if (!window.confirm(`Start automated application for ${runCount} Easy Apply job(s)? (Safety cap: max ${maxPerRun} per run, ${totalSelected} selected total).\n\nThe agent will process them safely using your profile & learned answers memory. Any expired jobs will automatically be marked Expired.`)) return;
+
+      const selectedKeys = easyApplyJobs.map(j => safe(j.job_key) || jobIdentity(j)).filter(Boolean);
+      try {
+        await postRunControl("start", {
+          workflow: "auto_apply_selected",
+          selected_job_keys: selectedKeys,
+          search_market: state.filters.searchMarket || "Netherlands",
+          preset: state.filters.quickPreset
+        });
+        if (els.terminalContainer && els.terminalContainer.classList.contains("hidden")) {
+          els.terminalContainer.classList.remove("hidden");
+          if (els.toggleTerminalButton) {
+            els.toggleTerminalButton.setAttribute("aria-expanded", "true");
+            setIconText(els.toggleTerminalButton, "settings", "Hide Terminal");
+          }
+        }
+        showToast(`🚀 Auto-apply initiated for ${runCount} job(s)! Opening terminal...`);
+        state.selectedJobKeys.clear();
+        renderBulkActionBar();
+      } catch (err) {
+        console.error("Start auto-apply failed:", err);
+        alert("Could not start auto-apply workflow: " + err.message);
+      }
     }
 
     function jobs() {
@@ -6267,3 +6512,601 @@ const DEFAULT_THEME = initialTheme();
     loadRunControl();
     window.setInterval(loadData, POLL_MS);
     window.setInterval(loadRunControl, POLL_MS);
+    
+    // GMAIL INTEGRATION
+    const inboxList = document.getElementById("inboxList");
+    const syncGmailBtn = document.getElementById("syncGmailButton");
+    const categoryBtns = document.querySelectorAll(".inbox-categories .career-lane-tab");
+    let allEmails = [];
+
+
+    // Gmail Settings Toggle
+    const openGmailSettingsBtn = document.getElementById("openGmailSettingsBtn");
+    const gmailSettingsContainer = document.getElementById("gmailSettingsContainer");
+    const saveGmailSettingsBtn = document.getElementById("saveGmailSettingsBtn");
+    const inboxCategories = document.querySelector(".inbox-categories");
+    const testGmailConnectionBtn = document.getElementById("testGmailConnectionBtn");
+    const gmailConnectionStatus = document.getElementById("gmailConnectionStatus");
+
+    let isGmailSettingsOpen = false;
+
+    async function loadGmailSettings() {
+      try {
+        const res = await fetch("/api/gmail-settings");
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById("gmailAddressInput").value = data.address || "";
+          
+          const confBadge = document.getElementById("gmailConfiguredBadge");
+          const notConfBadge = document.getElementById("gmailNotConfiguredBadge");
+          const passwordInput = document.getElementById("gmailPasswordInput");
+          const passwordHint = document.getElementById("gmailPasswordHint");
+          if (data.passwordConfigured) {
+            confBadge.hidden = false;
+            notConfBadge.hidden = true;
+            passwordInput.placeholder = "Configured — enter a new password to replace it";
+            if (passwordHint) passwordHint.hidden = false;
+          } else {
+            confBadge.hidden = true;
+            notConfBadge.hidden = false;
+            passwordInput.placeholder = "Enter a 16-character App Password";
+            if (passwordHint) passwordHint.hidden = true;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load Gmail settings", err);
+      }
+    }
+
+    if (openGmailSettingsBtn && gmailSettingsContainer) {
+      openGmailSettingsBtn.addEventListener("click", () => {
+        isGmailSettingsOpen = !isGmailSettingsOpen;
+        if (isGmailSettingsOpen) {
+          gmailSettingsContainer.hidden = false;
+          inboxList.hidden = true;
+          if (inboxCategories) inboxCategories.hidden = true;
+          openGmailSettingsBtn.innerHTML = `<svg class="icon icon-sm"><use href="#icon-x"></use></svg>Close Settings`;
+          loadGmailSettings();
+        } else {
+          gmailSettingsContainer.hidden = true;
+          inboxList.hidden = false;
+          if (inboxCategories) inboxCategories.hidden = false;
+          openGmailSettingsBtn.innerHTML = `<svg class="icon icon-sm"><use href="#icon-settings"></use></svg>Settings`;
+        }
+      });
+      
+      saveGmailSettingsBtn.addEventListener("click", async () => {
+        saveGmailSettingsBtn.disabled = true;
+        const originalText = saveGmailSettingsBtn.innerHTML;
+        saveGmailSettingsBtn.innerHTML = "Saving...";
+        
+        try {
+          const payload = {
+            address: document.getElementById("gmailAddressInput").value,
+            password: document.getElementById("gmailPasswordInput").value
+          };
+          
+          const res = await fetch("/api/gmail-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            document.getElementById("gmailPasswordInput").value = "";
+            const confBadge = document.getElementById("gmailConfiguredBadge");
+            const notConfBadge = document.getElementById("gmailNotConfiguredBadge");
+            const passwordInput = document.getElementById("gmailPasswordInput");
+            const passwordHint = document.getElementById("gmailPasswordHint");
+            if (data.passwordConfigured) {
+              confBadge.hidden = false;
+              notConfBadge.hidden = true;
+              passwordInput.placeholder = "Configured — enter a new password to replace it";
+              if (passwordHint) passwordHint.hidden = false;
+            } else {
+              confBadge.hidden = true;
+              notConfBadge.hidden = false;
+              passwordInput.placeholder = "Enter a 16-character App Password";
+              if (passwordHint) passwordHint.hidden = true;
+            }
+          }
+        } catch (err) {
+          console.error("Failed to save Gmail settings", err);
+        } finally {
+          saveGmailSettingsBtn.disabled = false;
+          saveGmailSettingsBtn.innerHTML = originalText;
+        }
+      });
+      
+      testGmailConnectionBtn.addEventListener("click", async () => {
+        gmailConnectionStatus.textContent = "Testing connection...";
+        gmailConnectionStatus.style.color = "var(--text-secondary)";
+        
+        try {
+           const res = await fetch("/api/gmail/test-connection", { method: "POST" });
+           const data = await res.json();
+           if (res.ok && data.ok) {
+              gmailConnectionStatus.textContent = "Connection successful!";
+              gmailConnectionStatus.style.color = "var(--status-good)";
+           } else {
+              gmailConnectionStatus.textContent = `Connection failed: ${data.error || 'Unknown error'}`;
+              gmailConnectionStatus.style.color = "var(--status-rejected)";
+           }
+        } catch (err) {
+           gmailConnectionStatus.textContent = "Connection failed.";
+           gmailConnectionStatus.style.color = "var(--status-rejected)";
+        }
+      });
+    }
+
+    function formatDate(rawDateStr) {
+      if (!rawDateStr) return "";
+      try {
+        const d = new Date(rawDateStr);
+        if (isNaN(d.getTime())) return rawDateStr;
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + " " + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return rawDateStr;
+      }
+    }
+
+    function getInitials(name) {
+      if (!name) return "✉️";
+      const parts = name.replace(/[^a-zA-Z0-9\s]/g, '').trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    if (syncGmailBtn) {
+      let pollInterval = null;
+      const stopSyncBtn = document.getElementById("stopSyncButton");
+
+      async function checkSyncStatus() {
+        try {
+          const res = await fetch("/api/gmail/sync-status");
+          const status = await res.json();
+          if (status.status === "running") {
+            syncGmailBtn.disabled = true;
+            let progressText = "Syncing...";
+            if (status.total && status.processed !== undefined) {
+              const perc = Math.round((status.processed / status.total) * 100);
+              progressText = `Syncing... ${perc}% (${status.processed}/${status.total})`;
+            }
+            syncGmailBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> ${progressText}`;
+            if (stopSyncBtn) { stopSyncBtn.style.display = ""; stopSyncBtn.disabled = false; stopSyncBtn.innerHTML = `<svg class="icon icon-sm"><use href="#icon-x-circle"></use></svg>Stop Sync`; }
+            await loadEmails();
+          } else {
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
+              syncGmailBtn.disabled = false;
+              syncGmailBtn.innerHTML = `<svg class="icon"><use href="#icon-refresh"></use></svg> Sync Inbox`;
+              if (stopSyncBtn) stopSyncBtn.style.display = "none";
+              
+              const testSyncGmailBtn = document.getElementById("testSyncGmailButton");
+              if (testSyncGmailBtn) {
+                testSyncGmailBtn.disabled = false;
+                testSyncGmailBtn.innerHTML = `<svg class="icon"><use href="#icon-play"></use></svg> Test 1 Email Scan`;
+              }
+              
+              await loadEmails();
+              if (status.status === "completed") {
+                showToast(`Sync complete! ${status.new_emails || 0} new emails processed.`);
+              } else if (status.status === "error") {
+                showToast(`Sync issue: ${status.error || 'Unknown error'}`);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Status check failed", e);
+        }
+      }
+
+      // Check on page load if sync is already running in background
+      checkSyncStatus();
+      
+      if (stopSyncBtn) {
+        stopSyncBtn.addEventListener("click", async () => {
+          stopSyncBtn.disabled = true;
+          stopSyncBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> Stopping...`;
+          try {
+            await fetch("/api/gmail/sync-cancel", { method: "POST" });
+            showToast("Sync cancellation requested...");
+          } catch(e) {
+            console.error("Cancel failed", e);
+          }
+        });
+      }
+
+      syncGmailBtn.addEventListener("click", async () => {
+        syncGmailBtn.disabled = true;
+        syncGmailBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> Starting...`;
+        const syncDaysSelect = document.getElementById("syncDaysSelect");
+        const daysBack = syncDaysSelect ? parseInt(syncDaysSelect.value, 10) : 7;
+        try {
+          const res = await fetch("/api/gmail/sync", { 
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ days: daysBack })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          
+          if (!pollInterval) {
+            pollInterval = setInterval(checkSyncStatus, 3000);
+          }
+        } catch (e) {
+          showToast("Failed to start sync: " + e.message);
+          syncGmailBtn.disabled = false;
+          syncGmailBtn.innerHTML = `<svg class="icon"><use href="#icon-refresh"></use></svg> Sync Inbox`;
+        }
+      });
+
+      const testSyncGmailBtn = document.getElementById("testSyncGmailButton");
+      if (testSyncGmailBtn) {
+        testSyncGmailBtn.addEventListener("click", async () => {
+          testSyncGmailBtn.disabled = true;
+          testSyncGmailBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> Testing...`;
+          try {
+            const res = await fetch("/api/gmail/sync-test", { 
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({})
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            
+            if (!pollInterval) {
+              pollInterval = setInterval(checkSyncStatus, 3000);
+            }
+          } catch (e) {
+            showToast("Failed to start test sync: " + e.message);
+            testSyncGmailBtn.disabled = false;
+            testSyncGmailBtn.innerHTML = `<svg class="icon"><use href="#icon-play"></use></svg> Test 1 Email Scan`;
+          }
+        });
+      }
+
+      const clearGmailBtn = document.getElementById("clearGmailButton");
+      if (clearGmailBtn) {
+        clearGmailBtn.addEventListener("click", async () => {
+          if (!confirm("Are you sure you want to clear all synced emails? This cannot be undone.")) return;
+          clearGmailBtn.disabled = true;
+          clearGmailBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> Cleaning...`;
+          try {
+            const res = await fetch("/api/gmail/clear", { method: "POST" });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            showToast("Emails cleared successfully.");
+            await loadEmails();
+          } catch (e) {
+            showToast("Failed to clear emails: " + e.message);
+          } finally {
+            clearGmailBtn.disabled = false;
+            clearGmailBtn.innerHTML = `<svg class="icon"><use href="#icon-trash"></use></svg> Clean Synced`;
+          }
+        });
+      }
+    }
+
+    async function loadEmails() {
+      if (!inboxList) return;
+      try {
+        const res = await fetch("/api/gmail/emails");
+        const data = await res.json();
+        allEmails = data.emails || [];
+        
+        // Clean up LLM artifacts
+        allEmails.forEach(e => {
+            if (e.analysis && typeof e.analysis.company_name === 'string') {
+                const ln = e.analysis.company_name.toLowerCase();
+                if (ln === 'null' || ln === 'none') {
+                    e.analysis.company_name = "";
+                }
+            }
+        });
+        
+        // Update category counts
+        const categoryCounts = allEmails.reduce((acc, email) => {
+          const cat = (email.analysis && email.analysis.category) || "Other";
+          acc[cat] = (acc[cat] || 0) + 1;
+          acc["All"] = (acc["All"] || 0) + 1;
+          return acc;
+        }, { "All": 0 });
+        
+        document.querySelectorAll('.inbox-categories .career-lane-tab').forEach(tab => {
+          const cat = tab.getAttribute('data-category');
+          const count = categoryCounts[cat] || 0;
+          let badge = tab.querySelector('.tab-badge');
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'tab-badge';
+            tab.appendChild(badge);
+          }
+          badge.textContent = count;
+        });
+
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        renderEmails(activeCat);
+        // Also trigger job render to apply badges
+        renderJobs();
+      } catch (e) {
+        inboxList.innerHTML = `<div class="error-state">Failed to load emails: ${e.message}</div>`;
+      }
+    }
+
+    function renderEmails(filterCategory) {
+      if (!window.jobAgentNavigateToLinkedJob) {
+        window.jobAgentNavigateToLinkedJob = (jobTitle) => {
+          const btn = document.querySelector('[data-app-page="jobs"]');
+          if (btn) btn.click();
+          
+          const actionFilter = document.getElementById('actionFilter');
+          if (actionFilter && actionFilter.value !== 'all') {
+              actionFilter.value = 'all';
+              actionFilter.dispatchEvent(new Event('change'));
+          }
+
+          const input = document.getElementById('searchInput');
+          if (input) {
+              input.value = jobTitle;
+              input.dispatchEvent(new Event('input'));
+              setTimeout(() => {
+                  const list = document.getElementById('jobsList') || input;
+                  list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 150);
+          }
+        };
+      }
+      if (!inboxList) return;
+      inboxList.innerHTML = "";
+      
+      const filtered = allEmails.filter(e => filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory));
+      
+      if (filtered.length === 0) {
+        inboxList.innerHTML = `
+          <div class="empty-state" style="text-align: center; grid-column: 1 / -1; padding: 40px 0;">
+            <strong style="color: var(--text-primary); font-size: 16px;">No emails found</strong>
+            <p style="color: var(--text-secondary); margin-top: 8px;">There are no emails matching the selected category.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      const sortSelect = document.getElementById('emailSortSelect');
+      const sortOrder = sortSelect ? sortSelect.value : 'newest';
+      
+      filtered.sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+      });
+      
+      const extractSenderName = (senderStr) => {
+        if (!senderStr) return "Unknown";
+        const match = senderStr.match(/^([^<]+?)\s*</);
+        if (match) return match[1].replace(/"/g, '').trim();
+        return senderStr.trim();
+      };
+
+      const getEmailDisplayInfo = (email) => {
+        const cat = (email.analysis && email.analysis.category) || "Other";
+        const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
+        let comp = (email.analysis && email.analysis.company_name) || "";
+        
+        if (email.is_outbound && comp) {
+            const rawSender = extractSenderName(email.sender);
+            if (comp.toLowerCase() === rawSender.toLowerCase() || comp.toLowerCase().includes("omar abdulghani")) {
+                comp = ""; // Reset hallucinated company name
+            }
+        }
+        
+        let senderKey;
+        if (isJobCategory && comp && comp.length > 1) {
+            senderKey = comp;
+        } else {
+            if (email.is_outbound) {
+                const recipientEmail = email.recipient || "";
+                const domainMatch = recipientEmail.match(/@([a-zA-Z0-9.-]+)\./);
+                if (domainMatch) {
+                    const domain = domainMatch[1];
+                    senderKey = domain.charAt(0).toUpperCase() + domain.slice(1);
+                } else {
+                    const rawRecipientName = email.recipient ? extractSenderName(email.recipient) : "Unknown";
+                    senderKey = `Sent to: ${rawRecipientName}`;
+                }
+            } else {
+                senderKey = extractSenderName(email.sender);
+            }
+        }
+        
+        const initialsSource = senderKey.replace("Sent to: ", "");
+        
+        return { displaySender: senderKey, initialsSource };
+      };
+
+      const groupMap = new Map();
+      for (const email of filtered) {
+          const { displaySender } = getEmailDisplayInfo(email);
+          if (!groupMap.has(displaySender)) {
+              groupMap.set(displaySender, []);
+          }
+          groupMap.get(displaySender).push(email);
+      }
+      
+      const groups = Array.from(groupMap.values());
+      groups.sort((groupA, groupB) => {
+          const timeA = new Date(groupA[0].date).getTime();
+          const timeB = new Date(groupB[0].date).getTime();
+          return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+      });
+
+      const createEmailCard = (email) => {
+        const card = document.createElement("div");
+        card.className = "email-card";
+        
+        const cat = (email.analysis && email.analysis.category) || "Other";
+        let summaryText = (email.analysis && email.analysis.summary) || "";
+        if (!summaryText || summaryText === email.subject) {
+            summaryText = email.snippet || (email.body ? email.body.substring(0, 150) + "..." : "");
+        }
+        
+        const { displaySender, initialsSource } = getEmailDisplayInfo(email);
+        const initials = getInitials(initialsSource);
+        
+        const badgesHtml = [];
+        if (email.is_forwarded) {
+            badgesHtml.push(`<span class="email-flag is-forwarded"><svg class="icon"><path d="M14 7l5 5-5 5V9H5v-4h9v2z" fill="currentColor"/></svg> Forwarded</span>`);
+        }
+        if (email.is_reply) {
+            badgesHtml.push(`<span class="email-flag is-reply"><svg class="icon"><path d="M10 7L5 12l5 5v-3h9V9h-9V7z" fill="currentColor"/></svg> Reply</span>`);
+        }
+        if (email.is_automated) {
+            badgesHtml.push(`<span class="email-flag is-automated"><svg class="icon"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v5l3 2" fill="none" stroke="currentColor" stroke-width="2"/></svg> Automated</span>`);
+        }
+        if (email.has_attachments) {
+            badgesHtml.push(`<span class="email-flag has-attachment"><svg class="icon"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" stroke-width="2"/></svg> Attachment</span>`);
+        }
+        if (email.has_calendar_invite) {
+            badgesHtml.push(`<span class="email-flag has-calendar"><svg class="icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/></svg> Calendar Invite</span>`);
+        }
+
+        card.innerHTML = `
+          <div class="email-avatar ${safe(cat)}">${safe(initials)}</div>
+          <div class="email-body-content">
+            <div class="email-header">
+              <div class="email-meta-left">
+                <span class="email-company-pill">${safe(displaySender)}</span>
+              </div>
+              <div class="email-meta-right">
+                <span class="email-date">${safe(formatDate(email.date))}</span>
+                <span class="email-category ${safe(cat)}">${safe(cat)}</span>
+              </div>
+            </div>
+            <div class="email-subject" style="margin-bottom: 8px;">${safe(summaryText)}</div>
+            ${badgesHtml.length > 0 ? `<div class="email-flags-container">${badgesHtml.join("")}</div>` : ""}
+            
+            ${(email.analysis && email.analysis.interview_date) ? `
+            <div class="email-interview-banner">
+              <svg class="icon" style="color: var(--status-good);"><use href="#icon-calendar"></use></svg>
+              <div>
+                <div style="font-weight: 600; color: var(--text-primary); font-size: 13px;">Interview Scheduled</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${safe(email.analysis.interview_date)} ${email.analysis.interview_time ? `at ${safe(email.analysis.interview_time)}` : ''}</div>
+              </div>
+            </div>
+            ` : ""}
+            ${email.linked_job_title ? `
+            <div onclick="event.stopPropagation(); window.jobAgentNavigateToLinkedJob('${safe(email.linked_job_title).replace(/'/g, "\\'")}')" style="cursor: pointer; margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-radius: 6px; font-size: 11px; font-weight: 600; transition: background 0.2s;" onmouseover="this.style.background='rgba(59, 130, 246, 0.2)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.1)'" title="View in Job Board">
+              <svg class="icon" style="width: 12px; height: 12px;"><use href="#icon-briefcase"></use></svg>
+              Linked Job: ${safe(email.linked_job_title)}
+            </div>
+            ` : ""}
+          </div>
+        `;
+        
+        if (email.gmail_hex_id) {
+          card.onclick = () => window.open(`https://mail.google.com/mail/u/0/#all/${email.gmail_hex_id}`, '_blank');
+          card.title = "Open in Gmail";
+        } else if (email.message_id) {
+          card.onclick = () => {
+            const encodedId = encodeURIComponent(email.message_id);
+            window.open(`https://mail.google.com/mail/u/0/#search/rfc822msgid%3A${encodedId}`, '_blank');
+          };
+          card.title = "Search in Gmail";
+        }
+        
+        return card;
+      };
+
+      for (const group of groups) {
+          if (group.length === 1) {
+              inboxList.appendChild(createEmailCard(group[0]));
+          } else {
+              const container = document.createElement("div");
+              container.className = "email-group-container";
+              
+              const firstEmail = group[0];
+              const { displaySender, initialsSource } = getEmailDisplayInfo(firstEmail);
+              const initials = getInitials(initialsSource);
+              
+              container.innerHTML = `
+                <div class="email-group-header" onclick="this.parentElement.classList.toggle('expanded')">
+                  <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="email-avatar" style="margin-top: 0; background: var(--surface-3);">${safe(initials)}</div>
+                    <div class="email-group-title">
+                      <span>${safe(displaySender)}</span>
+                      <span class="email-group-badge">${group.length} emails</span>
+                    </div>
+                  </div>
+                  <svg class="icon email-group-icon"><use href="#icon-trending-down"></use></svg>
+                </div>
+                <div class="email-group-content">
+                  <div class="email-group-inner"></div>
+                </div>
+              `;
+              
+              const inner = container.querySelector('.email-group-inner');
+              for (const email of group) {
+                  inner.appendChild(createEmailCard(email));
+              }
+              inboxList.appendChild(container);
+          }
+      }
+    }
+
+    categoryBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        categoryBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        renderEmails(btn.dataset.category);
+      });
+    });
+    
+    const emailSortSelect = document.getElementById('emailSortSelect');
+    if (emailSortSelect) {
+        emailSortSelect.addEventListener('change', () => {
+            const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+            renderEmails(activeCat);
+        });
+    }
+
+    // Inject email badges into renderJobs dynamically
+    const originalRenderJobs = renderJobs;
+    renderJobs = function() {
+        originalRenderJobs();
+        if (allEmails.length > 0) {
+            updateJobBadges(allEmails);
+        }
+    };
+    
+    function updateJobBadges(emails) {
+      const jobCards = document.querySelectorAll(".job-card");
+      jobCards.forEach(card => {
+        const titleEl = card.querySelector(".job-title");
+        const companyEl = card.querySelector(".job-company");
+        if (!titleEl || !companyEl) return;
+        
+        const company = companyEl.textContent.trim().toLowerCase();
+        
+        // Find matching email
+        const matchingEmail = emails.find(e => e.analysis && e.analysis.company_name && e.analysis.company_name.toLowerCase() === company);
+        
+        if (matchingEmail) {
+          const oldBadge = titleEl.querySelector(".gmail-badge");
+          if (oldBadge) oldBadge.remove();
+          
+          const cat = matchingEmail.analysis.category;
+          if (cat !== "Other" && cat !== "Promotions" && cat !== "Personal") {
+              const badge = document.createElement("span");
+              badge.className = `gmail-badge ${cat.toLowerCase()}`;
+              badge.innerHTML = `📧 ${safe(cat)}`;
+              titleEl.appendChild(badge);
+          }
+        }
+      });
+    }
+
+    // Initial load for emails
+    setTimeout(loadEmails, 1000);
+

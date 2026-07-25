@@ -3200,6 +3200,18 @@ class JobBrain:
             if postal_code:
                 return str(postal_code)
 
+        if self._matches_any(question_lower, ["phone", "phone number", "telephone", "mobile"]):
+            phone = personal.get("phone")
+            if phone:
+                return phone
+                
+        if self._matches_any(question_lower, ["phone country code", "country code"]):
+            phone = personal.get("phone", "")
+            if phone.startswith("+"):
+                # Simple extraction, normally LinkedIn dropdown matches +31 etc.
+                return "Netherlands (+31)" if "+31" in phone else phone
+            return "Netherlands (+31)"
+
         if self._matches_any(question_lower, ["start date", "when can you start", "available to start"]):
             if answers.get("can_start_immediately"):
                 return "Available immediately"
@@ -3741,6 +3753,15 @@ Instructions:
 - If the profile does not contain the exact answer, use the closest truthful professional response
 - For numeric fields (years of experience, notice period, salary, etc.), return only the requested value format
 """
+        if self.gemini_api_key:
+            from agent.brain import GeminiRetryableScoringError
+            try:
+                answer, _ = self._gemini_generate_content(prompt=prompt, max_tokens=300)
+                return answer.strip()
+            except GeminiRetryableScoringError:
+                pass
+        
+        # Fallback to Anthropic if not using Gemini or if Gemini fails
         response = self._get_client().messages.create(
             model=self.model,
             max_tokens=300,

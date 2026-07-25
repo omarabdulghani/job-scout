@@ -1640,6 +1640,11 @@ class LinkedInJobScout:
                         details = await self._get_full_job_details(summary)
                         stats["jobs_opened"] += 1
                         self._human_jobs_since_break += 1
+
+                        if details.get("is_expired_on_linkedin"):
+                            if job_processed_callback:
+                                job_processed_callback()
+                            continue
                         if self._description_extracted(details):
                             stats["description_extracted_true"] += 1
                             persisted = self._upsert_collected_job(details, query)
@@ -2513,6 +2518,40 @@ class LinkedInJobScout:
 
         try:
             await self.browser.wait_for_navigation(5000)
+        except Exception:
+            pass
+
+        try:
+            content = await self.browser.page.content()
+            content_lower = content.lower()
+            is_expired = False
+            
+            if "no longer accepting applications" in content_lower:
+                is_expired = True
+            elif "this job is no longer available" in content_lower:
+                is_expired = True
+            elif "this page doesn't exist" in content_lower:
+                is_expired = True
+            elif "unable to load the page" in content_lower:
+                is_expired = True
+            elif "page not found" in content_lower and "linkedin" in content_lower:
+                is_expired = True
+                
+            if not is_expired:
+                alert_box = await self.browser.page.query_selector(".jobs-details-top-card__apply-error, .artdeco-inline-feedback--error")
+                if alert_box:
+                    text = await alert_box.inner_text()
+                    if "no longer accepting" in text.lower():
+                        is_expired = True
+            
+            if is_expired:
+                details["is_expired_on_linkedin"] = True
+                details["description"] = ""
+                details["description_debug"] = {
+                    "text_length": 0,
+                    "notes": ["job_is_expired"],
+                }
+                return details
         except Exception:
             pass
 

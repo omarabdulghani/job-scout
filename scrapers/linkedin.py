@@ -943,14 +943,19 @@ class LinkedInScraper:
                     const s = window.getComputedStyle(el);
                     if (!/(auto|scroll)/i.test(s.overflowY || "")) return false;
                     if (el.scrollHeight <= el.clientHeight + 10) return false;
-                    const r = el.getBoundingClientRect();
-                    if (r.width > vpW * 0.95 && r.height > vpH * 0.9) return false;
                     return true;
                 });
                 scrollables.sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight));
                 // Never fall back to scrolling the modal root — if nothing inner is
                 // scrollable the content already fits and we must not touch the page.
-                if (!scrollables.length) return false;
+                if (!scrollables.length) {
+                    // Fallback to checking if the modal itself is scrollable!
+                    const s = window.getComputedStyle(modal);
+                    if (/(auto|scroll)/i.test(s.overflowY || "") && modal.scrollHeight > modal.clientHeight + 10) {
+                        return modal;
+                    }
+                    return false;
+                }
                 const target = scrollables[0];
 
                 const before = target.scrollTop;
@@ -968,11 +973,11 @@ class LinkedInScraper:
 
     async def is_easy_apply_flow_active(self) -> bool:
         # Retry briefly — the modal may not have fully rendered yet when first checked.
-        for attempt in range(3):
+        for attempt in range(5):
             if await self.is_easy_apply_modal_open() or await self._is_interop_host_visible():
                 return True
-            if attempt < 2:
-                await asyncio.sleep(0.8)
+            if attempt < 4:
+                await asyncio.sleep(1.0)
         try:
             page_text = (await self.browser.get_page_text()).lower()
         except Exception:
@@ -990,6 +995,51 @@ class LinkedInScraper:
                 "application sent",
             ]
         )
+
+    async def is_job_expired_on_page(self) -> bool:
+        """Check if the currently navigated LinkedIn job page is closed or expired."""
+        try:
+            content = await self.browser.page.content()
+            content_lower = content.lower()
+            if "no longer accepting applications" in content_lower:
+                return True
+            if "this job is no longer available" in content_lower:
+                return True
+            if "this page doesn't exist" in content_lower:
+                return True
+            if "unable to load the page" in content_lower:
+                return True
+            if "page not found" in content_lower and "linkedin" in content_lower:
+                return True
+
+            alert_box = await self.browser.page.query_selector(".jobs-details-top-card__apply-error, .artdeco-inline-feedback--error")
+            if alert_box:
+                text = await alert_box.inner_text()
+                if "no longer accepting" in text.lower():
+                    return True
+        except Exception:
+            pass
+        return False
+
+    async def is_linkedin_limit_roadblock(self) -> bool:
+        """Check if LinkedIn daily limit or captcha roadblock is displayed."""
+        try:
+            content = (await self.browser.page.content()).lower()
+            limit_markers = [
+                "reached your daily limit",
+                "daily limit for easy apply",
+                "reached the daily limit",
+                "limit for easy apply",
+                "too many applications",
+                "try again tomorrow",
+                "security verification",
+                "please solve this puzzle",
+            ]
+            if any(marker in content for marker in limit_markers):
+                return True
+        except Exception:
+            pass
+        return False
 
     async def handle_easy_apply_modal(self, brain) -> dict | None:
         state = await self.inspect_easy_apply_modal()

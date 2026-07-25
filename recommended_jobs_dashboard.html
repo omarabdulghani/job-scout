@@ -186,6 +186,10 @@
       <path d="M18 6L6 18" />
       <path d="M6 6l12 12" />
     </symbol>
+    <symbol id="icon-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+      <polyline points="22,6 12,13 2,6"></polyline>
+    </symbol>
   </svg>
   <div class="app-frame">
     <button id="mobileNavBackdrop" class="mobile-nav-backdrop" type="button" aria-label="Close workspace navigation"
@@ -202,6 +206,9 @@
         <button class="app-nav-button active" type="button" data-app-page="jobs"><svg class="icon">
             <use href="#icon-briefcase"></use>
           </svg>Jobs</button>
+        <button class="app-nav-button" type="button" data-app-page="inbox"><svg class="icon">
+            <use href="#icon-mail"></use>
+          </svg>Gmail Inbox</button>
         <button class="app-nav-button" type="button" data-app-page="scout"><svg class="icon">
             <use href="#icon-search"></use>
           </svg>Scout</button>
@@ -233,7 +240,7 @@
           title="Switch to dark mode"><svg id="themeToggleIcon" class="icon">
             <use href="#icon-moon"></use>
           </svg><span id="themeToggleText">Dark mode</span></button>
-        <button class="app-nav-button" type="button" data-app-page="resetClean" style="color: #52c41a;"><svg class="icon" style="stroke: #52c41a;">
+        <button class="app-nav-button" type="button" data-app-page="resetClean"><svg class="icon">
             <use href="#icon-trash"></use>
           </svg>Reset &amp; Clean</button>
         <button id="restartServerButton" class="app-nav-button" type="button" style="color: #ff4d4f;">
@@ -1743,6 +1750,113 @@
 
         </div>
       </main>
+
+  <main id="inboxPage" class="shell app-page workspace-page" data-page-id="inbox" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-icon" src="icon-dashboard.png" alt="" aria-hidden="true" />
+        <div>
+          <h1>Gmail Inbox Tracker</h1>
+          <p class="page-intent">Review job-related emails mapped directly to your applications.</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <div class="top-button-row">
+          <div class="field" style="margin: 0; min-width: 140px;">
+            <select id="syncDaysSelect" aria-label="Sync timeframe">
+              <option value="7">Last 7 Days</option>
+              <option value="30">Last 30 Days</option>
+              <option value="90">Last 90 Days</option>
+            </select>
+          </div>
+          <button id="syncGmailButton" class="button primary" type="button" style="margin-left: 8px;"><svg class="icon icon-sm">
+              <use href="#icon-refresh"></use>
+            </svg>Sync Inbox</button>
+          <button id="stopSyncButton" class="button secondary" type="button" style="margin-left: 8px; display: none; color: var(--status-rejected); border-color: var(--status-rejected);"><svg class="icon icon-sm">
+              <use href="#icon-x-circle"></use>
+            </svg>Stop Sync</button>
+
+          <button id="openGmailSettingsBtn" class="button secondary" type="button" style="margin-left: 8px; color: var(--status-rejected); border-color: var(--status-rejected);"><svg class="icon icon-sm">
+              <use href="#icon-settings"></use>
+            </svg>Settings</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="job-list-container" style="padding: var(--space-4);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; gap: var(--space-3);">
+        <nav class="career-lane-tabs inbox-categories" aria-label="Email categories" style="margin-bottom: 0;">
+          <button class="career-lane-tab active" type="button" data-category="All"><svg class="icon"><use href="#icon-list"></use></svg><span>All</span></button>
+          <button class="career-lane-tab" type="button" data-category="Interview" style="color: var(--status-good);"><svg class="icon"><use href="#icon-clock"></use></svg><span>Interview</span></button>
+          <button class="career-lane-tab" type="button" data-category="Applied" style="color: var(--status-apply);"><svg class="icon"><use href="#icon-check-circle"></use></svg><span>Applied</span></button>
+          <button class="career-lane-tab" type="button" data-category="Rejected" style="color: var(--status-rejected);"><svg class="icon"><use href="#icon-x-circle"></use></svg><span>Rejected</span></button>
+          <button class="career-lane-tab" type="button" data-category="Personal" style="color: var(--text-secondary);"><svg class="icon"><use href="#icon-info"></use></svg><span>Personal</span></button>
+          <button class="career-lane-tab" type="button" data-category="Promotions" style="color: var(--status-info);"><svg class="icon"><use href="#icon-spark"></use></svg><span>Promotions</span></button>
+          <button class="career-lane-tab" type="button" data-category="Other"><svg class="icon"><use href="#icon-layout"></use></svg><span>Other</span></button>
+        </nav>
+        <div class="field" style="margin: 0; min-width: 150px;">
+          <select id="emailSortSelect" aria-label="Sort emails">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
+      </div>
+      <div id="inboxList" class="inbox-list">
+        <!-- Emails render here -->
+      </div>
+      
+      <div id="gmailSettingsContainer" class="settings-layout" hidden>
+        <section class="form-section">
+          <div class="form-section-head">
+            <div>
+              <h2>Gmail Connection Settings</h2>
+              <p>Configure your Gmail App Password securely. Credentials remain local and are never sent back to the browser.</p>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button id="clearGmailButton" class="button secondary" type="button" style="color: var(--status-rejected); border-color: var(--status-rejected);"><svg class="icon icon-sm">
+                  <use href="#icon-trash"></use>
+                </svg>Clean Synced</button>
+              <button id="saveGmailSettingsBtn" class="button primary" type="button"><svg class="icon icon-sm">
+                  <use href="#icon-check"></use>
+                </svg>Save settings</button>
+            </div>
+          </div>
+          
+          <div style="margin-top: 24px;">
+            <article class="provider-card">
+              <div class="provider-card-head">
+                <div>
+                  <h2>Gmail App Password</h2>
+                  <div class="provider-copy">Generate an App Password from your Google Account settings to allow Job Scout to sync your emails securely.</div>
+                </div>
+                <span id="gmailConfiguredBadge" class="provider-status configured" hidden>Configured</span>
+                <span id="gmailNotConfiguredBadge" class="provider-status">Not configured</span>
+              </div>
+              
+              <div class="form-grid">
+                <div class="field">
+                  <label for="gmailAddressInput">GMAIL_ADDRESS</label>
+                  <input id="gmailAddressInput" type="email" class="form-input" placeholder="e.g. your.email@gmail.com">
+                </div>
+                
+                <div class="field">
+                  <label for="gmailPasswordInput">GMAIL_APP_PASSWORD</label>
+                  <input id="gmailPasswordInput" type="password" class="form-input" placeholder="Enter a 16-character App Password">
+                  <span id="gmailPasswordHint" class="field-hint" hidden>The existing key is hidden. Leave blank to keep it.</span>
+                </div>
+              </div>
+              
+              <div style="margin-top: 16px; display: flex; gap: 8px; align-items: center;">
+                <button id="testGmailConnectionBtn" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-activity"></use></svg>Test connection</button>
+                <button id="testSyncGmailButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Test 1 Email Scan (Dev)</button>
+                <span id="gmailConnectionStatus" style="font-size: 13px;"></span>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -2042,9 +2156,9 @@
         </form>
       </div>
     </section>
-  </div>
 
-    <script type="module" src="dashboard/app.js?v=20260716-async-font-loading"></script>
+
+  <script type="module" src="dashboard/app.js?v=20260716-async-font-loading"></script>
 </body>
 
 </html>
