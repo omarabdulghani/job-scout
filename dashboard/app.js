@@ -6836,6 +6836,7 @@ const DEFAULT_THEME = initialTheme();
         if (map[lower]) return map[lower];
         if (lower.includes("linkedin")) return "LinkedIn";
         
+        clean = clean.replace(/^(?:Info|No-Reply|Noreply|Support|Helpdesk|Contact|Service|Team|Recruitment|Careers|News|Newsletter|Orders|Billing|Admin|Office|Receptuur)\s+/i, "").trim();
         clean = clean.replace(/(\s+|,)+(Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$/i, "").trim();
         if (clean === clean.toLowerCase() && clean.length > 1) {
             clean = clean.charAt(0).toUpperCase() + clean.slice(1);
@@ -6884,6 +6885,7 @@ const DEFAULT_THEME = initialTheme();
            }
        }
        
+       senderKey = normalizeBrandName(senderKey);
        const normKey = _normStr(senderKey);
        if (normKey && knownCompanies.has(normKey)) {
            senderKey = knownCompanies.get(normKey);

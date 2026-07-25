@@ -46,7 +46,6 @@ def _validate_ai_consistency(analysis: dict) -> dict:
                 analysis["category"] = "Other"
             else:
                 analysis["category"] = "Personal"
-                analysis["company_name"] = None
     return analysis
 
 def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict, from_llm: bool = False) -> dict:
@@ -75,7 +74,6 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     if not from_llm:
         if any(k in text for k in ["herhaalrecept", "recept", "amitriptyline", "medicatie", "medicijn", "apotheek", "huisarts", "tandarts", "ziekenhuis", "praktijk", "voorschrift", "prescription", "refill", "pharmacy", "clinic", "doctor", "tandheelkunde"]):
             category = "Personal"
-            company = None
         elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further", "isn't progressing"]):
             category = "Rejected"
         elif any(k in text for k in [
@@ -143,12 +141,19 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
                     break
 
     # 6. Fallback sender name extraction
-    if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
+    if not company:
         sender_clean = _clean_header(target_email)
         if "<" in sender_clean:
             name_part = sender_clean.split("<")[0].replace('"', '').strip()
             if name_part and not any(ats in name_part.lower() for ats in ats_names) and "omar abdulghani" not in name_part.lower():
                 company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
+
+    # 6b. Normalize canonical group name (strip departmental prefixes and legal suffixes)
+    if company:
+        company = re.sub(r'^(?:Info|No-Reply|Noreply|Support|Helpdesk|Contact|Service|Team|Recruitment|Careers|News|Newsletter|Orders|Billing|Admin|Office|Receptuur)\s+', '', company, flags=re.IGNORECASE).strip()
+        company = re.sub(r'(\s+|,)+(?:Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$', '', company, flags=re.IGNORECASE).strip()
+        if company == company.lower() and len(company) > 1:
+            company = company.title()
 
     # 7. Clean summary
     if company and (summary == subject or not summary or summary == "Email received."):
@@ -357,7 +362,7 @@ Rules for Categorization:
 4. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Interview' or 'Applied'.
 5. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the interview').
 6. ATS Override: Any emails sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) that are directly about a job application MUST be categorized as 'Applied' (or 'Interview'/'Rejected' if applicable). Never categorize genuine job applications as 'Personal'.
-7. Company Name Extraction: ALWAYS extract the company_name if it is a job-related email. Look at the sender's domain (e.g. @d-en-b.nl -> D&B), the subject line, or the body. NEVER leave it null for job emails. NEVER use the sender's personal name (e.g. Maud Appelman) as the company. NEVER use software platform names (e.g. Greenhouse, Lever, Workday, Homerun, Recruitee, Dayforce, HROffice) as the company. If an email comes from an ATS platform, look into the email body or subject to extract the actual hiring employer. For outbound emails, deduce the company_name from the Recipient's domain (e.g. @hetabc.nl -> 'Het ABC').
+7. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
 8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or interview updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Interview' unless the email is an explicit application directly TO a company/HR.
 9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have an interview', your summary should be 'You shared your interview schedule', NOT 'Inviting you to an interview'.
 
