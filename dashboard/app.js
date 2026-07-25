@@ -6825,11 +6825,16 @@ const DEFAULT_THEME = initialTheme();
             "gemeente amstelveen": "Gemeente Amstelveen",
             "axioncontinu": "AxionContinu",
             "hunkemoller": "Hunkemöller",
-            "hunkemöller": "Hunkemöller"
+            "hunkemöller": "Hunkemöller",
+            "linkedin trust & safety team": "LinkedIn",
+            "linkedin": "LinkedIn",
+            "gtecombv": "GTE",
+            "gte": "GTE"
         };
         
         const lower = clean.toLowerCase();
         if (map[lower]) return map[lower];
+        if (lower.includes("linkedin")) return "LinkedIn";
         
         clean = clean.replace(/(\s+|,)+(Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$/i, "").trim();
         if (clean === clean.toLowerCase() && clean.length > 1) {
@@ -6854,7 +6859,7 @@ const DEFAULT_THEME = initialTheme();
        }
        
        let senderKey;
-       if (isJobCategory && comp && comp.length > 1) {
+       if (comp && comp.length > 1) {
            senderKey = comp;
        } else {
            if (email.is_outbound) {
@@ -6869,6 +6874,13 @@ const DEFAULT_THEME = initialTheme();
                }
            } else {
                senderKey = extractSenderName(email.sender);
+               const atsList = ["greenhouse", "workday", "lever", "recruitee", "dayforce", "personio", "ashby", "teamtailor", "homerun", "starred", "hroffice", "no-reply", "noreply", "donotreply", "messages-noreply"];
+               if (atsList.some(ats => senderKey.toLowerCase().includes(ats))) {
+                   const domMatch = (email.sender || "").match(/@([a-zA-Z0-9.-]+)\./);
+                   if (domMatch && !atsList.some(ats => domMatch[1].toLowerCase().includes(ats))) {
+                       senderKey = domMatch[1].charAt(0).toUpperCase() + domMatch[1].slice(1);
+                   }
+               }
            }
        }
        

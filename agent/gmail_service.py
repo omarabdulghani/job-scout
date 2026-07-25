@@ -44,7 +44,10 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
         "no-reply", "noreply", "hr account", "werken", "hr admin", "testgorilla", 
         "luna van der vos", "marieke altenburg", "maaike leemkuil", "ashby", 
         "smartrecruiters", "jobvite", "personio", "workable", "icims", "successfactors",
-        "rutgers, gerwin", "jim goslinga", "mendon people", "pinpoint"
+        "rutgers, gerwin", "jim goslinga", "mendon people", "pinpoint",
+        "teamtailor", "starred", "our company", "the company", "our team", "the team",
+        "complete the application", "g it", "kristienne ruiz", "messages-noreply",
+        "donotreply", "support", "careers"
     }
     
     if company and (any(ats in company.lower() for ats in ats_names) or "omar abdulghani" in company.lower()):
@@ -89,7 +92,11 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
         "jaarbeurs.nl": "Jaarbeurs",
         "hunkemoller": "Hunkemöller",
         "axioncontinu.nl": "AxionContinu",
-        "lvnl.nl": "Luchtverkeersleiding Nederland"
+        "lvnl.nl": "Luchtverkeersleiding Nederland",
+        "linkedin.com": "LinkedIn",
+        "linkedin": "LinkedIn",
+        "gtecombv": "GTE",
+        "gte.com": "GTE"
     }
     
     target_email = recipient if is_outbound else sender
@@ -104,17 +111,17 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
             category = "Applied"
 
     # 5. Extract company from regex if still missing
-    if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
+    if not company and category in ["Applied", "Interview", "Rejected"]:
         for scan_text in [subject, body[:600]]:
-            m_comp = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text, re.IGNORECASE)
+            m_comp = re.search(r'\b(?:at|to|bij|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text)
             if m_comp:
                 cand = m_comp.group(1).replace('®', '').replace('™', '').strip()
-                if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
+                if cand and len(cand) > 1 and cand[0].isupper() and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower() and not cand.lower().startswith(("our ", "the ", "this ", "your ", "a ", "an ", "my ", "complete ")):
                     company = cand
                     break
 
     # 6. Fallback sender name extraction
-    if not company and category in ["Applied", "Interview", "Rejected"]:
+    if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
         sender_clean = _clean_header(target_email)
         if "<" in sender_clean:
             name_part = sender_clean.split("<")[0].replace('"', '').strip()
