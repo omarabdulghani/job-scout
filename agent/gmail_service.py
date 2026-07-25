@@ -37,45 +37,52 @@ def _fallback_analysis(subject: str, sender: str, body: str) -> dict:
     # 1. Category heuristics
     if any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link"]):
         cat = "Interview"
-        requires_action = True
     elif any(k in text for k in ["thank you for applying", "thanks for applying", "application received", "application confirmed", "bedankt voor je sollicitatie", "bevestiging sollicitatie", "your application at", "your application to", "we have received your application", "application submitted", "started your job application"]):
         cat = "Applied"
-        requires_action = False
     elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further"]):
         cat = "Rejected"
-        requires_action = False
     elif any(k in text for k in ["gemeente", "belasting", "municipality", "security alert", "account alert", "google ai pro"]):
         cat = "Personal"
-        requires_action = False
     elif any(k in text for k in ["discount", "newsletter", "special offer", "unlimited", "sale", "pricing"]):
         cat = "Promotions"
-        requires_action = False
     else:
         cat = "Other"
-        requires_action = False
 
     # 2. Company Name heuristics
     company = None
-    # Try extracting company from sender e.g. "Accenture Careers <...>" -> "Accenture"
-    sender_clean = _clean_header(sender)
-    if "<" in sender_clean:
-        name_part = sender_clean.split("<")[0].replace('"', '').strip()
-        if name_part and not name_part.startswith("no-reply") and not name_part.startswith("noreply"):
-            company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
-    if not company:
-        # Match "at Company" or "for Company" or "sollicitatie bij Company"
-        m = re.search(r'(?:at|to|bij|with)\s+([A-Z][A-Za-z0-9\s\&]+?)(?:\.|,|\s+-$|\s+\(|$)', subject)
+    ats_names = {"greenhouse", "lever", "workday", "homerun", "recruitee", "dayforce", "hroffice", "no-reply", "noreply", "hr account", "werken"}
+    
+    # Try extracting company from body or subject e.g. "bij Praxis", "at Déhora"
+    for scan_text in [subject, body[:600]]:
+        m = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at)\s+([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n)', scan_text)
         if m:
-            company = m.group(1).strip()
+            cand = m.group(1).strip()
+            if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
+                company = cand
+                break
+
+    # If still not found, try extracting from sender e.g. "Accenture Careers <...>" -> "Accenture"
+    if not company:
+        sender_clean = _clean_header(sender)
+        if "<" in sender_clean:
+            name_part = sender_clean.split("<")[0].replace('"', '').strip()
+            if name_part and not any(ats in name_part.lower() for ats in ats_names) and "omar abdulghani" not in name_part.lower():
+                company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
 
     # 3. Clean summary
-    summary = subject if subject else "Email received."
+    if company and cat == "Applied":
+        summary = f"Application confirmed for a role at {company}."
+    elif company and cat == "Interview":
+        summary = f"{company} invited you to an interview."
+    elif company and cat == "Rejected":
+        summary = f"{company} decided not to move forward with your application."
+    else:
+        summary = subject if subject else "Email received."
     
     return {
         "category": cat,
         "company_name": company,
-        "summary": summary,
-        "requires_action": requires_action
+        "summary": summary
     }
 
 
@@ -192,12 +199,12 @@ Rules for Categorization:
 3. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Interview' or 'Applied'.
 4. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the interview').
 5. ATS Override: Any emails containing keywords like "candidate", "applicant", or sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) MUST be categorized as 'Applied' (or 'Interview'/'Rejected' if applicable). Never categorize them as 'Personal'.
-6. Company Name Extraction: ALWAYS extract the company_name if it is a job-related email. Look at the sender's domain (e.g. @d-en-b.nl -> D&B), the subject line, or the body. NEVER leave it null for job emails. NEVER use the sender's personal name (e.g. Maud Appelman) as the company. For outbound emails, deduce the company_name from the Recipient's domain (e.g. @hetabc.nl -> 'Het ABC').
+6. Company Name Extraction: ALWAYS extract the company_name if it is a job-related email. Look at the sender's domain (e.g. @d-en-b.nl -> D&B), the subject line, or the body. NEVER leave it null for job emails. NEVER use the sender's personal name (e.g. Maud Appelman) as the company. NEVER use software platform names (e.g. Greenhouse, Lever, Workday, Homerun, Recruitee, Dayforce, HROffice) as the company. If an email comes from an ATS platform, look into the email body or subject to extract the actual hiring employer. For outbound emails, deduce the company_name from the Recipient's domain (e.g. @hetabc.nl -> 'Het ABC').
 7. Smart Context (Outbound Updates): CRITICAL PRECEDENCE: This rule OVERRIDES Rule 1 (Thread State Progression). If an OUTBOUND email shares CVs, portfolio links, or interview updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Interview' unless the email is an explicit application directly TO a company/HR.
 8. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have an interview', your summary should be 'You shared your interview schedule', NOT 'Inviting you to an interview'.
 
 Return ONLY JSON format:
-{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words, e.g. 'Company X invited you to interview')", "action_required": true or false (true if the email asks you to take an assessment, book a time, reply with info, or complete an action)}}
+{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words, e.g. 'Company X invited you to interview')"}}
 """
         
         import time
@@ -409,7 +416,28 @@ Return ONLY JSON format:
                             category = analysis.get("category", "Other")
                             company = analysis.get("company_name")
                             summary = analysis.get("summary", subject)
-                            requires_action = analysis.get("requires_action", False)
+                            
+                            # Filter out ATS platform software names or user name
+                            ats_names = {"greenhouse", "lever", "workday", "homerun", "recruitee", "dayforce", "hroffice", "no-reply", "noreply", "hr account", "werken"}
+                            if company and (any(ats in company.lower() for ats in ats_names) or "omar abdulghani" in company.lower()):
+                                company = None
+                                
+                            if not company and category in ["Applied", "Interview", "Rejected", "Other"]:
+                                for scan_text in [subject, body[:600]]:
+                                    m_comp = re.search(r'(?:at|to|bij|in|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at)\s+([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n)', scan_text)
+                                    if m_comp:
+                                        cand = m_comp.group(1).strip()
+                                        if cand and len(cand) > 1 and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower():
+                                            company = cand
+                                            break
+
+                            if company and summary == subject and category in ["Applied", "Interview", "Rejected"]:
+                                if category == "Applied":
+                                    summary = f"Application confirmed for a role at {company}."
+                                elif category == "Interview":
+                                    summary = f"{company} invited you to an interview."
+                                elif category == "Rejected":
+                                    summary = f"{company} decided not to move forward with your application."
                             
                             linked_job_key = None
                             linked_job_title = None
@@ -487,7 +515,7 @@ Return ONLY JSON format:
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, (
                                 message_id, date, sender, subject, category, company, summary, 
-                                0 if requires_action else 1,
+                                1,
                                 json.dumps(payload),
                                 parsed_ts
                             ))

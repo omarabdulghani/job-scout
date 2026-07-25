@@ -6862,12 +6862,7 @@ const DEFAULT_THEME = initialTheme();
       if (!inboxList) return;
       inboxList.innerHTML = "";
       
-      let filtered = [];
-      if (filterCategory === "Action Required") {
-        filtered = allEmails.filter(e => e.analysis && e.analysis.action_required === true);
-      } else {
-        filtered = allEmails.filter(e => filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory));
-      }
+      const filtered = allEmails.filter(e => filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory));
       
       if (filtered.length === 0) {
         inboxList.innerHTML = `
@@ -6895,40 +6890,57 @@ const DEFAULT_THEME = initialTheme();
         return senderStr.trim();
       };
 
+      const _normStr = (str) => str ? str.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+      const knownCompanies = new Map();
+      allEmails.forEach(e => {
+          if (e.analysis && e.analysis.company_name && e.analysis.company_name.trim().length > 1) {
+              const compName = e.analysis.company_name.trim();
+              const norm = _normStr(compName);
+              if (norm && !knownCompanies.has(norm)) {
+                  knownCompanies.set(norm, compName);
+              }
+          }
+      });
+
       const getEmailDisplayInfo = (email) => {
-        const cat = (email.analysis && email.analysis.category) || "Other";
-        const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
-        let comp = (email.analysis && email.analysis.company_name) || "";
-        
-        if (email.is_outbound && comp) {
-            const rawSender = extractSenderName(email.sender);
-            if (comp.toLowerCase() === rawSender.toLowerCase() || comp.toLowerCase().includes("omar abdulghani")) {
-                comp = ""; // Reset hallucinated company name
-            }
-        }
-        
-        let senderKey;
-        if (isJobCategory && comp && comp.length > 1) {
-            senderKey = comp;
-        } else {
-            if (email.is_outbound) {
-                const recipientEmail = email.recipient || "";
-                const domainMatch = recipientEmail.match(/@([a-zA-Z0-9.-]+)\./);
-                if (domainMatch) {
-                    const domain = domainMatch[1];
-                    senderKey = domain.charAt(0).toUpperCase() + domain.slice(1);
-                } else {
-                    const rawRecipientName = email.recipient ? extractSenderName(email.recipient) : "Unknown";
-                    senderKey = `Sent to: ${rawRecipientName}`;
-                }
-            } else {
-                senderKey = extractSenderName(email.sender);
-            }
-        }
-        
-        const initialsSource = senderKey.replace("Sent to: ", "");
-        
-        return { displaySender: senderKey, initialsSource };
+         const cat = (email.analysis && email.analysis.category) || "Other";
+         const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
+         let comp = (email.analysis && email.analysis.company_name) || "";
+         
+         if (email.is_outbound && comp) {
+             const rawSender = extractSenderName(email.sender);
+             if (comp.toLowerCase() === rawSender.toLowerCase() || comp.toLowerCase().includes("omar abdulghani")) {
+                 comp = ""; // Reset hallucinated company name
+             }
+         }
+         
+         let senderKey;
+         if (isJobCategory && comp && comp.length > 1) {
+             senderKey = comp;
+         } else {
+             if (email.is_outbound) {
+                 const recipientEmail = email.recipient || "";
+                 const domainMatch = recipientEmail.match(/@([a-zA-Z0-9.-]+)\./);
+                 if (domainMatch) {
+                     const domain = domainMatch[1];
+                     senderKey = domain.charAt(0).toUpperCase() + domain.slice(1);
+                 } else {
+                     const rawRecipientName = email.recipient ? extractSenderName(email.recipient) : "Unknown";
+                     senderKey = `Sent to: ${rawRecipientName}`;
+                 }
+             } else {
+                 senderKey = extractSenderName(email.sender);
+             }
+         }
+         
+         const normKey = _normStr(senderKey);
+         if (normKey && knownCompanies.has(normKey)) {
+             senderKey = knownCompanies.get(normKey);
+         }
+         
+         const initialsSource = senderKey.replace("Sent to: ", "");
+         
+         return { displaySender: senderKey, initialsSource };
       };
 
       const groupMap = new Map();
@@ -6975,9 +6987,6 @@ const DEFAULT_THEME = initialTheme();
         }
         if (email.has_calendar_invite) {
             badgesHtml.push(`<span class="email-flag has-calendar"><svg class="icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/></svg> Calendar Invite</span>`);
-        }
-        if (email.analysis && email.analysis.action_required) {
-            badgesHtml.push(`<span class="email-flag" style="color: #d32f2f; background: rgba(211,47,47,0.1); border: 1px solid rgba(211,47,47,0.3); font-weight: bold;"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2L1 21h22M12 8v7m0 4h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Action Required</span>`);
         }
 
         card.innerHTML = `
