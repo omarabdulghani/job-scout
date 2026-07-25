@@ -6790,6 +6790,57 @@ const DEFAULT_THEME = initialTheme();
       }
     }
 
+    const extractSenderName = (senderStr) => {
+      if (!senderStr) return "Unknown";
+      const match = senderStr.match(/^([^<]+?)\s*</);
+      if (match) return match[1].replace(/"/g, '').trim();
+      return senderStr.trim();
+    };
+
+    const _normStr = (str) => str ? str.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+    let knownCompanies = new Map();
+
+    const getEmailDisplayInfo = (email) => {
+       const cat = (email.analysis && email.analysis.category) || "Other";
+       const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
+       let comp = (email.analysis && email.analysis.company_name) || "";
+       
+       if (email.is_outbound && comp) {
+           const rawSender = extractSenderName(email.sender);
+           if (comp.toLowerCase() === rawSender.toLowerCase() || comp.toLowerCase().includes("omar abdulghani")) {
+               comp = ""; // Reset hallucinated company name
+           }
+       }
+       
+       let senderKey;
+       if (isJobCategory && comp && comp.length > 1) {
+           senderKey = comp;
+       } else {
+           if (email.is_outbound) {
+               const recipientEmail = email.recipient || "";
+               const domainMatch = recipientEmail.match(/@([a-zA-Z0-9.-]+)\./);
+               if (domainMatch) {
+                   const domain = domainMatch[1];
+                   senderKey = domain.charAt(0).toUpperCase() + domain.slice(1);
+               } else {
+                   const rawRecipientName = email.recipient ? extractSenderName(email.recipient) : "Unknown";
+                   senderKey = `Sent to: ${rawRecipientName}`;
+               }
+           } else {
+               senderKey = extractSenderName(email.sender);
+           }
+       }
+       
+       const normKey = _normStr(senderKey);
+       if (normKey && knownCompanies.has(normKey)) {
+           senderKey = knownCompanies.get(normKey);
+       }
+       
+       const initialsSource = senderKey.replace("Sent to: ", "");
+       
+       return { displaySender: senderKey, initialsSource };
+    };
+
     async function loadEmails() {
       if (!inboxList) return;
       try {
@@ -6807,13 +6858,30 @@ const DEFAULT_THEME = initialTheme();
             }
         });
         
-        // Update category counts
-        const categoryCounts = allEmails.reduce((acc, email) => {
+        knownCompanies = new Map();
+        allEmails.forEach(e => {
+            if (e.analysis && e.analysis.company_name && e.analysis.company_name.trim().length > 1) {
+                const compName = e.analysis.company_name.trim();
+                const norm = _normStr(compName);
+                if (norm && !knownCompanies.has(norm)) {
+                    knownCompanies.set(norm, compName);
+                }
+            }
+        });
+
+        // Update category counts: count distinct groups per category, All counts raw total
+        const catGroupSets = {};
+        allEmails.forEach(email => {
           const cat = (email.analysis && email.analysis.category) || "Other";
-          acc[cat] = (acc[cat] || 0) + 1;
-          acc["All"] = (acc["All"] || 0) + 1;
-          return acc;
-        }, { "All": 0 });
+          if (!catGroupSets[cat]) catGroupSets[cat] = new Set();
+          const { displaySender } = getEmailDisplayInfo(email);
+          catGroupSets[cat].add(displaySender);
+        });
+
+        const categoryCounts = { "All": allEmails.length };
+        for (const [cat, groupSet] of Object.entries(catGroupSets)) {
+          categoryCounts[cat] = groupSet.size;
+        }
         
         document.querySelectorAll('.inbox-categories .career-lane-tab').forEach(tab => {
           const cat = tab.getAttribute('data-category');
@@ -6883,66 +6951,6 @@ const DEFAULT_THEME = initialTheme();
         return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
       });
       
-      const extractSenderName = (senderStr) => {
-        if (!senderStr) return "Unknown";
-        const match = senderStr.match(/^([^<]+?)\s*</);
-        if (match) return match[1].replace(/"/g, '').trim();
-        return senderStr.trim();
-      };
-
-      const _normStr = (str) => str ? str.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
-      const knownCompanies = new Map();
-      allEmails.forEach(e => {
-          if (e.analysis && e.analysis.company_name && e.analysis.company_name.trim().length > 1) {
-              const compName = e.analysis.company_name.trim();
-              const norm = _normStr(compName);
-              if (norm && !knownCompanies.has(norm)) {
-                  knownCompanies.set(norm, compName);
-              }
-          }
-      });
-
-      const getEmailDisplayInfo = (email) => {
-         const cat = (email.analysis && email.analysis.category) || "Other";
-         const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
-         let comp = (email.analysis && email.analysis.company_name) || "";
-         
-         if (email.is_outbound && comp) {
-             const rawSender = extractSenderName(email.sender);
-             if (comp.toLowerCase() === rawSender.toLowerCase() || comp.toLowerCase().includes("omar abdulghani")) {
-                 comp = ""; // Reset hallucinated company name
-             }
-         }
-         
-         let senderKey;
-         if (isJobCategory && comp && comp.length > 1) {
-             senderKey = comp;
-         } else {
-             if (email.is_outbound) {
-                 const recipientEmail = email.recipient || "";
-                 const domainMatch = recipientEmail.match(/@([a-zA-Z0-9.-]+)\./);
-                 if (domainMatch) {
-                     const domain = domainMatch[1];
-                     senderKey = domain.charAt(0).toUpperCase() + domain.slice(1);
-                 } else {
-                     const rawRecipientName = email.recipient ? extractSenderName(email.recipient) : "Unknown";
-                     senderKey = `Sent to: ${rawRecipientName}`;
-                 }
-             } else {
-                 senderKey = extractSenderName(email.sender);
-             }
-         }
-         
-         const normKey = _normStr(senderKey);
-         if (normKey && knownCompanies.has(normKey)) {
-             senderKey = knownCompanies.get(normKey);
-         }
-         
-         const initialsSource = senderKey.replace("Sent to: ", "");
-         
-         return { displaySender: senderKey, initialsSource };
-      };
-
       const groupMap = new Map();
       for (const email of filtered) {
           const { displaySender } = getEmailDisplayInfo(email);
