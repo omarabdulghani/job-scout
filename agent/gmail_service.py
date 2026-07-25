@@ -177,8 +177,8 @@ Has Calendar Invite: {has_calendar_invite}
 Body: {body_snippet}
 
 Choose ONE category:
-- Interview: Interview invitations or assessments.
-- Applied: Application confirmations, candidate portal access, account setups for job portals, or Applicant Tracking System (ATS) notifications.
+- Interview: Actual interview invitations or confirmations.
+- Applied: Application confirmations, candidate portal access, account setups for job portals, Applicant Tracking System (ATS) notifications, or assessments/coding challenges.
 - Rejected: Job rejections.
 - Promotions: Marketing, newsletters, sales.
 - Personal: General non-job security alerts, non-job account notices, bills, or casual correspondence.
@@ -188,14 +188,16 @@ Rules for Categorization:
 1. Thread State Progression:
    - For INBOUND Replies (from company to you): Read the new email carefully. If it is a rejection, classify as 'Rejected'. If it is an interview invite, classify as 'Interview'. Otherwise, maintain the current thread state (e.g. 'Applied').
    - For OUTBOUND Replies (from you to company): You MUST inherit the most advanced stage from the Thread Context (e.g. if the thread is 'Interview', your outbound reply is also 'Interview'). Do NOT downgrade outbound job replies to 'Personal'.
-2. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Interview' or 'Applied'.
-3. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the interview').
-4. ATS Override: Any emails containing keywords like "candidate", "applicant", or sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) MUST be categorized as 'Applied' (or 'Interview'/'Rejected' if applicable). Never categorize them as 'Personal'.
-5. Company Name Extraction: Never extract the sender's own name as the company. For outbound emails, deduce the company_name from the Recipient's domain (e.g. @hetabc.nl -> 'Het ABC').
-6. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or interview updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it is 'Personal'. Do NOT categorize as 'Applied' or 'Interview' unless the email is an explicit application directly TO a company/HR.
+2. OOO Exception: If an email is clearly an automated Out-of-Office (OOO) or vacation auto-reply, it MUST bypass thread inheritance and be categorized as 'Other'.
+3. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Interview' or 'Applied'.
+4. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the interview').
+5. ATS Override: Any emails containing keywords like "candidate", "applicant", or sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) MUST be categorized as 'Applied' (or 'Interview'/'Rejected' if applicable). Never categorize them as 'Personal'.
+6. Company Name Extraction: ALWAYS extract the company_name if it is a job-related email. Look at the sender's domain (e.g. @d-en-b.nl -> D&B), the subject line, or the body. NEVER leave it null for job emails. NEVER use the sender's personal name (e.g. Maud Appelman) as the company. For outbound emails, deduce the company_name from the Recipient's domain (e.g. @hetabc.nl -> 'Het ABC').
+7. Smart Context (Outbound Updates): CRITICAL PRECEDENCE: This rule OVERRIDES Rule 1 (Thread State Progression). If an OUTBOUND email shares CVs, portfolio links, or interview updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Interview' unless the email is an explicit application directly TO a company/HR.
+8. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have an interview', your summary should be 'You shared your interview schedule', NOT 'Inviting you to an interview'.
 
 Return ONLY JSON format:
-{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words, e.g. 'Company X invited you to interview')"}}
+{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words, e.g. 'Company X invited you to interview')", "action_required": true or false (true if the email asks you to take an assessment, book a time, reply with info, or complete an action)}}
 """
         
         import time
