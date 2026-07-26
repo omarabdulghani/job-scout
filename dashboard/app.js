@@ -6849,7 +6849,7 @@ const DEFAULT_THEME = initialTheme();
 
     const getEmailDisplayInfo = (email) => {
        const cat = (email.analysis && email.analysis.category) || "Other";
-       const isJobCategory = ["Interview", "Applied", "Rejected"].includes(cat);
+       const isJobCategory = ["Review", "Interview", "Applied", "Rejected"].includes(cat);
        let comp = (email.analysis && email.analysis.company_name) || "";
        
        if (email.is_outbound && comp) {

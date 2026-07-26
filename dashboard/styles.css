@@ -3796,7 +3796,7 @@
       color: var(--muted);
       border: 1px solid var(--line);
     }
-    .email-category.Interview, .email-avatar.Interview { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+    .email-category.Review, .email-avatar.Review, .email-category.Interview, .email-avatar.Interview { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
     .email-category.Applied, .email-avatar.Applied { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
     .email-category.Rejected, .email-avatar.Rejected { background: rgba(248, 113, 113, 0.15); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
     .email-category.Personal, .email-avatar.Personal { background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3); }

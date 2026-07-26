@@ -33,7 +33,7 @@ def _clean_header(header_val: str) -> str:
 
 def _validate_ai_consistency(analysis: dict) -> dict:
     category = analysis.get("category", "Other")
-    if category in ["Applied", "Interview", "Rejected"]:
+    if category in ["Applied", "Review", "Interview", "Rejected"]:
         summary = str(analysis.get("summary", "")).lower()
         if any(k in summary for k in [
             "prescription", "refill", "medication", "doctor", "pharmacy", "clinic", "amitriptyline", 
@@ -48,7 +48,7 @@ def _validate_ai_consistency(analysis: dict) -> dict:
                 analysis["category"] = "Personal"
     return analysis
 
-def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict, from_llm: bool = False) -> dict:
+def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict, from_llm: bool = True) -> dict:
     category = analysis.get("category", "Other")
     company = analysis.get("company_name")
     summary = analysis.get("summary", subject)
@@ -70,36 +70,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     if company and (any(ats in company.lower() for ats in ats_names) or "omar abdulghani" in company.lower()):
         company = None
 
-    # 2. Heuristic Category Overrides (High Priority - ONLY in Offline Fallback Mode)
-    if not from_llm:
-        if any(k in text for k in ["herhaalrecept", "recept", "amitriptyline", "medicatie", "medicijn", "apotheek", "huisarts", "tandarts", "ziekenhuis", "praktijk", "voorschrift", "prescription", "refill", "pharmacy", "clinic", "doctor", "tandheelkunde"]):
-            category = "Personal"
-        elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further", "isn't progressing"]):
-            category = "Rejected"
-        elif any(k in text for k in [
-            "login code", "security code", "verification code", "new account", "account creation", 
-            "account created", "applicant registration", "set your new password", "reset your password", 
-            "password for the portal", "je persoonlijke omgeving", "inschrijving website", 
-            "can we keep your information", "gdpr", "bewaartermijn", "gegevens bewaren"
-        ]):
-            category = "Other"
-        elif any(k in text for k in ["thank you for applying", "thanks for applying", "application received", "application confirmed", "bedankt voor je sollicitatie", "bevestiging sollicitatie", "your application at", "your application to", "we have received your application", "application submitted", "started your job application", "projectcoördinator", "solliciteer ik", "sollicitatie naar", "mijn sollicitatie", "graag solliciteer"]):
-            if category not in ["Rejected", "Interview"]:
-                category = "Applied"
-        elif any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link", "vervolg op ons gesprek"]):
-            if category not in ["Rejected", "Other"]:
-                category = "Interview"
-        elif "samsung" in text and "survey" in text:
-            category = "Applied"
-        elif "dayforce" in text and any(k in text for k in ["login code", "new account", "registration"]):
-            category = "Other"
-            company = None
-
-        # 3. Prevent "gemeente" collision with job keywords
-        if category == "Personal" and any(k in text for k in ["sollicitatie", "gesprek", "cv", "portfolio", "kennismaking", "interview", "application"]):
-            category = "Interview" if any(k in text for k in ["gesprek", "kennismaking", "interview"]) else "Applied"
-
-    # 4. Domain-to-Company & Subject Override Mapping
+    # 2. Domain-to-Company & Subject Override Mapping
     domain_map = {
         "hetabc.nl": "Het ABC",
         "tool2match.nl": "Tool2Match",
@@ -127,11 +98,9 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
 
     if "hunkemöller" in text or "hunkemoller" in text or "hkm@myworkday" in target_email.lower():
         company = "Hunkemöller"
-        if category in ["Other", "Personal"]:
-            category = "Applied"
 
-    # 5. Extract company from regex if still missing
-    if not company and category in ["Applied", "Interview", "Rejected"]:
+    # 3. Extract company from regex if still missing
+    if not company and category in ["Applied", "Review", "Interview", "Rejected"]:
         for scan_text in [subject, body[:600]]:
             m_comp = re.search(r'\b(?:at|to|bij|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text)
             if m_comp:
@@ -140,7 +109,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
                     company = cand
                     break
 
-    # 6. Fallback sender name extraction
+    # 4. Fallback sender name extraction
     if not company:
         sender_clean = _clean_header(target_email)
         if "<" in sender_clean:
@@ -148,58 +117,20 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
             if name_part and not any(ats in name_part.lower() for ats in ats_names) and "omar abdulghani" not in name_part.lower():
                 company = name_part.replace("Careers", "").replace("Talent", "").replace("Team", "").strip()
 
-    # 6b. Normalize canonical group name (strip departmental prefixes and legal suffixes)
+    # 5. Normalize canonical group name (strip departmental prefixes and legal suffixes)
     if company:
         company = re.sub(r'^(?:Info|No-Reply|Noreply|Support|Helpdesk|Contact|Service|Team|Recruitment|Careers|News|Newsletter|Orders|Billing|Admin|Office|Receptuur)\s+', '', company, flags=re.IGNORECASE).strip()
         company = re.sub(r'(\s+|,)+(?:Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$', '', company, flags=re.IGNORECASE).strip()
         if company == company.lower() and len(company) > 1:
             company = company.title()
 
-    # 7. Clean summary
-    if company and (summary == subject or not summary or summary == "Email received."):
-        if category == "Applied":
-            summary = f"Application confirmed for a role at {company}."
-        elif category == "Interview":
-            summary = f"{company} invited you to an interview."
-        elif category == "Rejected":
-            summary = f"{company} decided not to move forward with your application."
-        elif category == "Other":
-            if any(k in text for k in ["security code", "login code", "verification code", "password"]):
-                summary = f"Security code / verification received from {company}."
-            elif any(k in text for k in ["report", "received your report"]):
-                summary = f"Report acknowledgment received from {company}."
-            elif any(k in text for k in ["complete the application", "action required", "complete your"]):
-                summary = f"Application action required by {company}."
-            else:
-                summary = f"Notification / update received from {company}."
-        elif category == "Personal":
-            summary = f"Personal correspondence or notice from {company}."
-        elif category == "Promotions":
-            summary = f"Promotional update or offer from {company}."
+    if category == "Interview":
+        category = "Review"
 
     analysis["category"] = category
     analysis["company_name"] = company
     analysis["summary"] = summary
     return _validate_ai_consistency(analysis)
-
-def _fallback_analysis(subject: str, sender: str, body: str) -> dict:
-    text = f"{subject} {sender} {body}".lower()
-    
-    # 1. Category heuristics
-    if any(k in text for k in ["herhaalrecept", "recept", "amitriptyline", "medicatie", "medicijn", "apotheek", "huisarts", "tandarts", "ziekenhuis", "praktijk", "voorschrift", "prescription", "refill", "pharmacy", "clinic", "doctor", "tandheelkunde", "gemeente", "belasting", "municipality", "security alert", "account alert", "google ai pro"]):
-        cat = "Personal"
-    elif any(k in text for k in ["interview", "assessment", "coding challenge", "hacker rank", "schedule a time", "uitnodiging", "kennismaking", "gesprek", "meeting link"]):
-        cat = "Interview"
-    elif any(k in text for k in ["thank you for applying", "thanks for applying", "application received", "application confirmed", "bedankt voor je sollicitatie", "bevestiging sollicitatie", "your application at", "your application to", "we have received your application", "application submitted", "started your job application"]):
-        cat = "Applied"
-    elif any(k in text for k in ["not progressing", "other candidates", "unfortunately", "decided not to move forward", "afwijzing", "niet verder", "won't be moving forward", "we got a better offer", "isn't progressing further"]):
-        cat = "Rejected"
-    elif any(k in text for k in ["discount", "newsletter", "special offer", "unlimited", "sale", "pricing"]):
-        cat = "Promotions"
-    else:
-        cat = "Other"
-
-    return _refine_email_analysis(subject, sender, "", body, False, {"category": cat, "company_name": None, "summary": subject if subject else "Email received."})
 
 
 class GmailService:
@@ -252,6 +183,9 @@ class GmailService:
                     old_cat = analysis.get("category")
                     old_comp = analysis.get("company_name")
                     old_sum = analysis.get("summary")
+                    
+                    if old_cat == "Interview":
+                        analysis["category"] = "Review"
                     
                     body_text = data.get("body", "") or snippet or ""
                     from_llm = analysis.get("_from_llm", False) or (old_sum and old_sum != subject and old_sum != "Email received.")
@@ -324,8 +258,6 @@ class GmailService:
         is_automated: bool = False, has_attachments: bool = False, 
         has_calendar_invite: bool = False, thread_context: str = ""
     ) -> dict:
-        fallback = _fallback_analysis(subject, sender, body)
-        
         # Keep prompt concise so local LLMs process it in < 2 seconds
         body_snippet = " ".join(body.split()[:300])
         
@@ -346,28 +278,28 @@ Has Calendar Invite: {has_calendar_invite}
 Body: {body_snippet}
 
 Choose ONE category:
-- Interview: Actual interview invitations or confirmations.
-- Applied: Application confirmations, candidate portal access, account setups for job portals, Applicant Tracking System (ATS) notifications, or assessments/coding challenges.
+- Review: Active employer next steps, assessments, coding tests, take-home exercises, phone screens, interview invitations/confirmations, recruiter check-ins, or talent pool hold notices.
+- Applied: Application confirmations, candidate portal access, account setups for job portals, Applicant Tracking System (ATS) notifications, or application submissions.
 - Rejected: Job rejections.
 - Promotions: Marketing, newsletters, sales.
 - Personal: General non-job security alerts, non-job account notices, bills, or casual correspondence.
 - Other: Anything else.
 
 Rules for Categorization:
-1. Self-Consistency Guardrail (HIGHEST PRECEDENCE): Your assigned category MUST be logically consistent with your summary. If your summary describes a doctor, prescription, medication, medical practice, bank account, tax notice, municipality, or casual personal correspondence, the category is STRICTLY FORBIDDEN from being 'Applied', 'Interview', or 'Rejected'. It MUST be categorized as 'Personal' or 'Other'.
+1. Self-Consistency Guardrail (HIGHEST PRECEDENCE): Your assigned category MUST be logically consistent with your summary. If your summary describes a doctor, prescription, medication, medical practice, bank account, tax notice, municipality, or casual personal correspondence, the category is STRICTLY FORBIDDEN from being 'Applied', 'Review', or 'Rejected'. It MUST be categorized as 'Personal' or 'Other'.
 2. Thread State Progression:
-   - For INBOUND Replies (from company to you): Read the new email carefully. If it is a rejection, classify as 'Rejected'. If it is an interview invite, classify as 'Interview'. Otherwise, maintain the current thread state (e.g. 'Applied').
+   - For INBOUND Replies (from company to you): Read the new email carefully. If it is a rejection, classify as 'Rejected'. If it is an assessment, interview invite, or active review step, classify as 'Review'. Otherwise, maintain the current thread state (e.g. 'Applied').
    - For OUTBOUND Replies (from you to company): Inherit the job stage ONLY if the email is part of an active job application with a direct employer. Do NOT apply thread inheritance to personal, medical, or administrative emails.
 3. OOO Exception: If an email is clearly an automated Out-of-Office (OOO) or vacation auto-reply, it MUST bypass thread inheritance and be categorized as 'Other'.
-4. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Interview' or 'Applied'.
-5. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the interview').
-6. ATS Override: Any emails sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) that are directly about a job application MUST be categorized as 'Applied' (or 'Interview'/'Rejected' if applicable). Never categorize genuine job applications as 'Personal'.
+4. If Direction is OUTBOUND and it is a BRAND NEW email (no job-related Thread Context), categorize it as 'Personal' or 'Other', unless it's a clear outbound job application. Do NOT categorize casual emails to friends about jobs as 'Review' or 'Applied'.
+5. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the call' or 'Company placed your application on hold for future review').
+6. ATS Override: Any emails sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) that are directly about a job application MUST be categorized as 'Applied' (or 'Review'/'Rejected' if applicable). Never categorize genuine job applications as 'Personal'.
 7. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
-8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or interview updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Interview' unless the email is an explicit application directly TO a company/HR.
-9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have an interview', your summary should be 'You shared your interview schedule', NOT 'Inviting you to an interview'.
+8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
+9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
 
 Return ONLY JSON format:
-{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words, e.g. 'Company X invited you to interview')"}}
+{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words)"}}
 """
         
         import time
@@ -455,8 +387,8 @@ Return ONLY JSON format:
                 _safe_log(f"[yellow]{provider.get('label', backend_id)} LLM fallback triggered for '{subject[:30]}...': {exc}[/yellow]")
                 continue
                 
-        _safe_log(f"[yellow]All LLMs failed for '{subject[:30]}...'. Using static fallback.[/yellow]")
-        return fallback
+        _safe_log(f"[red]All LLMs failed or unreachable for '{subject[:30]}...'. Aborting email sync.[/red]")
+        raise RuntimeError(f"All AI LLM providers failed or unreachable while analyzing email '{subject[:30]}...'.")
 
     def sync_emails(self, days_back: int = 7, cancel_check=None, progress_callback=None) -> dict:
         if not self.email_address or not self.app_password:
@@ -593,7 +525,7 @@ Return ONLY JSON format:
                             
                             ignore_domains = {"gmail", "yahoo", "hotmail", "outlook", "icloud", "aol", "live", "msn"}
                             
-                            if category in ["Applied", "Interview", "Rejected"]:
+                            if category in ["Applied", "Review", "Interview", "Rejected"]:
                                 norm_sender_domain = _norm(sender_domain)
                                 norm_llm_company = _norm(company)
                                 norm_llm_title = _norm(analysis.get("job_title"))
