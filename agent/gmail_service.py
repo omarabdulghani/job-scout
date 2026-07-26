@@ -305,6 +305,7 @@ Return ONLY JSON format:
         import time
         from agent.ai_settings_service import PROVIDERS
         
+        provider_errors = []
         for backend_id in self.backend_order:
             provider = self.providers_config.get(backend_id)
             if not provider or (not provider.get("configured") and backend_id != "lmstudio"):
@@ -384,11 +385,24 @@ Return ONLY JSON format:
                     parsed["_from_llm"] = True
                     return parsed
             except Exception as exc:
-                _safe_log(f"[yellow]{provider.get('label', backend_id)} LLM fallback triggered for '{subject[:30]}...': {exc}[/yellow]")
+                err_detail = str(exc)
+                if hasattr(exc, 'response') and exc.response is not None:
+                    try:
+                        resp_json = exc.response.json()
+                        err_msg = resp_json.get("error", {}).get("message") or resp_json.get("error") or exc.response.text
+                        if err_msg:
+                            err_detail = f"{exc} ({str(err_msg)[:150]})"
+                    except Exception:
+                        if exc.response.text:
+                            err_detail = f"{exc} ({exc.response.text[:150]})"
+                label = provider.get('label', backend_id)
+                provider_errors.append(f"{label}: {err_detail}")
+                _safe_log(f"[yellow]{label} LLM fallback triggered for '{subject[:30]}...': {err_detail}[/yellow]")
                 continue
                 
-        _safe_log(f"[red]All LLMs failed or unreachable for '{subject[:30]}...'. Aborting email sync.[/red]")
-        raise RuntimeError(f"All AI LLM providers failed or unreachable while analyzing email '{subject[:30]}...'.")
+        reasons_str = " | ".join(provider_errors) if provider_errors else "No LLM providers configured or available"
+        _safe_log(f"[red]All LLMs failed or unreachable for '{subject[:30]}...'. Reasons: {reasons_str}[/red]")
+        raise RuntimeError(f"AI Sync stopped while analyzing '{subject[:30]}...'. Reason: {reasons_str}")
 
     def sync_emails(self, days_back: int = 7, cancel_check=None, progress_callback=None) -> dict:
         if not self.email_address or not self.app_password:
@@ -605,7 +619,12 @@ Return ONLY JSON format:
             return {"status": "success", "new_emails": new_emails}
             
         except Exception as e:
-            return {"error": str(e)}
+            try:
+                mail.close()
+                mail.logout()
+            except Exception:
+                pass
+            return {"error": str(e), "new_emails": new_emails, "status": "error"}
 
 if __name__ == "__main__":
     service = GmailService()

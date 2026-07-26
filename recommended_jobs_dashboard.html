@@ -1801,6 +1801,16 @@
           </select>
         </div>
       </div>
+      <div id="syncErrorBanner" style="display: none; background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.4); color: #f87171; padding: 14px 18px; border-radius: 10px; margin-bottom: 16px; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <svg class="icon" style="flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px;"><use href="#icon-alert-triangle"></use></svg>
+          <div>
+            <strong style="display: block; color: var(--text-primary); font-size: 14px; margin-bottom: 4px;">Email Sync Stopped</strong>
+            <div id="syncErrorText" style="font-size: 13px; color: var(--text-secondary); line-height: 1.4;"></div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('syncErrorBanner').style.display='none'" style="background: rgba(255,255,255,0.1); border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Dismiss</button>
+      </div>
       <div id="inboxList" class="inbox-list">
         <!-- Emails render here -->
       </div>

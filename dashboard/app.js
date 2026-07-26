@@ -6666,7 +6666,11 @@ const DEFAULT_THEME = initialTheme();
         try {
           const res = await fetch("/api/gmail/sync-status");
           const status = await res.json();
+          const errBanner = document.getElementById("syncErrorBanner");
+          const errText = document.getElementById("syncErrorText");
+          
           if (status.status === "running") {
+            if (errBanner) errBanner.style.display = "none";
             syncGmailBtn.disabled = true;
             let progressText = "Syncing...";
             if (status.total && status.processed !== undefined) {
@@ -6677,6 +6681,13 @@ const DEFAULT_THEME = initialTheme();
             if (stopSyncBtn) { stopSyncBtn.style.display = ""; stopSyncBtn.disabled = false; stopSyncBtn.innerHTML = `<svg class="icon icon-sm"><use href="#icon-x-circle"></use></svg>Stop Sync`; }
             await loadEmails();
           } else {
+            if (status.status === "error" && status.error) {
+              if (errText) errText.textContent = `${status.error} (Processed ${status.new_emails || 0} new emails before stopping)`;
+              if (errBanner) errBanner.style.display = "flex";
+            } else if (status.status === "completed") {
+              if (errBanner) errBanner.style.display = "none";
+            }
+            
             if (pollInterval) {
               clearInterval(pollInterval);
               pollInterval = null;

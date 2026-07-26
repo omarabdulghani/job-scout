@@ -1324,7 +1324,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         service = GmailService(root_path)
                         res = service.sync_emails(days_back=days, cancel_check=lambda: GMAIL_SYNC_CANCEL, progress_callback=_progress)
                         if "error" in res:
-                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": 0}
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
                         else:
                             GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
                     except Exception as exc:
@@ -1354,7 +1354,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         # Call sync_emails with max_emails=1 for testing
                         res = service.sync_emails(days_back=7, max_emails=1, cancel_check=lambda: GMAIL_SYNC_CANCEL)
                         if "error" in res:
-                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": 0}
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
                         else:
                             GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
                     except Exception as exc:
