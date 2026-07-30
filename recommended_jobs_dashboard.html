@@ -1787,11 +1787,11 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; gap: var(--space-3);">
         <nav class="career-lane-tabs inbox-categories" aria-label="Email categories" style="margin-bottom: 0;">
           <button class="career-lane-tab active" type="button" data-category="All"><svg class="icon"><use href="#icon-list"></use></svg><span>All</span></button>
-          <button class="career-lane-tab" type="button" data-category="Review" style="color: var(--status-good);"><svg class="icon"><use href="#icon-clock"></use></svg><span>Review</span></button>
-          <button class="career-lane-tab" type="button" data-category="Applied" style="color: var(--status-apply);"><svg class="icon"><use href="#icon-check-circle"></use></svg><span>Applied</span></button>
-          <button class="career-lane-tab" type="button" data-category="Rejected" style="color: var(--status-rejected);"><svg class="icon"><use href="#icon-x-circle"></use></svg><span>Rejected</span></button>
-          <button class="career-lane-tab" type="button" data-category="Personal" style="color: var(--text-secondary);"><svg class="icon"><use href="#icon-info"></use></svg><span>Personal</span></button>
-          <button class="career-lane-tab" type="button" data-category="Promotions" style="color: var(--status-info);"><svg class="icon"><use href="#icon-spark"></use></svg><span>Promotions</span></button>
+          <button class="career-lane-tab" type="button" data-category="Review"><span style="color: var(--green); display: flex;"><svg class="icon"><use href="#icon-clock"></use></svg></span><span>Review</span></button>
+          <button class="career-lane-tab" type="button" data-category="Applied"><span style="color: var(--blue); display: flex;"><svg class="icon"><use href="#icon-check-circle"></use></svg></span><span>Applied</span></button>
+          <button class="career-lane-tab" type="button" data-category="Rejected"><span style="color: var(--red); display: flex;"><svg class="icon"><use href="#icon-x-circle"></use></svg></span><span>Rejected</span></button>
+          <button class="career-lane-tab" type="button" data-category="Personal"><span style="color: var(--violet); display: flex;"><svg class="icon"><use href="#icon-info"></use></svg></span><span>Personal</span></button>
+          <button class="career-lane-tab" type="button" data-category="Promotions"><span style="color: var(--amber); display: flex;"><svg class="icon"><use href="#icon-spark"></use></svg></span><span>Promotions</span></button>
           <button class="career-lane-tab" type="button" data-category="Other"><svg class="icon"><use href="#icon-layout"></use></svg><span>Other</span></button>
         </nav>
         <div class="field" style="margin: 0; min-width: 150px;">
@@ -1810,6 +1810,16 @@
           </div>
         </div>
         <button onclick="document.getElementById('syncErrorBanner').style.display='none'" style="background: rgba(255,255,255,0.1); border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Dismiss</button>
+      </div>
+      <div id="email-bulk-toolbar" class="email-bulk-toolbar" style="display: none; background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px 18px; border-radius: 10px; align-items: center; justify-content: space-between; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; gap: 24px; width: max-content; max-width: 90vw;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="email-select-all" onclick="toggleSelectAllEmails(this)" title="Select all emails in this tab" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--status-good);">
+          <span id="bulk-selected-count" style="font-weight: 600; font-size: 14px; color: var(--text-primary);">0 selected</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="button secondary" onclick="bulkArchiveEmails()" title="Archive selected in Gmail & Dashboard" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-primary); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive Selected</button>
+          <button class="button secondary" onclick="bulkDeleteEmails()" title="Move selected to Trash in Gmail" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); color: #f87171; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">🗑️ Delete Selected</button>
+        </div>
       </div>
       <div id="inboxList" class="inbox-list">
         <!-- Emails render here -->

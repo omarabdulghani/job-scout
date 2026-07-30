@@ -1092,8 +1092,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         GmailService(self.user_workspace.root).repair_existing_emails(conn)
                     except Exception:
                         pass
-                    rows = conn.execute("SELECT message_id, payload_json FROM emails ORDER BY COALESCE(parsed_timestamp, 0) DESC, date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-                    total = conn.execute("SELECT COUNT(*) FROM emails").fetchone()[0]
+                    rows = conn.execute("SELECT message_id, payload_json FROM emails WHERE COALESCE(is_archived, 0) = 0 ORDER BY COALESCE(parsed_timestamp, 0) DESC, date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+                    total = conn.execute("SELECT COUNT(*) FROM emails WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
                 emails = []
                 for row in rows:
                     if row[1]:
@@ -1297,6 +1297,30 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "message": "All synced emails cleared."})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+            return
+        if self._path_without_query() == "/api/gmail/email/archive":
+            try:
+                payload = self._read_json_body()
+                msg_ids = payload.get("message_ids")
+                if not msg_ids and payload.get("message_id"):
+                    msg_ids = [payload.get("message_id")]
+                from agent.gmail_service import GmailService
+                res = GmailService(self.user_workspace.root).archive_emails(msg_ids or [])
+                self._send_json(res, status=200 if res.get("ok", True) else 400)
+            except Exception as e:
+                self._send_json({"error": str(e), "ok": False}, status=500)
+            return
+        if self._path_without_query() == "/api/gmail/email/delete":
+            try:
+                payload = self._read_json_body()
+                msg_ids = payload.get("message_ids")
+                if not msg_ids and payload.get("message_id"):
+                    msg_ids = [payload.get("message_id")]
+                from agent.gmail_service import GmailService
+                res = GmailService(self.user_workspace.root).delete_emails(msg_ids or [])
+                self._send_json(res, status=200 if res.get("ok", True) else 400)
+            except Exception as e:
+                self._send_json({"error": str(e), "ok": False}, status=500)
             return
         if self._path_without_query() == "/api/gmail/sync":
             try:

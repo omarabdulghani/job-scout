@@ -92,7 +92,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     
     target_email = recipient if is_outbound else sender
     for dom, canonical_comp in domain_map.items():
-        if dom in target_email.lower() or dom in text:
+        if dom in target_email.lower():
             company = canonical_comp
             break
 
@@ -102,7 +102,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     # 3. Extract company from regex if still missing
     if not company and category in ["Applied", "Review", "Interview", "Rejected"]:
         for scan_text in [subject, body[:600]]:
-            m_comp = re.search(r'\b(?:at|to|bij|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text)
+            m_comp = re.search(r'\b(?:for|at|to|bij|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text)
             if m_comp:
                 cand = m_comp.group(1).replace('®', '').replace('™', '').strip()
                 if cand and len(cand) > 1 and cand[0].isupper() and not any(ats in cand.lower() for ats in ats_names) and "omar abdulghani" not in cand.lower() and not cand.lower().startswith(("our ", "the ", "this ", "your ", "a ", "an ", "my ", "complete ")):
@@ -126,6 +126,37 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
 
     if category == "Interview":
         category = "Review"
+
+    # 6b. Rejection language override — catches Dutch/English rejection phrases the AI may miss
+    if category in ("Review", "Applied", "Other") and not is_outbound:
+        rejection_phrases = [
+            "helaas meedelen", "niet meenemen in de verdere procedure",
+            "niet verder gaan", "afgewezen", "niet geselecteerd",
+            "andere kandidaat gekozen", "andere kandidaten gekozen",
+            "geen match", "niet door naar de volgende ronde",
+            "sollicitatie niet in behandeling", "niet kunnen selecteren",
+            "unfortunately we will not", "not moving forward",
+            "decided not to proceed", "will not be proceeding",
+            "not be taking you further", "regret to inform",
+            "position has been filled", "decided to go with another",
+            "not progressing your application", "unsuccessful",
+            "we have decided not to", "unable to offer you",
+            "not selected for", "not shortlisted",
+        ]
+        if any(phrase in text for phrase in rejection_phrases):
+            category = "Rejected"
+            if summary and "reject" not in summary.lower() and "afgewezen" not in summary.lower():
+                summary = "Application rejected"
+
+    # 6c. Review category override (surveys and generic ATS confirmations)
+    if category == "Review" and not is_outbound:
+        applied_phrases = [
+            "candidate survey", "candidate experience", "how did we do",
+            "feedback survey", "survey", "we have received your application",
+            "thank you for applying", "your application is under review"
+        ]
+        if any(phrase in text for phrase in applied_phrases) and "interview" not in text and "assessment" not in text:
+            category = "Applied"
 
     analysis["category"] = category
     analysis["company_name"] = company
@@ -161,7 +192,12 @@ class GmailService:
         self.backend_order.append("lmstudio")
 
     def _connect_db(self):
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("ALTER TABLE emails ADD COLUMN is_archived INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        return conn
 
     def repair_existing_emails(self, conn=None):
         close_conn = False
@@ -252,6 +288,27 @@ class GmailService:
             return " ".join(words[:max_words]) + "\n...[TRUNCATED]"
         return text
 
+    def _split_reply_body(self, body: str) -> tuple:
+        """For reply emails, separate new content from quoted previous messages."""
+        patterns = [
+            r'\n\s*On\s+.{10,80}\s+wrote:\s*\n',
+            r'\n\s*Op\s+.{10,80}\s+schreef.{0,40}:\s*\n',
+            r'\n\s*Van:\s+.{5,}',
+            r'\n\s*From:\s+.{5,}',
+            r'\n\s*Sent from\s+',
+            r'\n\s*Verzonden\s+',
+            r'\n-{3,}\s*\n',
+            r'\n_{3,}\s*\n',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, body, re.IGNORECASE)
+            if match:
+                new_content = body[:match.start()].strip()
+                quoted = body[match.start():].strip()
+                if len(new_content.split()) >= 5:
+                    return new_content, quoted
+        return body, ""
+
     def _analyze_email_with_llm(
         self, subject: str, sender: str, recipient: str, cc: str, body: str, 
         is_outbound: bool = False, is_forwarded: bool = False, is_reply: bool = False, 
@@ -259,7 +316,16 @@ class GmailService:
         has_calendar_invite: bool = False, thread_context: str = ""
     ) -> dict:
         # Keep prompt concise so local LLMs process it in < 2 seconds
-        body_snippet = " ".join(body.split()[:300])
+        if is_reply:
+            new_part, quoted_part = self._split_reply_body(body)
+            if quoted_part:
+                new_snippet = " ".join(new_part.split()[:250])
+                quoted_snippet = " ".join(quoted_part.split()[:50])
+                body_snippet = f"[LATEST REPLY - CATEGORIZE BASED ON THIS]:\n{new_snippet}\n\n[QUOTED PREVIOUS EMAIL - FOR CONTEXT ONLY]:\n{quoted_snippet}"
+            else:
+                body_snippet = " ".join(body.split()[:300])
+        else:
+            body_snippet = " ".join(body.split()[:300])
         
         direction_str = "OUTBOUND (Sent by you)" if is_outbound else "INBOUND (Received by you)"
         
@@ -278,8 +344,8 @@ Has Calendar Invite: {has_calendar_invite}
 Body: {body_snippet}
 
 Choose ONE category:
-- Review: Active employer next steps, assessments, coding tests, take-home exercises, phone screens, interview invitations/confirmations, recruiter check-ins, or talent pool hold notices.
-- Applied: Application confirmations, candidate portal access, account setups for job portals, Applicant Tracking System (ATS) notifications, or application submissions.
+- Review: CRITICAL/ACTION REQUIRED. Use ONLY for active employer next steps: interview invitations/confirmations, real assessments/coding tests, recruiter emails asking for availability, or talent pool hold notices.
+- Applied: Application confirmations, ATS status updates (e.g. "we are reviewing your application", "we have received your application"), candidate portal access, candidate surveys, or feedback requests.
 - Rejected: Job rejections.
 - Promotions: Marketing, newsletters, sales.
 - Personal: General non-job security alerts, non-job account notices, bills, or casual correspondence.
@@ -297,6 +363,8 @@ Rules for Categorization:
 7. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
 8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
 9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
+10. "Under Review" Trap: If an email simply states "your application is under review" or "we will get back to you", it MUST be categorized as 'Applied', NOT 'Review'. 'Review' is strictly for actionable next steps like interviews.
+11. Surveys/Feedback Trap: Automated candidate experience surveys or feedback requests MUST be 'Applied' or 'Other', NEVER 'Review'.
 
 Return ONLY JSON format:
 {{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words)"}}
@@ -626,6 +694,102 @@ Return ONLY JSON format:
                 pass
             return {"error": str(e), "new_emails": new_emails, "status": "error"}
 
+    def archive_emails(self, message_ids: list) -> dict:
+        if not message_ids:
+            return {"ok": True, "count": 0, "message": "No emails selected."}
+        
+        email_addr = self.email_address
+        app_password = self.app_password
+        if not email_addr or not app_password:
+            return {"error": "No Gmail credentials configured. Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD.", "ok": False}
+        try:
+                
+            mail = imaplib.IMAP4_SSL("imap.gmail.com")
+            mail.login(email_addr, app_password)
+            mail.select("INBOX")
+            
+            archived_imap = 0
+            for msg_id in message_ids:
+                typ, data = mail.uid('SEARCH', None, f'(HEADER "Message-ID" "{msg_id}")')
+                uids = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not uids:
+                    typ, data = mail.uid('SEARCH', None, f'X-GM-RAW "rfc822msgid:{msg_id}"')
+                    uids = data[0].split() if typ == 'OK' and data and data[0] else []
+                for uid in uids:
+                    mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
+                    archived_imap += 1
+            mail.expunge()
+            mail.close()
+            mail.logout()
+        except Exception as e:
+            _safe_log(f"[yellow]IMAP archive warning: {e}[/yellow]")
+            
+        try:
+            with self._connect_db() as conn:
+                placeholders = ",".join("?" * len(message_ids))
+                conn.execute(f"UPDATE emails SET is_archived = 1 WHERE message_id IN ({placeholders})", message_ids)
+                conn.commit()
+        except Exception as e:
+            return {"error": f"Database update failed: {e}", "ok": False}
+            
+        return {"ok": True, "count": len(message_ids), "message": f"Archived {len(message_ids)} email(s) in Gmail and dashboard."}
+
+    def delete_emails(self, message_ids: list) -> dict:
+        if not message_ids:
+            return {"ok": True, "count": 0, "message": "No emails selected."}
+            
+        email_addr = self.email_address
+        app_password = self.app_password
+        if not email_addr or not app_password:
+            return {"error": "No Gmail credentials configured. Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD.", "ok": False}
+        try:
+                
+            mail = imaplib.IMAP4_SSL("imap.gmail.com")
+            mail.login(email_addr, app_password)
+            
+            trash_folder = "[Gmail]/Trash"
+            typ, folders = mail.list()
+            if typ == 'OK' and folders:
+                for f in folders:
+                    f_str = f.decode('utf-8', errors='ignore') if isinstance(f, bytes) else str(f)
+                    if '\\Trash' in f_str or '\\Bin' in f_str or '/Trash' in f_str or '/Bin' in f_str or '/Prullenbak' in f_str:
+                        parts = f_str.split('"')
+                        if len(parts) >= 3:
+                            trash_folder = parts[-2]
+                            break
+                        elif len(f_str.split()) >= 3:
+                            trash_folder = f_str.split()[-1]
+                            break
+                            
+            mail.select("INBOX")
+            deleted_imap = 0
+            for msg_id in message_ids:
+                typ, data = mail.uid('SEARCH', None, f'(HEADER "Message-ID" "{msg_id}")')
+                uids = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not uids:
+                    typ, data = mail.uid('SEARCH', None, f'X-GM-RAW "rfc822msgid:{msg_id}"')
+                    uids = data[0].split() if typ == 'OK' and data and data[0] else []
+                for uid in uids:
+                    mail.uid('COPY', uid, trash_folder)
+                    mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
+                    deleted_imap += 1
+            mail.expunge()
+            mail.close()
+            mail.logout()
+        except Exception as e:
+            _safe_log(f"[yellow]IMAP delete warning: {e}[/yellow]")
+            
+        try:
+            with self._connect_db() as conn:
+                placeholders = ",".join("?" * len(message_ids))
+                conn.execute(f"DELETE FROM emails WHERE message_id IN ({placeholders})", message_ids)
+                conn.commit()
+        except Exception as e:
+            return {"error": f"Database delete failed: {e}", "ok": False}
+            
+        return {"ok": True, "count": len(message_ids), "message": f"Moved {len(message_ids)} email(s) to Gmail Trash and removed from dashboard."}
+
 if __name__ == "__main__":
     service = GmailService()
     print(service.sync_emails(days_back=1))
+

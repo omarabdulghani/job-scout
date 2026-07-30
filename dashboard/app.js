@@ -6886,7 +6886,7 @@ const DEFAULT_THEME = initialTheme();
                }
            } else {
                senderKey = extractSenderName(email.sender);
-               const atsList = ["greenhouse", "workday", "lever", "recruitee", "dayforce", "personio", "ashby", "teamtailor", "homerun", "starred", "hroffice", "no-reply", "noreply", "donotreply", "messages-noreply"];
+               const atsList = ["testgorilla", "greenhouse", "workday", "lever", "recruitee", "dayforce", "personio", "ashby", "teamtailor", "homerun", "starred", "hroffice", "no-reply", "noreply", "donotreply", "messages-noreply"];
                if (atsList.some(ats => senderKey.toLowerCase().includes(ats))) {
                    const domMatch = (email.sender || "").match(/@([a-zA-Z0-9.-]+)\./);
                    if (domMatch && !atsList.some(ats => domMatch[1].toLowerCase().includes(ats))) {
@@ -6932,7 +6932,122 @@ const DEFAULT_THEME = initialTheme();
             }
         });
 
-        // Update category counts: count distinct groups per category, All counts raw total
+        window.updateCategoryTabs();
+
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        renderEmails(activeCat);
+        // Also trigger job render to apply badges
+        renderJobs();
+      } catch (e) {
+        inboxList.innerHTML = `<div class="error-state">Failed to load emails: ${e.message}</div>`;
+      }
+    }
+
+    window.updateBulkToolbar = function() {
+        const checkboxes = document.querySelectorAll('.email-card-select:checked');
+        const allCheckboxes = document.querySelectorAll('.email-card-select');
+        const toolbar = document.getElementById('email-bulk-toolbar');
+        const countSpan = document.getElementById('bulk-selected-count');
+        const selectAll = document.getElementById('email-select-all');
+        
+        if (checkboxes.length > 0) {
+            toolbar.style.display = 'flex';
+            countSpan.textContent = checkboxes.length + ' selected';
+            if (selectAll) {
+                selectAll.checked = checkboxes.length === allCheckboxes.length && allCheckboxes.length > 0;
+            }
+        } else {
+            toolbar.style.display = 'none';
+            if (selectAll) selectAll.checked = false;
+        }
+        
+        // Update group headers based on children
+        document.querySelectorAll('.email-group-container').forEach(container => {
+            const groupSelect = container.querySelector('.group-select-checkbox');
+            if (groupSelect) {
+                const cbx = container.querySelectorAll('.email-card-select');
+                const checkedCbx = container.querySelectorAll('.email-card-select:checked');
+                groupSelect.checked = cbx.length > 0 && checkedCbx.length === cbx.length;
+                groupSelect.indeterminate = checkedCbx.length > 0 && checkedCbx.length < cbx.length;
+            }
+        });
+    };
+
+    window.toggleSelectAllEmails = function(masterCheckbox) {
+        document.querySelectorAll('.email-card-select').forEach(cb => {
+            cb.checked = masterCheckbox.checked;
+        });
+        window.updateBulkToolbar();
+    };
+
+    window.archiveEmails = async function(ids) {
+        if (!ids || ids.length === 0) return;
+        try {
+            const res = await fetch('/api/gmail/email/archive', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_ids: ids })
+            });
+            if (res.ok) {
+                showToast("Emails archived successfully.");
+                allEmails = allEmails.filter(e => !ids.includes(e.message_id));
+                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(activeCat);
+                window.updateBulkToolbar();
+            } else {
+                showToast("Failed to archive emails.");
+            }
+        } catch (e) {
+            console.error(e);
+            showToast("Error archiving emails.");
+        }
+    };
+
+    window.deleteEmails = async function(ids) {
+        if (!ids || ids.length === 0) return;
+        try {
+            const res = await fetch('/api/gmail/email/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_ids: ids })
+            });
+            if (res.ok) {
+                showToast("Emails moved to trash.");
+                allEmails = allEmails.filter(e => !ids.includes(e.message_id));
+                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(activeCat);
+                window.updateBulkToolbar();
+            } else {
+                showToast("Failed to delete emails.");
+            }
+        } catch (e) {
+            console.error(e);
+            showToast("Error deleting emails.");
+        }
+    };
+
+    window.bulkArchiveEmails = function() {
+        const checkboxes = document.querySelectorAll('.email-card-select:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        window.archiveEmails(ids);
+    };
+
+    window.bulkDeleteEmails = function() {
+        const checkboxes = document.querySelectorAll('.email-card-select:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        window.deleteEmails(ids);
+    };
+
+    window.toggleGroupSelection = function(checkbox) {
+        const groupContainer = checkbox.closest('.email-group-container');
+        if (!groupContainer) return;
+        const emailCheckboxes = groupContainer.querySelectorAll('.email-group-content .email-card-select');
+        emailCheckboxes.forEach(cb => {
+            cb.checked = checkbox.checked;
+        });
+        updateBulkToolbar();
+    };
+    window.updateCategoryTabs = function() {
         const catGroupSets = {};
         allEmails.forEach(email => {
           const cat = (email.analysis && email.analysis.category) || "Other";
@@ -6957,15 +7072,7 @@ const DEFAULT_THEME = initialTheme();
           }
           badge.textContent = count;
         });
-
-        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-        renderEmails(activeCat);
-        // Also trigger job render to apply badges
-        renderJobs();
-      } catch (e) {
-        inboxList.innerHTML = `<div class="error-state">Failed to load emails: ${e.message}</div>`;
-      }
-    }
+    };
 
     function renderEmails(filterCategory) {
       if (!window.jobAgentNavigateToLinkedJob) {
@@ -6992,6 +7099,8 @@ const DEFAULT_THEME = initialTheme();
       }
       if (!inboxList) return;
       inboxList.innerHTML = "";
+      
+      window.updateCategoryTabs();
       
       const filtered = allEmails.filter(e => filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory));
       
@@ -7061,18 +7170,23 @@ const DEFAULT_THEME = initialTheme();
         }
 
         card.innerHTML = `
+          <div style="display: flex; align-items: flex-start; padding-right: 12px; padding-top: 4px;">
+            <input type="checkbox" class="email-card-select" value="${email.message_id}" onclick="event.stopPropagation()" onchange="updateBulkToolbar()" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--status-good);">
+          </div>
           <div class="email-avatar ${safe(cat)}">${safe(initials)}</div>
           <div class="email-body-content">
-            <div class="email-header">
+            <div class="email-header" style="align-items: flex-start;">
               <div class="email-meta-left">
                 <span class="email-company-pill">${safe(displaySender)}</span>
               </div>
-              <div class="email-meta-right">
-                <span class="email-date">${safe(formatDate(email.date))}</span>
+              <div class="email-meta-right" style="display: flex; align-items: center; gap: 8px;">
+                <button class="email-btn-archive" onclick="event.stopPropagation(); archiveEmails(['${email.message_id}'])" title="Archive in Gmail & Dashboard" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive</button>
+                <button class="email-btn-delete" onclick="event.stopPropagation(); deleteEmails(['${email.message_id}'])" title="Move to Trash in Gmail" style="background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: #f87171; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">🗑️ Delete</button>
+                <span class="email-date" style="margin-left: 4px;">${safe(formatDate(email.date))}</span>
                 <span class="email-category ${safe(cat)}">${safe(cat)}</span>
               </div>
             </div>
-            <div class="email-subject" style="margin-bottom: 8px;">${safe(summaryText)}</div>
+            <div class="email-subject" style="margin-bottom: 8px; margin-top: 4px;">${safe(summaryText)}</div>
             ${badgesHtml.length > 0 ? `<div class="email-flags-container">${badgesHtml.join("")}</div>` : ""}
             
             ${(email.analysis && email.analysis.interview_date) ? `
@@ -7118,13 +7232,59 @@ const DEFAULT_THEME = initialTheme();
               const { displaySender, initialsSource } = getEmailDisplayInfo(firstEmail);
               const initials = getInitials(initialsSource);
               
+              const catCounts = {};
+              group.forEach(e => {
+                  const cat = (e.analysis && e.analysis.category) || 'Other';
+                  catCounts[cat] = (catCounts[cat] || 0) + 1;
+              });
+              
+              const catThemeMap = {
+                  'Review': { base: 'var(--green)', wash: 'var(--green-wash)', border: 'var(--green-border)' },
+                  'Applied': { base: 'var(--blue)', wash: 'var(--blue-wash)', border: 'var(--blue-border)' },
+                  'Rejected': { base: 'var(--red)', wash: 'var(--red-wash)', border: 'var(--red-border)' },
+                  'Personal': { base: 'var(--violet)', wash: 'var(--violet-wash)', border: 'var(--violet-border)' },
+                  'Promotions': { base: 'var(--amber)', wash: 'var(--amber-wash)', border: 'var(--amber-border)' },
+                  'Other': { base: 'var(--muted)', wash: 'var(--surface-2)', border: 'var(--line)' }
+              };
+              
+              const uniqueCats = Object.keys(catCounts);
+              let badgeHtml = '';
+              
+              if (uniqueCats.length === 1) {
+                  const theme = catThemeMap[uniqueCats[0]] || catThemeMap['Other'];
+                  const badgeStyle = `background: ${theme.wash}; color: ${theme.base}; border: 1px solid ${theme.border};`;
+                  badgeHtml = `<span class="email-group-badge" style="${badgeStyle}">${group.length} emails</span>`;
+              } else {
+                  uniqueCats.sort((a, b) => catCounts[b] - catCounts[a]);
+                  
+                  let gradientStops = [];
+                  let currentPercentage = 0;
+                  const total = group.length;
+                  
+                  uniqueCats.forEach(cat => {
+                      const theme = catThemeMap[cat] || catThemeMap['Other'];
+                      const percentage = (catCounts[cat] / total) * 100;
+                      
+                      // For mixed gradients, use the bold/base colors
+                      gradientStops.push(`${theme.base} ${currentPercentage}%`);
+                      currentPercentage += percentage;
+                      gradientStops.push(`${theme.base} ${currentPercentage}%`);
+                  });
+                  
+                  const gradientStr = `linear-gradient(90deg, ${gradientStops.join(', ')})`;
+                  badgeHtml = `<span class="email-group-badge mixed-categories" style="--badge-gradient: ${gradientStr};"><span>${group.length} emails</span></span>`;
+              }
+              
               container.innerHTML = `
                 <div class="email-group-header" onclick="this.parentElement.classList.toggle('expanded')">
                   <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="group-checkbox-wrapper" style="display: flex; align-items: center;" onclick="event.stopPropagation()">
+                      <input type="checkbox" class="group-select-checkbox" onchange="toggleGroupSelection(this)" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--status-good);">
+                    </div>
                     <div class="email-avatar" style="margin-top: 0; background: var(--surface-3);">${safe(initials)}</div>
                     <div class="email-group-title">
                       <span>${safe(displaySender)}</span>
-                      <span class="email-group-badge">${group.length} emails</span>
+                      ${badgeHtml}
                     </div>
                   </div>
                   <svg class="icon email-group-icon"><use href="#icon-trending-down"></use></svg>

@@ -3796,11 +3796,11 @@
       color: var(--muted);
       border: 1px solid var(--line);
     }
-    .email-category.Review, .email-avatar.Review, .email-category.Interview, .email-avatar.Interview { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
-    .email-category.Applied, .email-avatar.Applied { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
-    .email-category.Rejected, .email-avatar.Rejected { background: rgba(248, 113, 113, 0.15); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
-    .email-category.Personal, .email-avatar.Personal { background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3); }
-    .email-category.Promotions, .email-avatar.Promotions { background: rgba(251, 146, 60, 0.15); color: #fb923c; border-color: rgba(251, 146, 60, 0.3); }
+    .email-category.Review, .email-avatar.Review, .email-category.Interview, .email-avatar.Interview { background: var(--green-wash); color: var(--green); border-color: var(--green-border); }
+    .email-category.Applied, .email-avatar.Applied { background: var(--blue-wash); color: var(--blue); border-color: var(--blue-border); }
+    .email-category.Rejected, .email-avatar.Rejected { background: var(--red-wash); color: var(--red); border-color: var(--red-border); }
+    .email-category.Personal, .email-avatar.Personal { background: var(--violet-wash); color: var(--violet); border-color: var(--violet-border); }
+    .email-category.Promotions, .email-avatar.Promotions { background: var(--amber-wash); color: var(--amber); border-color: var(--amber-border); }
 
     .email-interview-banner {
       margin: 8px 0; 
@@ -3866,6 +3866,33 @@
       font-weight: 800;
       letter-spacing: 0.5px;
       text-transform: uppercase;
+    }
+    
+    .email-group-badge.mixed-categories {
+      position: relative;
+      background: transparent !important;
+      border-color: transparent !important;
+      z-index: 1;
+    }
+
+    .email-group-badge.mixed-categories::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: 99px;
+      padding: 1px;
+      background: var(--badge-gradient);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      z-index: -1;
+    }
+
+    .email-group-badge.mixed-categories span {
+      background: var(--badge-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
     }
     
     .email-group-icon {

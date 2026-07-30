@@ -582,6 +582,7 @@ class OperationalStore:
                     company_name TEXT,
                     snippet TEXT,
                     read_status INTEGER,
+                    is_archived INTEGER DEFAULT 0,
                     payload_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_emails_date
@@ -601,6 +602,7 @@ class OperationalStore:
             self._ensure_column(connection, "jobs", "flexible_hours", "INTEGER")
             self._ensure_column(connection, "jobs", "sponsorship_status", "TEXT")
             self._ensure_column(connection, "emails", "parsed_timestamp", "INTEGER")
+            self._ensure_column(connection, "emails", "is_archived", "INTEGER DEFAULT 0")
             connection.executescript(
                 """
                 CREATE INDEX IF NOT EXISTS idx_emails_timestamp
