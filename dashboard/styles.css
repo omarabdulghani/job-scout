@@ -3939,3 +3939,61 @@
     .email-group-inner .email-card:last-child {
       border-bottom: none;
     }
+
+select.email-category {
+  background-color: transparent;
+}
+select.email-category option {
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  padding: 8px;
+}
+
+/* Custom Select Dropdown */
+.custom-select-wrapper {
+  position: relative;
+  display: inline-block;
+}
+.custom-select-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background-color: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  min-width: 120px;
+  overflow: hidden;
+}
+.custom-select-wrapper.open .custom-select-menu {
+  display: block;
+  animation: dropdownIn 0.15s ease-out;
+}
+.custom-select-menu div {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  text-align: right;
+  text-transform: uppercase;
+}
+.custom-select-menu div:hover {
+  background-color: var(--surface-3);
+}
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+.email-card { position: relative; z-index: 1; }
+.email-card:has(.custom-select-wrapper.open) { z-index: 50; }
+
+
+.email-group-container { position: relative; z-index: 1; }
+.email-group-container:has(.custom-select-wrapper.open) { z-index: 50; }

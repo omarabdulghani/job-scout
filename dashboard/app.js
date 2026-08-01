@@ -7038,6 +7038,41 @@ const DEFAULT_THEME = initialTheme();
         window.deleteEmails(ids);
     };
 
+    window.correctEmailCategory = async function(messageId, newCategory, selectElement) {
+        if (!messageId || !newCategory) return;
+        
+        try {
+            const res = await fetch("/api/emails/correct", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message_id: messageId, category: newCategory })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                showToast(`Category updated to ${newCategory} and saved for future learning!`, "success");
+                // Update local array
+                const emailObj = allEmails.find(e => e.message_id === messageId);
+                if (emailObj) {
+                    if (!emailObj.analysis) emailObj.analysis = {};
+                    emailObj.analysis.category = newCategory;
+                }
+                
+                // Re-render
+                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(activeCat);
+            } else {
+                showToast("Failed to correct category: " + data.error, "error");
+                // Re-render to restore previous UI state
+                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(activeCat);
+            }
+        } catch (e) {
+            showToast("Failed to correct category.", "error");
+            const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+            renderEmails(activeCat);
+        }
+    };
+
     window.toggleGroupSelection = function(checkbox) {
         const groupContainer = checkbox.closest('.email-group-container');
         if (!groupContainer) return;
@@ -7183,7 +7218,20 @@ const DEFAULT_THEME = initialTheme();
                 <button class="email-btn-archive" onclick="event.stopPropagation(); archiveEmails(['${email.message_id}'])" title="Archive in Gmail & Dashboard" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive</button>
                 <button class="email-btn-delete" onclick="event.stopPropagation(); deleteEmails(['${email.message_id}'])" title="Move to Trash in Gmail" style="background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: #f87171; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">🗑️ Delete</button>
                 <span class="email-date" style="margin-left: 4px;">${safe(formatDate(email.date))}</span>
-                <span class="email-category ${safe(cat)}">${safe(cat)}</span>
+                <div class="custom-select-wrapper" onclick="event.stopPropagation(); document.querySelectorAll('.custom-select-wrapper.open').forEach(el => { if(el !== this) el.classList.remove('open') }); this.classList.toggle('open')">
+                  <span class="email-category ${safe(cat)}" title="Correct Category" style="cursor: pointer; padding-right: 16px; position: relative; user-select: none;">
+                    ${safe(cat)}
+                    <svg style="position:absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; opacity: 0.7;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </span>
+                  <div class="custom-select-menu">
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Review', this)">Review</div>
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Applied', this)">Applied</div>
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Rejected', this)">Rejected</div>
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Personal', this)">Personal</div>
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Promotions', this)">Promotions</div>
+                    <div onclick="correctEmailCategory('${email.message_id}', 'Other', this)">Other</div>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="email-subject" style="margin-bottom: 8px; margin-top: 4px;">${safe(summaryText)}</div>
@@ -7358,3 +7406,6 @@ const DEFAULT_THEME = initialTheme();
     // Initial load for emails
     setTimeout(loadEmails, 1000);
 
+
+
+document.addEventListener('click', () => { document.querySelectorAll('.custom-select-wrapper.open').forEach(el => el.classList.remove('open')); });

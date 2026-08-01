@@ -31,18 +31,19 @@ def _clean_header(header_val: str) -> str:
     except Exception:
         return str(header_val).strip()
 
-def _validate_ai_consistency(analysis: dict) -> dict:
+def _validate_ai_consistency(analysis: dict, subject: str = "") -> dict:
     category = analysis.get("category", "Other")
     if category in ["Applied", "Review", "Interview", "Rejected"]:
         summary = str(analysis.get("summary", "")).lower()
-        if any(k in summary for k in [
+        search_text = f"{subject} {summary}".lower()
+        if any(k in search_text for k in [
             "prescription", "refill", "medication", "doctor", "pharmacy", "clinic", "amitriptyline", 
             "dentist", "recept", "herhaalrecept", "apotheek", "huisarts", "tandarts", "ziekenhuis", 
             "bill", "invoice", "tax", "belasting", "gemeente", "municipality", "shipment", 
             "delivery", "order", "package", "pakket", "bestelling", "flight", "hotel", "booking", 
-            "reservation", "security code", "login code", "verification code", "password reset"
+            "reservation", "security code", "login code", "verification code", "password reset", "reset password"
         ]):
-            if any(k in summary for k in ["security code", "login code", "verification code", "password reset"]):
+            if any(k in search_text for k in ["security code", "login code", "verification code", "password reset", "reset password"]):
                 analysis["category"] = "Other"
             else:
                 analysis["category"] = "Personal"
@@ -127,41 +128,10 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     if category == "Interview":
         category = "Review"
 
-    # 6b. Rejection language override — catches Dutch/English rejection phrases the AI may miss
-    if category in ("Review", "Applied", "Other") and not is_outbound:
-        rejection_phrases = [
-            "helaas meedelen", "niet meenemen in de verdere procedure",
-            "niet verder gaan", "afgewezen", "niet geselecteerd",
-            "andere kandidaat gekozen", "andere kandidaten gekozen",
-            "geen match", "niet door naar de volgende ronde",
-            "sollicitatie niet in behandeling", "niet kunnen selecteren",
-            "unfortunately we will not", "not moving forward",
-            "decided not to proceed", "will not be proceeding",
-            "not be taking you further", "regret to inform",
-            "position has been filled", "decided to go with another",
-            "not progressing your application", "unsuccessful",
-            "we have decided not to", "unable to offer you",
-            "not selected for", "not shortlisted",
-        ]
-        if any(phrase in text for phrase in rejection_phrases):
-            category = "Rejected"
-            if summary and "reject" not in summary.lower() and "afgewezen" not in summary.lower():
-                summary = "Application rejected"
-
-    # 6c. Review category override (surveys and generic ATS confirmations)
-    if category == "Review" and not is_outbound:
-        applied_phrases = [
-            "candidate survey", "candidate experience", "how did we do",
-            "feedback survey", "survey", "we have received your application",
-            "thank you for applying", "your application is under review"
-        ]
-        if any(phrase in text for phrase in applied_phrases) and "interview" not in text and "assessment" not in text:
-            category = "Applied"
-
     analysis["category"] = category
     analysis["company_name"] = company
     analysis["summary"] = summary
-    return _validate_ai_consistency(analysis)
+    return _validate_ai_consistency(analysis, subject)
 
 
 class GmailService:
@@ -193,11 +163,59 @@ class GmailService:
 
     def _connect_db(self):
         conn = sqlite3.connect(self.db_path)
+        # Ensure the table schema exists in case operational_store hasn't run yet
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_ai_corrections (
+                message_id TEXT PRIMARY KEY,
+                subject TEXT,
+                snippet TEXT,
+                original_category TEXT,
+                corrected_category TEXT,
+                corrected_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_email_corrections_date ON email_ai_corrections(corrected_at DESC)")
         try:
             conn.execute("ALTER TABLE emails ADD COLUMN is_archived INTEGER DEFAULT 0")
-        except Exception:
+        except sqlite3.OperationalError:
             pass
         return conn
+
+    def save_email_correction(self, message_id: str, corrected_category: str) -> dict:
+        """Saves a manual email category correction to the memory bank and updates the email."""
+        import datetime
+        with self._connect_db() as conn:
+            email = conn.execute("SELECT subject, snippet, category FROM emails WHERE message_id = ?", (message_id,)).fetchone()
+            if not email:
+                return {"ok": False, "message": "Email not found."}
+                
+            subject, snippet, original_category = email
+            if original_category == corrected_category:
+                return {"ok": True, "message": "Category is already set to this value."}
+                
+            # Update the email
+            conn.execute("UPDATE emails SET category = ? WHERE message_id = ?", (corrected_category, message_id))
+            
+            # Save the correction
+            now_iso = datetime.datetime.utcnow().isoformat()
+            conn.execute("""
+                INSERT OR REPLACE INTO email_ai_corrections 
+                (message_id, subject, snippet, original_category, corrected_category, corrected_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (message_id, subject, snippet, original_category, corrected_category, now_iso))
+            conn.commit()
+        return {"ok": True, "message": "Correction saved."}
+
+    def get_recent_email_corrections(self, limit: int = 5) -> list[dict]:
+        """Fetches the most recent manual corrections to inject as few-shot examples."""
+        with self._connect_db() as conn:
+            rows = conn.execute("""
+                SELECT subject, snippet, corrected_category 
+                FROM email_ai_corrections 
+                ORDER BY corrected_at DESC 
+                LIMIT ?
+            """, (limit,)).fetchall()
+            return [{"subject": r[0], "snippet": r[1], "corrected_category": r[2]} for r in rows]
 
     def repair_existing_emails(self, conn=None):
         close_conn = False
@@ -253,6 +271,13 @@ class GmailService:
         text = soup.get_text(separator="\n", strip=True)
         return text
 
+    def _decode_payload(self, raw_bytes, charset) -> str:
+        if not raw_bytes: return ""
+        try:
+            return raw_bytes.decode(charset or 'utf-8', errors='replace')
+        except LookupError:
+            return raw_bytes.decode('utf-8', errors='replace')
+
     def _get_body(self, msg) -> str:
         body = ""
         if msg.is_multipart():
@@ -261,23 +286,26 @@ class GmailService:
                 content_disposition = str(part.get("Content-Disposition"))
                 if content_type == "text/plain" and "attachment" not in content_disposition:
                     try:
-                        body += part.get_payload(decode=True).decode()
+                        raw = part.get_payload(decode=True)
+                        body += self._decode_payload(raw, part.get_content_charset())
                     except Exception:
                         pass
                 elif content_type == "text/html" and "attachment" not in content_disposition:
                     try:
-                        html = part.get_payload(decode=True).decode()
+                        raw = part.get_payload(decode=True)
+                        html = self._decode_payload(raw, part.get_content_charset())
                         body += self._clean_html(html)
                     except Exception:
                         pass
         else:
             content_type = msg.get_content_type()
             try:
-                payload = msg.get_payload(decode=True).decode()
+                raw = msg.get_payload(decode=True)
+                payload_text = self._decode_payload(raw, msg.get_content_charset())
                 if content_type == "text/html":
-                    body = self._clean_html(payload)
+                    body = self._clean_html(payload_text)
                 else:
-                    body = payload
+                    body = payload_text
             except Exception:
                 pass
         return body
@@ -329,6 +357,15 @@ class GmailService:
         
         direction_str = "OUTBOUND (Sent by you)" if is_outbound else "INBOUND (Received by you)"
         
+        recent_corrections = self.get_recent_email_corrections(limit=3)
+        few_shot_examples = ""
+        if recent_corrections:
+            few_shot_examples = "\n[USER AI CORRECTIONS MEMORY BANK - HIGHEST PRIORITY EXAMPLES]\n"
+            few_shot_examples += "You previously miscategorized the following emails, and the human corrected them. YOU MUST NOT MAKE THE SAME MISTAKES. Use these as perfect rules for categorization:\n"
+            for c in recent_corrections:
+                few_shot_examples += f"- Subject: '{c['subject']}' | Snippet: '{c['snippet'][:100]}' -> MUST BE CATEGORIZED AS '{c['corrected_category']}'\n"
+            few_shot_examples += "\n"
+        
         prompt = f"""Categorize this email. Translate internally and process emails in ANY language (Dutch, Spanish, etc.), but you MUST output the JSON summary and categories in ENGLISH.
 Sender: {sender}
 Recipient: {recipient}
@@ -342,9 +379,9 @@ Has Attachments: {has_attachments}
 Has Calendar Invite: {has_calendar_invite}
 {f"Thread Context (Previous emails): {thread_context}" if thread_context else ""}
 Body: {body_snippet}
-
+{few_shot_examples}
 Choose ONE category:
-- Review: CRITICAL/ACTION REQUIRED. Use ONLY for active employer next steps: interview invitations/confirmations, real assessments/coding tests, recruiter emails asking for availability, or talent pool hold notices.
+- Review: CRITICAL/ACTION REQUIRED. Use ONLY for active employer next steps: interview invitations/confirmations, real assessments/coding tests, recruiter emails asking for availability, or talent pool hold notices. Do NOT use for administrative IT tasks, password resets, or MFA codes.
 - Applied: Application confirmations, ATS status updates (e.g. "we are reviewing your application", "we have received your application"), candidate portal access, candidate surveys, or feedback requests.
 - Rejected: Job rejections.
 - Promotions: Marketing, newsletters, sales.
@@ -361,13 +398,20 @@ Rules for Categorization:
 5. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the call' or 'Company placed your application on hold for future review').
 6. ATS Override: Any emails sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) that are directly about a job application MUST be categorized as 'Applied' (or 'Review'/'Rejected' if applicable). Never categorize genuine job applications as 'Personal'.
 7. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
-8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
-9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
-10. "Under Review" Trap: If an email simply states "your application is under review" or "we will get back to you", it MUST be categorized as 'Applied', NOT 'Review'. 'Review' is strictly for actionable next steps like interviews.
-11. Surveys/Feedback Trap: Automated candidate experience surveys or feedback requests MUST be 'Applied' or 'Other', NEVER 'Review'.
+6. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
+7. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
+8. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
+9. "Under Review" Trap: If an email simply states "your application is under review" or "we will get back to you", it MUST be categorized as 'Applied', NOT 'Review'. 'Review' is strictly for actionable next steps like interviews.
+10. Surveys/Feedback Trap: Automated candidate experience surveys or feedback requests MUST be 'Applied' or 'Other', NEVER 'Review'.
 
 Return ONLY JSON format:
-{{"category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words)"}}
+{{"reasoning": "Step-by-step analysis of the email intent and final conclusion.", "category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words)"}}
+
+Examples of Reasoning:
+- "We carefully reviewed your application... but decided not to move forward." -> {{"reasoning": "Starts polite but final conclusion is a rejection with no next steps.", "category": "Rejected", ...}}
+- "After carefully reviewing your application, we think you're a great fit and want to schedule a call." -> {{"reasoning": "Starts with 'reviewing application' but concludes with a clear interview invite.", "category": "Review", ...}}
+- "Your application is currently under review by our team." -> {{"reasoning": "Generic ATS update, no active assessment or interview scheduled yet.", "category": "Applied", ...}}
+- "Reset password for your Nestlé account" -> {{"reasoning": "Administrative IT task, not a job progression step.", "category": "Other", ...}}
 """
         
         import time
@@ -472,7 +516,7 @@ Return ONLY JSON format:
         _safe_log(f"[red]All LLMs failed or unreachable for '{subject[:30]}...'. Reasons: {reasons_str}[/red]")
         raise RuntimeError(f"AI Sync stopped while analyzing '{subject[:30]}...'. Reason: {reasons_str}")
 
-    def sync_emails(self, days_back: int = 7, cancel_check=None, progress_callback=None) -> dict:
+    def sync_emails(self, days_back: int = 7, max_emails: int = None, cancel_check=None, progress_callback=None) -> dict:
         if not self.email_address or not self.app_password:
             return {"error": "Gmail credentials not configured in .env."}
 
@@ -506,6 +550,9 @@ Return ONLY JSON format:
                 return {"error": "Failed to search emails."}
                 
             email_ids = messages[0].split()
+            if max_emails is not None and len(email_ids) > max_emails:
+                email_ids = email_ids[-max_emails:]
+                
             total_emails = len(email_ids)
             processed_count = 0
             new_emails = 0

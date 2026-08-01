@@ -587,6 +587,17 @@ class OperationalStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_emails_date
                     ON emails(date DESC);
+                    
+                CREATE TABLE IF NOT EXISTS email_ai_corrections (
+                    message_id TEXT PRIMARY KEY,
+                    subject TEXT,
+                    snippet TEXT,
+                    original_category TEXT,
+                    corrected_category TEXT,
+                    corrected_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_email_corrections_date
+                    ON email_ai_corrections(corrected_at DESC);
                 """
             )
             self._ensure_column(connection, "jobs", "domain_category", "TEXT")

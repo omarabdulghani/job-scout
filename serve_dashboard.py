@@ -1231,6 +1231,26 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "Not running"})
             return
 
+        if self._path_without_query() == "/api/emails/correct":
+            payload = self._read_json_body(max_bytes=1024)
+            message_id = payload.get("message_id")
+            corrected_category = payload.get("category")
+            if not message_id or not corrected_category:
+                self._send_json({"ok": False, "error": "Missing message_id or category"}, status=400)
+                return
+            
+            try:
+                from agent.gmail_service import GmailService
+                service = GmailService()
+                result = service.save_email_correction(message_id, corrected_category)
+                if result.get("ok"):
+                    self._send_json(result)
+                else:
+                    self._send_json(result, status=400)
+            except Exception as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
         if self._path_without_query() == "/api/generate-cover-letter":
             payload = self._read_json_body(max_bytes=1024)
             job_id = payload.get("job_id")
