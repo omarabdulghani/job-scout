@@ -7004,14 +7004,11 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Show loading animation smoothly
+            // Phase 2: Hide toast entirely to prevent a "3rd popup" effect
             const toastEl = document.getElementById("toast");
             if (toastEl) {
                 window.clearTimeout(state.toastTimer);
-                const btn = toastEl.querySelector('button');
-                if (btn) {
-                    btn.outerHTML = `<span style="display:flex;align-items:center;margin-left:8px;color:var(--text-secondary);"><svg class="icon spin" style="width:16px;height:16px;"><use href="#icon-refresh"></use></svg></span>`;
-                }
+                toastEl.classList.remove("visible");
             }
 
             try {
@@ -7070,14 +7067,11 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Show loading animation smoothly
+            // Phase 2: Hide toast entirely to prevent a "3rd popup" effect
             const toastEl = document.getElementById("toast");
             if (toastEl) {
                 window.clearTimeout(state.toastTimer);
-                const btn = toastEl.querySelector('button');
-                if (btn) {
-                    btn.outerHTML = `<span style="display:flex;align-items:center;margin-left:8px;color:var(--text-secondary);"><svg class="icon spin" style="width:16px;height:16px;"><use href="#icon-refresh"></use></svg></span>`;
-                }
+                toastEl.classList.remove("visible");
             }
 
             try {
