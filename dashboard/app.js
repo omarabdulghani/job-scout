@@ -4610,13 +4610,23 @@ const DEFAULT_THEME = initialTheme();
       actionLabel = "",
       onAction = null,
       duration = 4000,
+      icon = ""
     } = {}) {
       if (!els.toast) return;
       window.clearTimeout(state.toastTimer);
       els.toast.replaceChildren();
+      
       const copy = document.createElement("span");
-      copy.textContent = safe(message);
+      if (icon) {
+        copy.style.display = "flex";
+        copy.style.alignItems = "center";
+        copy.style.gap = "8px";
+        copy.innerHTML = icon + `<span>${safe(message)}</span>`;
+      } else {
+        copy.textContent = safe(message);
+      }
       els.toast.append(copy);
+      
       if (actionLabel && typeof onAction === "function") {
         const action = document.createElement("button");
         action.type = "button";
@@ -7004,11 +7014,15 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Hide toast entirely to prevent a "3rd popup" effect
+            // Phase 2: Hold the toast exactly as it is, just disable the Undo button while processing
             const toastEl = document.getElementById("toast");
             if (toastEl) {
-                window.clearTimeout(state.toastTimer);
-                toastEl.classList.remove("visible");
+                const btn = toastEl.querySelector('button');
+                if (btn) {
+                    btn.style.pointerEvents = 'none';
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                }
             }
 
             try {
@@ -7033,10 +7047,11 @@ const DEFAULT_THEME = initialTheme();
         const timer = setTimeout(commitAction, 5000);
         window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
 
-        // 3. Show Undo Toast
+        // 3. Show Undo Toast (Infinite duration, will be replaced by Phase 3)
         showToast(ids.length === 1 ? "Archiving email(s)..." : `Archiving ${ids.length} email(s)...`, {
+            icon: `<svg class="icon spin"><use href="#icon-refresh"></use></svg>`,
             actionLabel: "Undo",
-            duration: 5000,
+            duration: 999999,
             onAction: async () => {
                 clearTimeout(timer);
                 delete window.pendingEmailActions[actionId];
@@ -7067,11 +7082,15 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Hide toast entirely to prevent a "3rd popup" effect
+            // Phase 2: Hold the toast exactly as it is, just disable the Undo button while processing
             const toastEl = document.getElementById("toast");
             if (toastEl) {
-                window.clearTimeout(state.toastTimer);
-                toastEl.classList.remove("visible");
+                const btn = toastEl.querySelector('button');
+                if (btn) {
+                    btn.style.pointerEvents = 'none';
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                }
             }
 
             try {
@@ -7096,10 +7115,11 @@ const DEFAULT_THEME = initialTheme();
         const timer = setTimeout(commitAction, 5000);
         window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
 
-        // 3. Show Undo Toast
+        // 3. Show Undo Toast (Infinite duration, will be replaced by Phase 3)
         showToast(ids.length === 1 ? "Deleting email(s)..." : `Deleting ${ids.length} email(s)...`, {
+            icon: `<svg class="icon spin"><use href="#icon-refresh"></use></svg>`,
             actionLabel: "Undo",
-            duration: 5000,
+            duration: 999999,
             onAction: async () => {
                 clearTimeout(timer);
                 delete window.pendingEmailActions[actionId];
