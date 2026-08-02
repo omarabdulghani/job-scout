@@ -1794,11 +1794,17 @@
           <button class="career-lane-tab" type="button" data-category="Promotions"><span style="color: var(--amber); display: flex;"><svg class="icon"><use href="#icon-spark"></use></svg></span><span>Promotions</span></button>
           <button class="career-lane-tab" type="button" data-category="Other"><svg class="icon"><use href="#icon-layout"></use></svg><span>Other</span></button>
         </nav>
-        <div class="field" style="margin: 0; min-width: 150px;">
-          <select id="emailSortSelect" aria-label="Sort emails">
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <div style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;" onclick="document.getElementById('global-email-select-all').click()">
+            <input type="checkbox" id="global-email-select-all" onclick="event.stopPropagation(); toggleSelectAllEmails(this)" title="Select all emails in this tab" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--status-good); margin: 0;">
+            <label for="global-email-select-all" style="font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">Select All</label>
+          </div>
+          <div class="field" style="margin: 0; min-width: 150px;">
+            <select id="emailSortSelect" aria-label="Sort emails">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </div>
         </div>
       </div>
       <div id="syncErrorBanner" style="display: none; background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.4); color: #f87171; padding: 14px 18px; border-radius: 10px; margin-bottom: 16px; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">

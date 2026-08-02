@@ -6949,16 +6949,22 @@ const DEFAULT_THEME = initialTheme();
         const toolbar = document.getElementById('email-bulk-toolbar');
         const countSpan = document.getElementById('bulk-selected-count');
         const selectAll = document.getElementById('email-select-all');
+        const globalSelectAll = document.getElementById('global-email-select-all');
+        const isAllSelected = checkboxes.length === allCheckboxes.length && allCheckboxes.length > 0;
+        const isSomeSelected = checkboxes.length > 0 && checkboxes.length < allCheckboxes.length;
         
         if (checkboxes.length > 0) {
             toolbar.style.display = 'flex';
             countSpan.textContent = checkboxes.length + ' selected';
-            if (selectAll) {
-                selectAll.checked = checkboxes.length === allCheckboxes.length && allCheckboxes.length > 0;
-            }
+            if (selectAll) selectAll.checked = isAllSelected;
         } else {
             toolbar.style.display = 'none';
             if (selectAll) selectAll.checked = false;
+        }
+        
+        if (globalSelectAll) {
+            globalSelectAll.checked = isAllSelected;
+            globalSelectAll.indeterminate = isSomeSelected;
         }
         
         // Update group headers based on children
@@ -6980,50 +6986,136 @@ const DEFAULT_THEME = initialTheme();
         window.updateBulkToolbar();
     };
 
+    window.pendingEmailActions = window.pendingEmailActions || {};
+
     window.archiveEmails = async function(ids) {
         if (!ids || ids.length === 0) return;
-        try {
-            const res = await fetch('/api/gmail/email/archive', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ message_ids: ids })
-            });
-            if (res.ok) {
-                showToast("Emails archived successfully.");
-                allEmails = allEmails.filter(e => !ids.includes(e.message_id));
-                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(activeCat);
-                window.updateBulkToolbar();
-            } else {
-                showToast("Failed to archive emails.");
+        
+        // 1. Soft-delete from UI immediately
+        const affectedEmails = allEmails.filter(e => ids.includes(e.message_id));
+        allEmails = allEmails.filter(e => !ids.includes(e.message_id));
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        renderEmails(activeCat);
+        window.updateBulkToolbar();
+
+        // 2. Schedule backend action
+        const actionId = Date.now().toString() + Math.random();
+        
+        const commitAction = async () => {
+            delete window.pendingEmailActions[actionId];
+            
+            // Phase 2: Show loading animation
+            const toastEl = document.getElementById("toast");
+            if (toastEl) {
+                window.clearTimeout(state.toastTimer);
+                toastEl.replaceChildren();
+                toastEl.innerHTML = `<span style="display:flex;align-items:center;gap:8px;"><svg class="icon spin"><use href="#icon-refresh"></use></svg> Archiving ${ids.length} email(s)...</span>`;
+                toastEl.classList.add("visible");
             }
-        } catch (e) {
-            console.error(e);
-            showToast("Error archiving emails.");
-        }
+
+            try {
+                const res = await fetch('/api/gmail/email/archive', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message_ids: ids })
+                });
+                
+                // Phase 3: Success message
+                if (res.ok) {
+                    showToast(`✓ ${ids.length} email(s) successfully archived.`, { duration: 3000 });
+                } else {
+                    showToast(`Failed to archive email(s).`, { duration: 5000 });
+                }
+            } catch (e) {
+                console.error("Delayed archive failed:", e);
+                showToast(`Error while archiving emails.`, { duration: 5000 });
+            }
+        };
+
+        const timer = setTimeout(commitAction, 5000);
+        window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
+
+        // 3. Show Undo Toast
+        showToast(ids.length === 1 ? "Email archived." : `${ids.length} emails archived.`, {
+            actionLabel: "Undo",
+            duration: 5000,
+            onAction: async () => {
+                clearTimeout(timer);
+                delete window.pendingEmailActions[actionId];
+                
+                // Restore emails and re-render
+                allEmails = [...allEmails, ...affectedEmails];
+                allEmails.sort((a, b) => new Date(b.date) - new Date(a.date));
+                const currentCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(currentCat);
+                window.updateBulkToolbar();
+            }
+        });
     };
 
     window.deleteEmails = async function(ids) {
         if (!ids || ids.length === 0) return;
-        try {
-            const res = await fetch('/api/gmail/email/delete', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ message_ids: ids })
-            });
-            if (res.ok) {
-                showToast("Emails moved to trash.");
-                allEmails = allEmails.filter(e => !ids.includes(e.message_id));
-                const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(activeCat);
-                window.updateBulkToolbar();
-            } else {
-                showToast("Failed to delete emails.");
+        
+        // 1. Soft-delete from UI immediately
+        const affectedEmails = allEmails.filter(e => ids.includes(e.message_id));
+        allEmails = allEmails.filter(e => !ids.includes(e.message_id));
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        renderEmails(activeCat);
+        window.updateBulkToolbar();
+
+        // 2. Schedule backend action
+        const actionId = Date.now().toString() + Math.random();
+        
+        const commitAction = async () => {
+            delete window.pendingEmailActions[actionId];
+            
+            // Phase 2: Show loading animation
+            const toastEl = document.getElementById("toast");
+            if (toastEl) {
+                window.clearTimeout(state.toastTimer);
+                toastEl.replaceChildren();
+                toastEl.innerHTML = `<span style="display:flex;align-items:center;gap:8px;"><svg class="icon spin"><use href="#icon-refresh"></use></svg> Deleting ${ids.length} email(s)...</span>`;
+                toastEl.classList.add("visible");
             }
-        } catch (e) {
-            console.error(e);
-            showToast("Error deleting emails.");
-        }
+
+            try {
+                const res = await fetch('/api/gmail/email/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message_ids: ids })
+                });
+                
+                // Phase 3: Success message
+                if (res.ok) {
+                    showToast(`✓ ${ids.length} email(s) successfully deleted.`, { duration: 3000 });
+                } else {
+                    showToast(`Failed to delete email(s).`, { duration: 5000 });
+                }
+            } catch (e) {
+                console.error("Delayed delete failed:", e);
+                showToast(`Error while deleting emails.`, { duration: 5000 });
+            }
+        };
+
+        const timer = setTimeout(commitAction, 5000);
+        window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
+
+        // 3. Show Undo Toast
+        showToast(ids.length === 1 ? "Email moved to trash." : `${ids.length} emails moved to trash.`, {
+            actionLabel: "Undo",
+            duration: 5000,
+            onAction: async () => {
+                clearTimeout(timer);
+                delete window.pendingEmailActions[actionId];
+                
+                // Restore emails and re-render
+                allEmails = [...allEmails, ...affectedEmails];
+                allEmails.sort((a, b) => new Date(b.date) - new Date(a.date));
+                const currentCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+                renderEmails(currentCat);
+                window.updateBulkToolbar();
+            }
+        });
     };
 
     window.bulkArchiveEmails = function() {
