@@ -7004,13 +7004,14 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Show loading animation
+            // Phase 2: Show loading animation smoothly
             const toastEl = document.getElementById("toast");
             if (toastEl) {
                 window.clearTimeout(state.toastTimer);
-                toastEl.replaceChildren();
-                toastEl.innerHTML = `<span style="display:flex;align-items:center;gap:8px;"><svg class="icon spin"><use href="#icon-refresh"></use></svg> Archiving ${ids.length} email(s)...</span>`;
-                toastEl.classList.add("visible");
+                const btn = toastEl.querySelector('button');
+                if (btn) {
+                    btn.outerHTML = `<span style="display:flex;align-items:center;margin-left:8px;color:var(--text-secondary);"><svg class="icon spin" style="width:16px;height:16px;"><use href="#icon-refresh"></use></svg></span>`;
+                }
             }
 
             try {
@@ -7069,13 +7070,14 @@ const DEFAULT_THEME = initialTheme();
         const commitAction = async () => {
             delete window.pendingEmailActions[actionId];
             
-            // Phase 2: Show loading animation
+            // Phase 2: Show loading animation smoothly
             const toastEl = document.getElementById("toast");
             if (toastEl) {
                 window.clearTimeout(state.toastTimer);
-                toastEl.replaceChildren();
-                toastEl.innerHTML = `<span style="display:flex;align-items:center;gap:8px;"><svg class="icon spin"><use href="#icon-refresh"></use></svg> Deleting ${ids.length} email(s)...</span>`;
-                toastEl.classList.add("visible");
+                const btn = toastEl.querySelector('button');
+                if (btn) {
+                    btn.outerHTML = `<span style="display:flex;align-items:center;margin-left:8px;color:var(--text-secondary);"><svg class="icon spin" style="width:16px;height:16px;"><use href="#icon-refresh"></use></svg></span>`;
+                }
             }
 
             try {
