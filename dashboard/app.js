@@ -7036,7 +7036,7 @@ const DEFAULT_THEME = initialTheme();
         window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
 
         // 3. Show Undo Toast
-        showToast(ids.length === 1 ? "Email archived." : `${ids.length} emails archived.`, {
+        showToast(ids.length === 1 ? "Archiving email(s)..." : `Archiving ${ids.length} email(s)...`, {
             actionLabel: "Undo",
             duration: 5000,
             onAction: async () => {
@@ -7101,7 +7101,7 @@ const DEFAULT_THEME = initialTheme();
         window.pendingEmailActions[actionId] = { timer, emails: affectedEmails };
 
         // 3. Show Undo Toast
-        showToast(ids.length === 1 ? "Email moved to trash." : `${ids.length} emails moved to trash.`, {
+        showToast(ids.length === 1 ? "Deleting email(s)..." : `Deleting ${ids.length} email(s)...`, {
             actionLabel: "Undo",
             duration: 5000,
             onAction: async () => {
