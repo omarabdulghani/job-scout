@@ -3997,3 +3997,18 @@ select.email-category option {
 
 .email-group-container { position: relative; z-index: 1; }
 .email-group-container:has(.custom-select-wrapper.open) { z-index: 50; }
+
+
+/* Spinner Animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
