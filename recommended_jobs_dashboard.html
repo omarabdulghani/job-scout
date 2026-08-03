@@ -1799,6 +1799,9 @@
             <input type="checkbox" id="global-email-select-all" onclick="event.stopPropagation(); toggleSelectAllEmails(this)" title="Select all emails in this tab" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--status-good); margin: 0;">
             <label for="global-email-select-all" style="font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">Select All</label>
           </div>
+          <div class="field" style="margin: 0; min-width: 250px;">
+            <input type="text" id="emailSearchInput" class="form-input" placeholder="Search company, sender, or snippet..." aria-label="Search emails">
+          </div>
           <div class="field" style="margin: 0; min-width: 150px;">
             <select id="emailSortSelect" aria-label="Sort emails">
               <option value="newest">Newest first</option>
@@ -1876,6 +1879,45 @@
                 <button id="testGmailConnectionBtn" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-activity"></use></svg>Test connection</button>
                 <button id="testSyncGmailButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-play"></use></svg>Test 1 Email Scan (Dev)</button>
                 <span id="gmailConnectionStatus" style="font-size: 13px;"></span>
+              </div>
+            </article>
+            
+            <article class="provider-card" style="margin-top: 24px;">
+              <div class="provider-card-head">
+                <div>
+                  <h2>Custom Email Routing Rules</h2>
+                  <div class="provider-copy">Bypass the AI and force a category based on sender email address or domain.</div>
+                </div>
+              </div>
+              
+              <div class="form-grid">
+                <div class="field">
+                  <label for="newRulePattern">Sender Email or Domain Pattern</label>
+                  <input id="newRulePattern" type="text" class="form-input" placeholder="e.g. *@amazon.com or no-reply@github.com">
+                </div>
+                
+                <div class="field">
+                  <label for="newRuleCategory">Category</label>
+                  <select id="newRuleCategory" class="form-input">
+                    <option value="Review">Review</option>
+                    <option value="Applied">Applied</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Promotions">Promotions</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top: 16px;">
+                <button id="addRuleButton" class="button secondary" type="button"><svg class="icon icon-sm"><use href="#icon-plus-circle"></use></svg>Add Rule</button>
+              </div>
+
+              <div style="margin-top: 24px;">
+                <h3>Active Rules</h3>
+                <div id="routingRulesList" style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                  <!-- Rules will be rendered here -->
+                  <div style="color: var(--text-tertiary); font-size: 13px;">Loading rules...</div>
+                </div>
               </div>
             </article>
           </div>

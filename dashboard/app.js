@@ -6577,6 +6577,7 @@ const DEFAULT_THEME = initialTheme();
           if (inboxCategories) inboxCategories.hidden = true;
           openGmailSettingsBtn.innerHTML = `<svg class="icon icon-sm"><use href="#icon-x"></use></svg>Close Settings`;
           loadGmailSettings();
+          if (typeof loadRoutingRules === "function") loadRoutingRules();
         } else {
           gmailSettingsContainer.hidden = true;
           inboxList.hidden = false;
@@ -6648,6 +6649,85 @@ const DEFAULT_THEME = initialTheme();
            gmailConnectionStatus.style.color = "var(--status-rejected)";
         }
       });
+      
+      const addRuleButton = document.getElementById("addRuleButton");
+      const routingRulesList = document.getElementById("routingRulesList");
+
+      window.loadRoutingRules = async function() {
+        if (!routingRulesList) return;
+        try {
+          const res = await fetch("/api/gmail/rules");
+          if (!res.ok) throw new Error("Failed to load rules");
+          const data = await res.json();
+          if (data.ok && data.rules) {
+            routingRulesList.innerHTML = "";
+            if (data.rules.length === 0) {
+               routingRulesList.innerHTML = '<div style="color: var(--text-tertiary); font-size: 13px;">No rules found.</div>';
+               return;
+            }
+            for (const rule of data.rules) {
+               const el = document.createElement("div");
+               el.style = "display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);";
+               el.innerHTML = `
+                 <div>
+                   <div style="font-weight: 500; font-size: 14px; margin-bottom: 2px;">${rule.sender_pattern}</div>
+                   <div style="font-size: 12px; color: var(--text-secondary);">➔ ${rule.category}</div>
+                 </div>
+                 <button class="button secondary icon-only delete-rule-btn" data-id="${rule.id}" style="color: var(--status-rejected); border-color: transparent;"><svg class="icon icon-sm"><use href="#icon-trash"></use></svg></button>
+               `;
+               routingRulesList.appendChild(el);
+            }
+            
+            document.querySelectorAll(".delete-rule-btn").forEach(btn => {
+               btn.addEventListener("click", async (e) => {
+                 const id = e.currentTarget.getAttribute("data-id");
+                 e.currentTarget.disabled = true;
+                 try {
+                   await fetch(`/api/gmail/rules/${id}`, { method: "DELETE" });
+                   window.loadRoutingRules();
+                 } catch (err) {
+                   console.error(err);
+                 }
+               });
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          routingRulesList.innerHTML = '<div style="color: var(--status-rejected); font-size: 13px;">Failed to load rules</div>';
+        }
+      };
+      
+      if (addRuleButton) {
+        addRuleButton.addEventListener("click", async () => {
+          const patternInput = document.getElementById("newRulePattern");
+          const categorySelect = document.getElementById("newRuleCategory");
+          
+          if (!patternInput.value.trim()) return;
+          
+          addRuleButton.disabled = true;
+          try {
+            const res = await fetch("/api/gmail/rules", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sender_pattern: patternInput.value.trim(),
+                category: categorySelect.value
+              })
+            });
+            if (res.ok) {
+              patternInput.value = "";
+              window.loadRoutingRules();
+            } else {
+              const data = await res.json();
+              alert(data.error || "Failed to add rule");
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            addRuleButton.disabled = false;
+          }
+        });
+      }
     }
 
     function formatDate(rawDateStr) {
@@ -7245,7 +7325,47 @@ const DEFAULT_THEME = initialTheme();
       
       window.updateCategoryTabs();
       
-      const filtered = allEmails.filter(e => filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory));
+      const searchInput = document.getElementById("emailSearchInput");
+      if (searchInput && !searchInput.dataset.listenerAdded) {
+         searchInput.dataset.listenerAdded = "true";
+         searchInput.addEventListener("input", () => {
+             if (window.emailSearchTimeout) {
+                 clearTimeout(window.emailSearchTimeout);
+             }
+             window.emailSearchTimeout = setTimeout(() => {
+                 const activeTab = document.querySelector('.career-lane-tabs.inbox-categories .career-lane-tab.active');
+                 const currentCategory = activeTab ? activeTab.dataset.category : "All";
+                 renderEmails(currentCategory);
+             }, 300);
+         });
+      }
+
+      const searchText = (searchInput ? searchInput.value : "").toLowerCase();
+      
+      const filtered = allEmails.filter(e => {
+        const matchesCategory = filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory);
+        if (!matchesCategory) return false;
+        
+        if (!searchText) return true;
+        
+        const sender = (e.sender || "").toLowerCase();
+        const recipient = (e.recipient || "").toLowerCase();
+        const cc = (e.cc || "").toLowerCase();
+        const company = (e.analysis && e.analysis.company ? e.analysis.company : "").toLowerCase();
+        const snippet = (e.analysis && e.analysis.snippet ? e.analysis.snippet : "").toLowerCase();
+        const subject = (e.subject || "").toLowerCase();
+        const body = (e.body || "").toLowerCase();
+        const linkedJob = (e.linked_job_title || "").toLowerCase();
+        
+        return sender.includes(searchText) || 
+               recipient.includes(searchText) ||
+               cc.includes(searchText) ||
+               company.includes(searchText) || 
+               snippet.includes(searchText) || 
+               subject.includes(searchText) ||
+               body.includes(searchText) ||
+               linkedJob.includes(searchText);
+      });
       
       if (filtered.length === 0) {
         inboxList.innerHTML = `

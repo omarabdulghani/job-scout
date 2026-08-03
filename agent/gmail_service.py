@@ -31,23 +31,7 @@ def _clean_header(header_val: str) -> str:
     except Exception:
         return str(header_val).strip()
 
-def _validate_ai_consistency(analysis: dict, subject: str = "") -> dict:
-    category = analysis.get("category", "Other")
-    if category in ["Applied", "Review", "Interview", "Rejected"]:
-        summary = str(analysis.get("summary", "")).lower()
-        search_text = f"{subject} {summary}".lower()
-        if any(k in search_text for k in [
-            "prescription", "refill", "medication", "doctor", "pharmacy", "clinic", "amitriptyline", 
-            "dentist", "recept", "herhaalrecept", "apotheek", "huisarts", "tandarts", "ziekenhuis", 
-            "bill", "invoice", "tax", "belasting", "gemeente", "municipality", "shipment", 
-            "delivery", "order", "package", "pakket", "bestelling", "flight", "hotel", "booking", 
-            "reservation", "security code", "login code", "verification code", "password reset", "reset password"
-        ]):
-            if any(k in search_text for k in ["security code", "login code", "verification code", "password reset", "reset password"]):
-                analysis["category"] = "Other"
-            else:
-                analysis["category"] = "Personal"
-    return analysis
+
 
 def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict, from_llm: bool = True) -> dict:
     category = analysis.get("category", "Other")
@@ -131,7 +115,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
     analysis["category"] = category
     analysis["company_name"] = company
     analysis["summary"] = summary
-    return _validate_ai_consistency(analysis, subject)
+    return analysis
 
 
 class GmailService:
@@ -389,7 +373,7 @@ Choose ONE category:
 - Other: Anything else.
 
 Rules for Categorization:
-1. Self-Consistency Guardrail (HIGHEST PRECEDENCE): Your assigned category MUST be logically consistent with your summary. If your summary describes a doctor, prescription, medication, medical practice, bank account, tax notice, municipality, or casual personal correspondence, the category is STRICTLY FORBIDDEN from being 'Applied', 'Review', or 'Rejected'. It MUST be categorized as 'Personal' or 'Other'.
+1. Self-Consistency Guardrail (HIGHEST PRECEDENCE): Your assigned category MUST be logically consistent with your summary. You are the SOLE authority for identifying personal/noise emails. If the email describes a doctor, prescription, medication, medical practice, bank account, tax notice, municipality, casual personal correspondence, flights, hotel bookings, package deliveries, invoices, or security codes, the category is STRICTLY FORBIDDEN from being 'Applied', 'Review', or 'Rejected'. It MUST be categorized as 'Personal' or 'Other'.
 2. Thread State Progression:
    - For INBOUND Replies (from company to you): Read the new email carefully. If it is a rejection, classify as 'Rejected'. If it is an assessment, interview invite, or active review step, classify as 'Review'. Otherwise, maintain the current thread state (e.g. 'Applied').
    - For OUTBOUND Replies (from you to company): Inherit the job stage ONLY if the email is part of an active job application with a direct employer. Do NOT apply thread inheritance to personal, medical, or administrative emails.
@@ -398,11 +382,10 @@ Rules for Categorization:
 5. Ensure your summary reflects the context (e.g. 'You confirmed your availability for the call' or 'Company placed your application on hold for future review').
 6. ATS Override: Any emails sent from an ATS domain (e.g. workday, lever, greenhouse, homerun, myworkdayjobs) that are directly about a job application MUST be categorized as 'Applied' (or 'Review'/'Rejected' if applicable). Never categorize genuine job applications as 'Personal'.
 7. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
-6. Canonical Entity & Grouping (company_name): For EVERY email (whether job-related, personal, administrative, medical, or promotional), ALWAYS extract the clean, canonical organization or entity name that owns the conversation (e.g. 'Praktijk Bovenuit', 'DEPT', 'Tot Heil des Volks', 'Gemeente Amsterdam'). NEVER leave it null unless it is purely private correspondence between individuals with no organization. Strip all departmental prefixes (like 'Info', 'Noreply', 'Support', 'Helpdesk', 'Recruitment', 'Contact', 'Service') and legal suffixes (like BV, Inc, LLC). For example: 'Info Praktijk Bovenuit' -> 'Praktijk Bovenuit'. NEVER use software platform names (e.g. Greenhouse, Lever, Workday) as the group name. When replying or forwarding in a thread, inherit the exact same canonical entity name as the parent email to ensure they group together.
-7. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
-8. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
-9. "Under Review" Trap: If an email simply states "your application is under review" or "we will get back to you", it MUST be categorized as 'Applied', NOT 'Review'. 'Review' is strictly for actionable next steps like interviews.
-10. Surveys/Feedback Trap: Automated candidate experience surveys or feedback requests MUST be 'Applied' or 'Other', NEVER 'Review'.
+8. Smart Context (Outbound Updates): If an OUTBOUND email shares CVs, portfolio links, or application updates casually with an individual (e.g. a job coach, friend, gemeente, or caseworker), it MUST BE 'Personal'. Do NOT categorize as 'Applied' or 'Review' unless the email is an explicit application directly TO a company/HR.
+9. Role Reversal Prevention: Always remember the 'Direction' of the email. If the Direction is OUTBOUND, the sender is YOU (the user) and the recipient is someone else. Do NOT confuse the pronouns 'I' and 'you' in the email body when writing your summary. For example, if you send an outbound email saying 'I have a phone screen', your summary should be 'You shared your schedule', NOT 'Inviting you to a phone screen'.
+10. "Under Review" Trap: If an email simply states "your application is under review" or "we will get back to you", it MUST be categorized as 'Applied', NOT 'Review'. 'Review' is strictly for actionable next steps like interviews.
+11. Surveys/Feedback Trap: Automated candidate experience surveys or feedback requests MUST be 'Applied' or 'Other', NEVER 'Review'.
 
 Return ONLY JSON format:
 {{"reasoning": "Step-by-step analysis of the email intent and final conclusion.", "category": "CategoryName", "company_name": "CompanyName or null", "job_title": "Job title if mentioned else null", "summary": "One extremely short, direct sentence (max 10 words)"}}
@@ -560,6 +543,13 @@ Examples of Reasoning:
             
             with self._connect_db() as conn:
                 self.repair_existing_emails(conn)
+                
+                # Fetch custom routing rules
+                try:
+                    routing_rules = conn.execute("SELECT sender_pattern, category FROM email_routing_rules").fetchall()
+                except Exception:
+                    routing_rules = []
+                    
                 for eid in email_ids:
                     loop_index += 1
                     if progress_callback:
@@ -632,12 +622,33 @@ Examples of Reasoning:
                             
                             body = self._truncate_text(self._get_body(msg))
                             
-                            _safe_log(f"Analyzing email: {subject[:50]}...")
-                            analysis = self._analyze_email_with_llm(
-                                subject, sender, recipient, cc, body, 
-                                is_outbound, is_forwarded, is_reply, is_automated, 
-                                has_attachments, has_calendar_invite, thread_context
-                            )
+                            # Pre-flight Custom Routing Rule Check
+                            forced_category = None
+                            for pattern, cat in routing_rules:
+                                if pattern.startswith("*@"):
+                                    domain = pattern[2:].lower()
+                                    if sender.lower().endswith(f"@{domain}") or f"@{domain}>" in sender.lower():
+                                        forced_category = cat
+                                        break
+                                elif pattern.lower() in sender.lower():
+                                    forced_category = cat
+                                    break
+                            
+                            if forced_category:
+                                _safe_log(f"Routing rule matched for '{sender[:30]}...', assigning to {forced_category}")
+                                analysis = {
+                                    "category": forced_category,
+                                    "summary": subject, # Default summary for forced rules
+                                    "company_name": None,
+                                    "_from_llm": False
+                                }
+                            else:
+                                _safe_log(f"Analyzing email: {subject[:50]}...")
+                                analysis = self._analyze_email_with_llm(
+                                    subject, sender, recipient, cc, body, 
+                                    is_outbound, is_forwarded, is_reply, is_automated, 
+                                    has_attachments, has_calendar_invite, thread_context
+                                )
                             
                             analysis = _refine_email_analysis(subject, sender, recipient, body, is_outbound, analysis, from_llm=analysis.get("_from_llm", False))
                             category = analysis.get("category", "Other")

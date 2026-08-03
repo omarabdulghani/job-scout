@@ -1193,6 +1193,18 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(GMAIL_SYNC_STATUS)
             return
 
+        if self._path_without_query() == "/api/gmail/rules":
+            if not self.operational_store:
+                self._send_json({"error": "DB unavailable"}, status=503)
+                return
+            try:
+                with self.operational_store._connect() as conn:
+                    rules = conn.execute("SELECT id, sender_pattern, category, created_at FROM email_routing_rules ORDER BY id DESC").fetchall()
+                    self._send_json({"ok": True, "rules": [{"id": r[0], "sender_pattern": r[1], "category": r[2], "created_at": r[3]} for r in rules]})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, status=500)
+            return
+
         super().do_GET()
 
     def do_POST(self) -> None:
@@ -1202,6 +1214,38 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             return
         if not self._local_origin_allowed():
             self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
+            return
+
+        print(f"DEBUG do_POST path: {self.path}, without query: {self._path_without_query()}")
+
+        if self._path_without_query() == "/api/gmail/rules":
+            if not self.operational_store:
+                self._send_json({"error": "DB unavailable"}, status=503)
+                return
+            
+            payload = self._read_json_body()
+            if not payload:
+                return
+
+            pattern = payload.get("sender_pattern", "").strip()
+            category = payload.get("category", "").strip()
+            
+            if not pattern or not category:
+                self._send_json({"ok": False, "error": "sender_pattern and category are required"}, status=400)
+                return
+                
+            try:
+                with self.operational_store._connect() as conn:
+                    created_at = datetime.utcnow().isoformat() + "Z"
+                    cursor = conn.execute(
+                        "INSERT OR REPLACE INTO email_routing_rules (sender_pattern, category, created_at) VALUES (?, ?, ?)",
+                        (pattern, category, created_at)
+                    )
+                    conn.commit()
+                    rule_id = cursor.lastrowid
+                    self._send_json({"ok": True, "rule": {"id": rule_id, "sender_pattern": pattern, "category": category, "created_at": created_at}})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, status=500)
             return
 
         if self._path_without_query() == "/api/clean-expired":
@@ -1806,10 +1850,34 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         except Exception as exc:
             self._send_json({"ok": False, "error": str(exc)}, status=500)
 
+    def do_DELETE(self) -> None:
+        if not self._authenticate():
+            return
+        if not self._local_origin_allowed():
+            self._send_json({"ok": False, "error": "Request origin is not allowed"}, status=403)
+            return
+
+        if self._path_without_query().startswith("/api/gmail/rules/"):
+            if not self.operational_store:
+                self._send_json({"error": "DB unavailable"}, status=503)
+                return
+                
+            rule_id = self._path_without_query().split("/")[-1]
+            try:
+                with self.operational_store._connect() as conn:
+                    conn.execute("DELETE FROM email_routing_rules WHERE id = ?", (rule_id,))
+                    conn.commit()
+                    self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, status=500)
+            return
+
+        self._send_json({"error": "Not Found"}, status=404)
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
