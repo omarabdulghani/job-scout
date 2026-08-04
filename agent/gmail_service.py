@@ -31,8 +31,6 @@ def _clean_header(header_val: str) -> str:
     except Exception:
         return str(header_val).strip()
 
-
-
 def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str, is_outbound: bool, analysis: dict, from_llm: bool = True) -> dict:
     category = analysis.get("category", "Other")
     company = analysis.get("company_name")
@@ -85,7 +83,7 @@ def _refine_email_analysis(subject: str, sender: str, recipient: str, body: str,
         company = "Hunkemöller"
 
     # 3. Extract company from regex if still missing
-    if not company and category in ["Applied", "Review", "Interview", "Rejected"]:
+    if not company:
         for scan_text in [subject, body[:600]]:
             m_comp = re.search(r'\b(?:for|at|to|bij|with|voor|functie van [^.\n]+? bij|position of [^.\n]+? with|position of [^.\n]+? at|application to |application at |sollicitatie bij |sollicitatie naar de functie van [^.\n]+? bij )\s*([A-Z][A-Za-z0-9\s&\'\.-]{1,25}?)(?:\s*\.|,|\s+wij|\s+we|\s+en|\s+in|\s+om|\s+wat|\s+-|\s+\(|$|\n|®|™)', scan_text)
             if m_comp:
@@ -159,6 +157,25 @@ class GmailService:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_email_corrections_date ON email_ai_corrections(corrected_at DESC)")
+        # Fix 5: SQLite Pagination Index
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_emails_pagination ON emails(parsed_timestamp DESC, date DESC)")
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_ai_cache (
+                template_hash TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_routing_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_pattern TEXT UNIQUE NOT NULL,
+                category TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         try:
             conn.execute("ALTER TABLE emails ADD COLUMN is_archived INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
@@ -207,6 +224,9 @@ class GmailService:
             conn = self._connect_db()
             close_conn = True
         try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version >= 1:
+                return
             rows = conn.execute("SELECT message_id, subject, sender, snippet, payload_json FROM emails").fetchall()
             updated = 0
             for msg_id, subject, sender, snippet, payload_str in rows:
@@ -244,6 +264,7 @@ class GmailService:
             if updated > 0:
                 conn.commit()
                 _safe_log(f"Repaired {updated} email records in database.")
+            conn.execute("PRAGMA user_version = 1")
         except Exception as e:
             _safe_log(f"Error repairing email database: {e}")
         finally:
@@ -252,7 +273,7 @@ class GmailService:
 
     def _clean_html(self, html_content: str) -> str:
         soup = BeautifulSoup(html_content, "html.parser")
-        text = soup.get_text(separator="\n", strip=True)
+        text = soup.get_text(separator="\\n", strip=True)
         return text
 
     def _decode_payload(self, raw_bytes, charset) -> str:
@@ -297,20 +318,20 @@ class GmailService:
     def _truncate_text(self, text: str, max_words: int = 1500) -> str:
         words = text.split()
         if len(words) > max_words:
-            return " ".join(words[:max_words]) + "\n...[TRUNCATED]"
+            return " ".join(words[:max_words]) + "\\n...[TRUNCATED]"
         return text
 
     def _split_reply_body(self, body: str) -> tuple:
         """For reply emails, separate new content from quoted previous messages."""
         patterns = [
-            r'\n\s*On\s+.{10,80}\s+wrote:\s*\n',
-            r'\n\s*Op\s+.{10,80}\s+schreef.{0,40}:\s*\n',
-            r'\n\s*Van:\s+.{5,}',
-            r'\n\s*From:\s+.{5,}',
-            r'\n\s*Sent from\s+',
-            r'\n\s*Verzonden\s+',
-            r'\n-{3,}\s*\n',
-            r'\n_{3,}\s*\n',
+            r'\\n\\s*On\\s+.{10,80}\\s+wrote:\\s*\\n',
+            r'\\n\\s*Op\\s+.{10,80}\\s+schreef.{0,40}:\\s*\\n',
+            r'\\n\\s*Van:\\s+.{5,}',
+            r'\\n\\s*From:\\s+.{5,}',
+            r'\\n\\s*Sent from\\s+',
+            r'\\n\\s*Verzonden\\s+',
+            r'\\n-{3,}\\s*\\n',
+            r'\\n_{3,}\\s*\\n',
         ]
         for pattern in patterns:
             match = re.search(pattern, body, re.IGNORECASE)
@@ -320,6 +341,18 @@ class GmailService:
                 if len(new_content.split()) >= 5:
                     return new_content, quoted
         return body, ""
+
+    def _generate_template_hash(self, body: str) -> str:
+        import hashlib
+        import re
+        # Remove words starting with a capital letter (Names, Companies, Roles)
+        text = re.sub(r'\\b[A-Z][a-zA-Z]*\\b', '', body)
+        # Remove all numbers
+        text = re.sub(r'\\d+', '', text)
+        # Remove all non-alphabetic characters and lowercase
+        text = re.sub(r'[^a-z]', '', text.lower())
+        # Hash the first 1000 characters of the structure
+        return hashlib.md5(text[:1000].encode('utf-8')).hexdigest()
 
     def _analyze_email_with_llm(
         self, subject: str, sender: str, recipient: str, cc: str, body: str, 
@@ -333,7 +366,7 @@ class GmailService:
             if quoted_part:
                 new_snippet = " ".join(new_part.split()[:250])
                 quoted_snippet = " ".join(quoted_part.split()[:50])
-                body_snippet = f"[LATEST REPLY - CATEGORIZE BASED ON THIS]:\n{new_snippet}\n\n[QUOTED PREVIOUS EMAIL - FOR CONTEXT ONLY]:\n{quoted_snippet}"
+                body_snippet = f"[LATEST REPLY - CATEGORIZE BASED ON THIS]:\\n{new_snippet}\\n\\n[QUOTED PREVIOUS EMAIL - FOR CONTEXT ONLY]:\\n{quoted_snippet}"
             else:
                 body_snippet = " ".join(body.split()[:300])
         else:
@@ -344,11 +377,11 @@ class GmailService:
         recent_corrections = self.get_recent_email_corrections(limit=3)
         few_shot_examples = ""
         if recent_corrections:
-            few_shot_examples = "\n[USER AI CORRECTIONS MEMORY BANK - HIGHEST PRIORITY EXAMPLES]\n"
-            few_shot_examples += "You previously miscategorized the following emails, and the human corrected them. YOU MUST NOT MAKE THE SAME MISTAKES. Use these as perfect rules for categorization:\n"
+            few_shot_examples = "\\n[USER AI CORRECTIONS MEMORY BANK - HIGHEST PRIORITY EXAMPLES]\\n"
+            few_shot_examples += "You previously miscategorized the following emails, and the human corrected them. YOU MUST NOT MAKE THE SAME MISTAKES. Use these as perfect rules for categorization:\\n"
             for c in recent_corrections:
-                few_shot_examples += f"- Subject: '{c['subject']}' | Snippet: '{c['snippet'][:100]}' -> MUST BE CATEGORIZED AS '{c['corrected_category']}'\n"
-            few_shot_examples += "\n"
+                few_shot_examples += f"- Subject: '{c['subject']}' | Snippet: '{c['snippet'][:100]}' -> MUST BE CATEGORIZED AS '{c['corrected_category']}'\\n"
+            few_shot_examples += "\\n"
         
         prompt = f"""Categorize this email. Translate internally and process emails in ANY language (Dutch, Spanish, etc.), but you MUST output the JSON summary and categories in ENGLISH.
 Sender: {sender}
@@ -464,9 +497,9 @@ Examples of Reasoning:
                 try:
                     parsed = json.loads(content)
                 except json.JSONDecodeError:
-                    full_text = str(msg.get("reasoning_content") or "") + "\n" + content if not is_gemini else content
+                    full_text = str(msg.get("reasoning_content") or "") + "\\n" + content if not is_gemini else content
                     full_text = re.sub(r'<think>.*?</think>', '', full_text, flags=re.DOTALL)
-                    blocks = re.findall(r'\{[^{}]*\}', full_text, re.DOTALL)
+                    blocks = re.findall(r'\\{[^{}]*\\}', full_text, re.DOTALL)
                     for block in reversed(blocks):
                         try:
                             temp = json.loads(block)
@@ -499,6 +532,35 @@ Examples of Reasoning:
         _safe_log(f"[red]All LLMs failed or unreachable for '{subject[:30]}...'. Reasons: {reasons_str}[/red]")
         raise RuntimeError(f"AI Sync stopped while analyzing '{subject[:30]}...'. Reason: {reasons_str}")
 
+    def _get_special_folder(self, mail, purpose="all_mail"):
+        if not hasattr(self, '_folder_cache'):
+            self._folder_cache = {}
+        if purpose in self._folder_cache:
+            return self._folder_cache[purpose]
+            
+        typ, folders = mail.list()
+        target_folder = "[Gmail]/Trash" if purpose == "trash" else '"[Gmail]/All Mail"'
+        if typ == 'OK' and folders:
+            for f in folders:
+                f_str = f.decode('utf-8', errors='ignore') if isinstance(f, bytes) else str(f)
+                if purpose == "trash" and any(x in f_str for x in ['\\Trash', '\\Bin', '/Trash', '/Bin', '/Prullenbak']):
+                    parts = f_str.split('"')
+                    if len(parts) >= 3:
+                        target_folder = f'"{parts[-2]}"'
+                        break
+                    elif len(f_str.split()) >= 3:
+                        target_folder = f'"{f_str.split()[-1]}"'
+                        break
+                elif purpose == "all_mail" and any(x in f_str.lower() for x in ['\\all', '/all mail', '/alle berichten', '/todos los', '/toutes']):
+                    match = re.search(r'\"/\"\s+(.+)$', f_str)
+                    if match:
+                        target_folder = match.group(1).strip()
+                        if not target_folder.startswith('"'):
+                            target_folder = f'"{target_folder}"'
+                        break
+        self._folder_cache[purpose] = target_folder
+        return target_folder
+
     def sync_emails(self, days_back: int = 7, max_emails: int = None, cancel_check=None, progress_callback=None) -> dict:
         if not self.email_address or not self.app_password:
             return {"error": "Gmail credentials not configured in .env."}
@@ -506,27 +568,15 @@ Examples of Reasoning:
         try:
             mail = imaplib.IMAP4_SSL("imap.gmail.com")
             mail.login(self.email_address, self.app_password)
-            status, mailboxes = mail.list()
-            all_mail_folder = None
-            if status == "OK":
-                for mailbox in mailboxes:
-                    mb_str = mailbox.decode('utf-8', errors='ignore')
-                    if '\\All' in mb_str:
-                        match = re.search(r'\"/\"\s+(.+)$', mb_str)
-                        if match:
-                            all_mail_folder = match.group(1).strip()
-                        break
-            
-            if all_mail_folder:
-                status, _ = mail.select(all_mail_folder)
-                if status != "OK":
-                    mail.select("inbox")
-            else:
+            all_mail_folder = self._get_special_folder(mail, "all_mail")
+            status, _ = mail.select(all_mail_folder)
+            if status != "OK":
                 status, _ = mail.select('"[Gmail]/All Mail"')
                 if status != "OK":
                     mail.select("inbox")
             
-            date_since = (datetime.now() - timedelta(days=days_back)).strftime("%d-%b-%Y")
+            # Fix 2: date_since buffer
+            date_since = (datetime.now() - timedelta(days=days_back + 1)).strftime("%d-%b-%Y")
             status, messages = mail.search(None, f'(SINCE "{date_since}")')
             
             if status != "OK":
@@ -544,7 +594,6 @@ Examples of Reasoning:
             with self._connect_db() as conn:
                 self.repair_existing_emails(conn)
                 
-                # Fetch custom routing rules
                 try:
                     routing_rules = conn.execute("SELECT sender_pattern, category FROM email_routing_rules").fetchall()
                 except Exception:
@@ -552,193 +601,226 @@ Examples of Reasoning:
                     
                 for eid in email_ids:
                     loop_index += 1
+                    if loop_index % 50 == 0:
+                        import time
+                        time.sleep(1.0)
                     if progress_callback:
                         progress_callback(loop_index, total_emails, new_emails)
                     if cancel_check and cancel_check():
                         _safe_log("[yellow]Sync cancelled by user![/yellow]")
                         break
-                        
-                    status, msg_data = mail.fetch(eid, "(X-GM-LABELS X-GM-THRID X-GM-MSGID RFC822)")
-                    if status != "OK":
-                        continue
-                        
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            resp_text = response_part[0].decode('utf-8', errors='ignore')
+                    
+                    try:
+                        status, msg_data = mail.fetch(eid, "(FLAGS X-GM-LABELS X-GM-THRID X-GM-MSGID RFC822)")
+                        if status != "OK":
+                            continue
                             
-                            msg_id_match = re.search(r'X-GM-MSGID\s+(\d+)', resp_text)
-                            gmail_hex_id = hex(int(msg_id_match.group(1)))[2:] if msg_id_match else None
-                            
-                            thrid_match = re.search(r'X-GM-THRID\s+(\d+)', resp_text)
-                            gmail_thread_id = hex(int(thrid_match.group(1)))[2:] if thrid_match else None
-                            
-                            labels_match = re.search(r'X-GM-LABELS\s+\((.*?)\)', resp_text)
-                            gmail_labels = labels_match.group(1).lower() if labels_match else ""
-
-                            msg = email.message_from_bytes(response_part[1])
-                            
-                            message_id = msg.get("Message-ID", "")
-                            if not message_id:
-                                continue
-                            
-                            exists = conn.execute("SELECT 1 FROM emails WHERE message_id = ?", (message_id,)).fetchone()
-                            if exists:
-                                continue
+                        for response_part in msg_data:
+                            if isinstance(response_part, tuple):
+                                resp_text = response_part[0].decode('utf-8', errors='ignore')
+                                is_seen = 1 if r"\\seen" in resp_text.lower() else 0
                                 
-                            subject = _clean_header(msg.get("Subject", ""))
-                            sender = _clean_header(msg.get("From", ""))
-                            recipient = _clean_header(msg.get("To", ""))
-                            cc = _clean_header(msg.get("Cc", ""))
-                            date = _clean_header(msg.get("Date", ""))
-                            
-                            is_outbound = bool('\\sent' in gmail_labels or (self.email_address and self.email_address.lower() in sender.lower()))
-                            is_forwarded = bool(subject.lower().startswith('fwd:') or subject.lower().startswith('fw:'))
-                            is_reply = bool(subject.lower().startswith('re:'))
-                            is_automated = bool(re.search(r'(no-reply|noreply|mailer-daemon|donotreply)', sender.lower()))
-                            
-                            has_attachments = False
-                            has_calendar_invite = False
-                            
-                            for part in msg.walk():
-                                ctype = part.get_content_type()
-                                cdisp = str(part.get("Content-Disposition"))
-                                if ctype in ['text/calendar', 'application/ics']:
-                                    has_calendar_invite = True
-                                if ('attachment' in cdisp or 'inline' in cdisp) and part.get_filename():
-                                    has_attachments = True
-                            
-                            thread_context = ""
-                            if gmail_thread_id:
-                                try:
-                                    prev_emails = conn.execute("""
-                                        SELECT category, subject, snippet FROM emails 
-                                        WHERE json_extract(payload_json, '$.gmail_thread_id') = ?
-                                        ORDER BY parsed_timestamp ASC LIMIT 5
-                                    """, (gmail_thread_id,)).fetchall()
-                                    if prev_emails:
-                                        thread_context = " | ".join([f"[{s[0].upper()}] {s[1][:30]} - {s[2][:100]}" for s in prev_emails])
-                                except Exception:
-                                    pass
-                            
-                            body = self._truncate_text(self._get_body(msg))
-                            
-                            # Pre-flight Custom Routing Rule Check
-                            forced_category = None
-                            for pattern, cat in routing_rules:
-                                if pattern.startswith("*@"):
-                                    domain = pattern[2:].lower()
-                                    if sender.lower().endswith(f"@{domain}") or f"@{domain}>" in sender.lower():
+                                msg_id_match = re.search(r'X-GM-MSGID\s+(\d+)', resp_text)
+                                gmail_hex_id = hex(int(msg_id_match.group(1)))[2:] if msg_id_match else None
+                                
+                                thrid_match = re.search(r'X-GM-THRID\s+(\d+)', resp_text)
+                                gmail_thread_id = hex(int(thrid_match.group(1)))[2:] if thrid_match else None
+                                
+                                labels_match = re.search(r'X-GM-LABELS\s+\((.*?)\)', resp_text)
+                                gmail_labels = labels_match.group(1).lower() if labels_match else ""
+
+                                msg = email.message_from_bytes(response_part[1])
+                                
+                                message_id = msg.get("Message-ID", "")
+                                if not message_id:
+                                    continue
+                                
+                                exists = conn.execute("SELECT 1 FROM emails WHERE message_id = ?", (message_id,)).fetchone()
+                                if exists:
+                                    continue
+                                    
+                                subject = _clean_header(msg.get("Subject", ""))
+                                sender = _clean_header(msg.get("From", ""))
+                                recipient = _clean_header(msg.get("To", ""))
+                                cc = _clean_header(msg.get("Cc", ""))
+                                date = _clean_header(msg.get("Date", ""))
+                                
+                                is_outbound = bool('\\sent' in gmail_labels or (self.email_address and self.email_address.lower() in sender.lower()))
+                                is_forwarded = bool(subject.lower().startswith('fwd:') or subject.lower().startswith('fw:'))
+                                is_reply = bool(subject.lower().startswith('re:'))
+                                is_automated = bool(re.search(r'(no-reply|noreply|mailer-daemon|donotreply)', sender.lower()))
+                                
+                                has_attachments = False
+                                has_calendar_invite = False
+                                
+                                for part in msg.walk():
+                                    ctype = part.get_content_type()
+                                    cdisp = str(part.get("Content-Disposition"))
+                                    if ctype in ['text/calendar', 'application/ics']:
+                                        has_calendar_invite = True
+                                    if ('attachment' in cdisp or 'inline' in cdisp) and part.get_filename():
+                                        has_attachments = True
+                                
+                                thread_context = ""
+                                if gmail_thread_id:
+                                    try:
+                                        prev_emails = conn.execute("""
+                                            SELECT category, subject, snippet FROM emails 
+                                            WHERE json_extract(payload_json, '$.gmail_thread_id') = ?
+                                            ORDER BY parsed_timestamp ASC LIMIT 5
+                                        """, (gmail_thread_id,)).fetchall()
+                                        if prev_emails:
+                                            thread_context = " | ".join([f"[{s[0].upper()}] {s[1][:30]} - {s[2][:100]}" for s in prev_emails])
+                                    except Exception:
+                                        pass
+                                
+                                body = self._truncate_text(self._get_body(msg))
+                                
+                                forced_category = None
+                                for pattern, cat in routing_rules:
+                                    if pattern.startswith("*@"):
+                                        domain = pattern[2:].lower()
+                                        if sender.lower().endswith(f"@{domain}") or f"@{domain}>" in sender.lower():
+                                            forced_category = cat
+                                            break
+                                    elif pattern.lower() in sender.lower():
                                         forced_category = cat
                                         break
-                                elif pattern.lower() in sender.lower():
-                                    forced_category = cat
-                                    break
-                            
-                            if forced_category:
-                                _safe_log(f"Routing rule matched for '{sender[:30]}...', assigning to {forced_category}")
-                                analysis = {
-                                    "category": forced_category,
-                                    "summary": subject, # Default summary for forced rules
-                                    "company_name": None,
-                                    "_from_llm": False
-                                }
-                            else:
-                                _safe_log(f"Analyzing email: {subject[:50]}...")
-                                analysis = self._analyze_email_with_llm(
-                                    subject, sender, recipient, cc, body, 
-                                    is_outbound, is_forwarded, is_reply, is_automated, 
-                                    has_attachments, has_calendar_invite, thread_context
-                                )
-                            
-                            analysis = _refine_email_analysis(subject, sender, recipient, body, is_outbound, analysis, from_llm=analysis.get("_from_llm", False))
-                            category = analysis.get("category", "Other")
-                            company = analysis.get("company_name")
-                            summary = analysis.get("summary", subject)
-                            
-                            linked_job_key = None
-                            linked_job_title = None
-                            
-                            def _norm(t): return re.sub(r'[^a-z0-9]', '', str(t).lower()) if t else ""
-                            
-                            domain_match = re.search(r'@([\w.-]+)', sender)
-                            sender_domain = domain_match.group(1).split('.')[0] if domain_match else ""
-                            
-                            ignore_domains = {"gmail", "yahoo", "hotmail", "outlook", "icloud", "aol", "live", "msn"}
-                            
-                            if category in ["Applied", "Review", "Interview", "Rejected"]:
-                                norm_sender_domain = _norm(sender_domain)
-                                norm_llm_company = _norm(company)
-                                norm_llm_title = _norm(analysis.get("job_title"))
                                 
-                                if norm_sender_domain in ignore_domains:
-                                    norm_sender_domain = ""
-                                
-                                applied_jobs = conn.execute("""
-                                    SELECT j.job_key, j.title, j.company
-                                    FROM jobs j
-                                    JOIN applications a ON j.job_key = a.job_key
-                                    ORDER BY a.applied_at DESC
-                                """).fetchall()
-                                
-                                for j_key, j_title, j_comp in applied_jobs:
-                                    norm_db_comp = _norm(j_comp)
-                                    norm_db_title = _norm(j_title)
+                                if forced_category:
+                                    _safe_log(f"Routing rule matched for '{sender[:30]}...', assigning to {forced_category}")
+                                    analysis = {
+                                        "category": forced_category,
+                                        "summary": subject,
+                                        "company_name": None,
+                                        "_from_llm": False
+                                    }
+                                else:
+                                    template_hash = self._generate_template_hash(body)
+                                    cached = conn.execute("SELECT category, summary FROM email_ai_cache WHERE template_hash = ?", (template_hash,)).fetchone()
                                     
-                                    match = False
-                                    if norm_sender_domain and len(norm_sender_domain) > 2 and (norm_sender_domain in norm_db_comp or norm_db_comp in norm_sender_domain):
-                                        match = True
-                                    elif norm_llm_company and len(norm_llm_company) > 2 and (norm_llm_company in norm_db_comp or norm_db_comp in norm_llm_company):
-                                        match = True
-                                    elif norm_llm_title and len(norm_llm_title) > 4 and (norm_llm_title in norm_db_title or norm_db_title in norm_llm_title):
-                                        match = True
-                                        
-                                    if match:
-                                        linked_job_key, linked_job_title = j_key, j_title
-                                        _safe_log(f"Linked email to job: {linked_job_title}")
-                                        break
-                            
-                            payload = {
-                                "subject": subject,
-                                "sender": sender,
-                                "recipient": recipient,
-                                "cc": cc,
-                                "is_outbound": is_outbound,
-                                "is_forwarded": is_forwarded,
-                                "is_reply": is_reply,
-                                "is_automated": is_automated,
-                                "has_attachments": has_attachments,
-                                "has_calendar_invite": has_calendar_invite,
-                                "date": date,
-                                "body": body[:500],
-                                "analysis": analysis,
-                                "gmail_hex_id": gmail_hex_id,
-                                "gmail_thread_id": gmail_thread_id,
-                                "linked_job_key": linked_job_key,
-                                "linked_job_title": linked_job_title
-                            }
-                            
-                            parsed_ts = None
-                            try:
-                                parsed_tuple = email.utils.parsedate_tz(date)
-                                if parsed_tuple:
-                                    parsed_ts = int(email.utils.mktime_tz(parsed_tuple))
-                            except Exception:
-                                pass
+                                    if cached:
+                                        _safe_log(f"Cache HIT for template_hash: {template_hash[:8]}... bypassing LLM")
+                                        analysis = {
+                                            "category": cached[0],
+                                            "summary": cached[1],
+                                            "company_name": None,
+                                            "_from_llm": False
+                                        }
+                                    else:
+                                        _safe_log(f"Analyzing email: {subject[:50]}...")
+                                        # Fix 1: Try/Except around LLM to prevent sync halt
+                                        try:
+                                            analysis = self._analyze_email_with_llm(
+                                                subject, sender, recipient, cc, body, 
+                                                is_outbound, is_forwarded, is_reply, is_automated, 
+                                                has_attachments, has_calendar_invite, thread_context
+                                            )
+                                        except Exception as e_llm:
+                                            _safe_log(f"[red]LLM Analysis failed for {subject[:30]}: {e_llm}[/red]")
+                                            analysis = {"_from_llm": False}
+                                            
+                                        if analysis.get("_from_llm"):
+                                            try:
+                                                conn.execute(
+                                                    "INSERT OR IGNORE INTO email_ai_cache (template_hash, category, summary) VALUES (?, ?, ?)",
+                                                    (template_hash, analysis.get("category", "Other"), analysis.get("summary", subject))
+                                                )
+                                                conn.commit()
+                                            except Exception as e:
+                                                _safe_log(f"[yellow]Failed to cache LLM result: {e}[/yellow]")
                                 
-                            conn.execute("""
-                                INSERT INTO emails (
-                                    message_id, date, sender, subject, category, company_name, snippet, read_status, payload_json, parsed_timestamp
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                message_id, date, sender, subject, category, company, summary, 
-                                1,
-                                json.dumps(payload),
-                                parsed_ts
-                            ))
-                            conn.commit()
-                            new_emails += 1
-                            processed_count += 1
-
+                                analysis = _refine_email_analysis(subject, sender, recipient, body, is_outbound, analysis, from_llm=analysis.get("_from_llm", False))
+                                category = analysis.get("category", "Other")
+                                company = analysis.get("company_name")
+                                summary = analysis.get("summary", subject)
+                                
+                                linked_job_key = None
+                                linked_job_title = None
+                                
+                                def _norm(t): return re.sub(r'[^a-z0-9]', '', str(t).lower()) if t else ""
+                                
+                                domain_match = re.search(r'@([\w.-]+)', sender)
+                                sender_domain = domain_match.group(1).split('.')[0] if domain_match else ""
+                                
+                                ignore_domains = {"gmail", "yahoo", "hotmail", "outlook", "icloud", "aol", "live", "msn"}
+                                
+                                if category in ["Applied", "Review", "Interview", "Rejected"]:
+                                    norm_sender_domain = _norm(sender_domain)
+                                    norm_llm_company = _norm(company)
+                                    norm_llm_title = _norm(analysis.get("job_title"))
+                                    
+                                    if norm_sender_domain in ignore_domains:
+                                        norm_sender_domain = ""
+                                    
+                                    applied_jobs = conn.execute("""
+                                        SELECT j.job_key, j.title, j.company
+                                        FROM jobs j
+                                        JOIN applications a ON j.job_key = a.job_key
+                                        ORDER BY a.applied_at DESC
+                                    """).fetchall()
+                                    
+                                    for j_key, j_title, j_comp in applied_jobs:
+                                        norm_db_comp = _norm(j_comp)
+                                        norm_db_title = _norm(j_title)
+                                        
+                                        match = False
+                                        if norm_sender_domain and len(norm_sender_domain) > 2 and (norm_sender_domain in norm_db_comp or norm_db_comp in norm_sender_domain):
+                                            match = True
+                                        elif norm_llm_company and len(norm_llm_company) > 2 and (norm_llm_company in norm_db_comp or norm_db_comp in norm_llm_company):
+                                            match = True
+                                        elif norm_llm_title and len(norm_llm_title) > 4 and (norm_llm_title in norm_db_title or norm_db_title in norm_llm_title):
+                                            match = True
+                                            
+                                        if match:
+                                            linked_job_key, linked_job_title = j_key, j_title
+                                            _safe_log(f"Linked email to job: {linked_job_title}")
+                                            break
+                                
+                                payload = {
+                                    "subject": subject,
+                                    "sender": sender,
+                                    "recipient": recipient,
+                                    "cc": cc,
+                                    "is_outbound": is_outbound,
+                                    "is_forwarded": is_forwarded,
+                                    "is_reply": is_reply,
+                                    "is_automated": is_automated,
+                                    "has_attachments": has_attachments,
+                                    "has_calendar_invite": has_calendar_invite,
+                                    "date": date,
+                                    "body": body[:500],
+                                    "analysis": analysis,
+                                    "gmail_hex_id": gmail_hex_id,
+                                    "gmail_thread_id": gmail_thread_id,
+                                    "linked_job_key": linked_job_key,
+                                    "linked_job_title": linked_job_title
+                                }
+                                
+                                parsed_ts = None
+                                try:
+                                    parsed_tuple = email.utils.parsedate_tz(date)
+                                    if parsed_tuple:
+                                        parsed_ts = int(email.utils.mktime_tz(parsed_tuple))
+                                except Exception:
+                                    pass
+                                    
+                                conn.execute("""
+                                    INSERT INTO emails (
+                                        message_id, date, sender, subject, category, company_name, snippet, read_status, payload_json, parsed_timestamp
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                """, (
+                                    message_id, date, sender, subject, category, company, summary, 
+                                    is_seen,
+                                    json.dumps(payload),
+                                    parsed_ts
+                                ))
+                                conn.commit()
+                                new_emails += 1
+                                processed_count += 1
+                    except Exception as loop_err:
+                        _safe_log(f"[red]Error parsing email ID {eid}: {loop_err}[/red]")
+                        continue
                         
             mail.close()
             mail.logout()
@@ -764,23 +846,29 @@ Examples of Reasoning:
                 
             mail = imaplib.IMAP4_SSL("imap.gmail.com")
             mail.login(email_addr, app_password)
-            mail.select("INBOX")
+            all_mail_folder = self._get_special_folder(mail, "all_mail")
+            mail.select(all_mail_folder)
             
-            archived_imap = 0
+            # Fix 7: Bulk IMAP Mutations
+            uids = []
             for msg_id in message_ids:
                 typ, data = mail.uid('SEARCH', None, f'(HEADER "Message-ID" "{msg_id}")')
-                uids = data[0].split() if typ == 'OK' and data and data[0] else []
-                if not uids:
+                uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not uid_list:
                     typ, data = mail.uid('SEARCH', None, f'X-GM-RAW "rfc822msgid:{msg_id}"')
-                    uids = data[0].split() if typ == 'OK' and data and data[0] else []
-                for uid in uids:
-                    mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
-                    archived_imap += 1
+                    uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                uids.extend([u.decode('utf-8') if isinstance(u, bytes) else str(u) for u in uid_list])
+            
+            if uids:
+                uid_str = ",".join(uids)
+                mail.uid('STORE', uid_str, '+FLAGS', '\\Deleted')
+            
             mail.expunge()
             mail.close()
             mail.logout()
         except Exception as e:
-            _safe_log(f"[yellow]IMAP archive warning: {e}[/yellow]")
+            _safe_log(f"[yellow]IMAP archive error: {e}[/yellow]")
+            return {"error": f"IMAP archive failed: {e}", "ok": False}
             
         try:
             with self._connect_db() as conn:
@@ -791,6 +879,56 @@ Examples of Reasoning:
             return {"error": f"Database update failed: {e}", "ok": False}
             
         return {"ok": True, "count": len(message_ids), "message": f"Archived {len(message_ids)} email(s) in Gmail and dashboard."}
+
+    def set_read_status(self, message_ids: list, is_read: bool) -> dict:
+        if not message_ids:
+            return {"ok": True, "count": 0, "message": "No emails selected."}
+        
+        email_addr = self.email_address
+        app_password = self.app_password
+        if not email_addr or not app_password:
+            return {"error": "No Gmail credentials configured.", "ok": False}
+        
+        # 1. Update SQLite locally instantly
+        try:
+            with self._connect_db() as conn:
+                placeholders = ",".join("?" * len(message_ids))
+                val = 1 if is_read else 0
+                conn.execute(f"UPDATE emails SET read_status = ? WHERE message_id IN ({placeholders})", [val] + message_ids)
+                conn.commit()
+        except Exception as e:
+            return {"error": f"Database update failed: {e}", "ok": False}
+            
+        # 2. Sync to IMAP
+        try:
+            import imaplib
+            mail = imaplib.IMAP4_SSL("imap.gmail.com")
+            mail.login(email_addr, app_password)
+            all_mail_folder = self._get_special_folder(mail, "all_mail")
+            mail.select(all_mail_folder)
+            
+            flag_op = '+FLAGS' if is_read else '-FLAGS'
+            uids = []
+            for msg_id in message_ids:
+                typ, data = mail.uid('SEARCH', None, f'(HEADER "Message-ID" "{msg_id}")')
+                uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not uid_list:
+                    typ, data = mail.uid('SEARCH', None, f'X-GM-RAW "rfc822msgid:{msg_id}"')
+                    uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                uids.extend([u.decode('utf-8') if isinstance(u, bytes) else str(u) for u in uid_list])
+            
+            if uids:
+                uid_str = ",".join(uids)
+                mail.uid('STORE', uid_str, flag_op, '\\Seen')
+            
+            mail.close()
+            mail.logout()
+        except Exception as e:
+            _safe_log(f"[yellow]IMAP read status sync error: {e}[/yellow]")
+            return {"error": f"IMAP read sync failed: {e}", "ok": False}
+            
+        action = "read" if is_read else "unread"
+        return {"ok": True, "count": len(message_ids), "message": f"Marked {len(message_ids)} email(s) as {action}."}
 
     def delete_emails(self, message_ids: list) -> dict:
         if not message_ids:
@@ -804,38 +942,30 @@ Examples of Reasoning:
                 
             mail = imaplib.IMAP4_SSL("imap.gmail.com")
             mail.login(email_addr, app_password)
+            trash_folder = self._get_special_folder(mail, "trash")
+            all_mail_folder = self._get_special_folder(mail, "all_mail")
+            mail.select(all_mail_folder)
             
-            trash_folder = "[Gmail]/Trash"
-            typ, folders = mail.list()
-            if typ == 'OK' and folders:
-                for f in folders:
-                    f_str = f.decode('utf-8', errors='ignore') if isinstance(f, bytes) else str(f)
-                    if '\\Trash' in f_str or '\\Bin' in f_str or '/Trash' in f_str or '/Bin' in f_str or '/Prullenbak' in f_str:
-                        parts = f_str.split('"')
-                        if len(parts) >= 3:
-                            trash_folder = parts[-2]
-                            break
-                        elif len(f_str.split()) >= 3:
-                            trash_folder = f_str.split()[-1]
-                            break
-                            
-            mail.select("INBOX")
-            deleted_imap = 0
+            uids = []
             for msg_id in message_ids:
                 typ, data = mail.uid('SEARCH', None, f'(HEADER "Message-ID" "{msg_id}")')
-                uids = data[0].split() if typ == 'OK' and data and data[0] else []
-                if not uids:
+                uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                if not uid_list:
                     typ, data = mail.uid('SEARCH', None, f'X-GM-RAW "rfc822msgid:{msg_id}"')
-                    uids = data[0].split() if typ == 'OK' and data and data[0] else []
-                for uid in uids:
-                    mail.uid('COPY', uid, trash_folder)
-                    mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
-                    deleted_imap += 1
+                    uid_list = data[0].split() if typ == 'OK' and data and data[0] else []
+                uids.extend([u.decode('utf-8') if isinstance(u, bytes) else str(u) for u in uid_list])
+            
+            if uids:
+                uid_str = ",".join(uids)
+                mail.uid('COPY', uid_str, trash_folder)
+                mail.uid('STORE', uid_str, '+FLAGS', '\\Deleted')
+            
             mail.expunge()
             mail.close()
             mail.logout()
         except Exception as e:
-            _safe_log(f"[yellow]IMAP delete warning: {e}[/yellow]")
+            _safe_log(f"[yellow]IMAP delete error: {e}[/yellow]")
+            return {"error": f"IMAP delete failed: {e}", "ok": False}
             
         try:
             with self._connect_db() as conn:
@@ -850,4 +980,3 @@ Examples of Reasoning:
 if __name__ == "__main__":
     service = GmailService()
     print(service.sync_emails(days_back=1))
-

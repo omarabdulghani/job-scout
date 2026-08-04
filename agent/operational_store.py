@@ -583,10 +583,13 @@ class OperationalStore:
                     snippet TEXT,
                     read_status INTEGER,
                     is_archived INTEGER DEFAULT 0,
+                    parsed_timestamp INTEGER,
                     payload_json TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_emails_date
                     ON emails(date DESC);
+                CREATE INDEX IF NOT EXISTS idx_emails_pagination
+                    ON emails(parsed_timestamp DESC, date DESC);
                     
                 CREATE TABLE IF NOT EXISTS email_ai_corrections (
                     message_id TEXT PRIMARY KEY,
@@ -605,6 +608,33 @@ class OperationalStore:
                     category TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                
+                CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
+                    message_id UNINDEXED, 
+                    subject, 
+                    sender, 
+                    company_name, 
+                    snippet, 
+                    content=emails, 
+                    content_rowid=rowid
+                );
+                
+                CREATE TRIGGER IF NOT EXISTS emails_ai AFTER INSERT ON emails BEGIN
+                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
+                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet);
+                END;
+                
+                CREATE TRIGGER IF NOT EXISTS emails_ad AFTER DELETE ON emails BEGIN
+                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet) 
+                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet);
+                END;
+                
+                CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
+                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet) 
+                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet);
+                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
+                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet);
+                END;
                 """
             )
             self._ensure_column(connection, "jobs", "domain_category", "TEXT")
@@ -620,6 +650,16 @@ class OperationalStore:
             self._ensure_column(connection, "jobs", "flexible_hours", "INTEGER")
             self._ensure_column(connection, "jobs", "sponsorship_status", "TEXT")
             self._ensure_column(connection, "emails", "parsed_timestamp", "INTEGER")
+            try:
+                # Populate FTS if empty but emails exist
+                fts_count = connection.execute("SELECT COUNT(*) FROM emails_fts").fetchone()[0]
+                if fts_count == 0:
+                    connection.execute("""
+                        INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
+                        SELECT rowid, message_id, subject, sender, company_name, snippet FROM emails
+                    """)
+            except Exception:
+                pass
             self._ensure_column(connection, "emails", "is_archived", "INTEGER DEFAULT 0")
             connection.executescript(
                 """

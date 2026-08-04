@@ -1784,7 +1784,7 @@
     </header>
 
     <div class="job-list-container" style="padding: var(--space-4);">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; gap: var(--space-3);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); flex-wrap: wrap; gap: var(--space-3); row-gap: 16px;">
         <nav class="career-lane-tabs inbox-categories" aria-label="Email categories" style="margin-bottom: 0;">
           <button class="career-lane-tab active" type="button" data-category="All"><svg class="icon"><use href="#icon-list"></use></svg><span>All</span></button>
           <button class="career-lane-tab" type="button" data-category="Review"><span style="color: var(--green); display: flex;"><svg class="icon"><use href="#icon-clock"></use></svg></span><span>Review</span></button>
@@ -1799,13 +1799,18 @@
             <input type="checkbox" id="global-email-select-all" onclick="event.stopPropagation(); toggleSelectAllEmails(this)" title="Select all emails in this tab" style="width: 16px; height: 16px; cursor: pointer; accent-color: var(--status-good); margin: 0;">
             <label for="global-email-select-all" style="font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; user-select: none;">Select All</label>
           </div>
-          <div class="field" style="margin: 0; min-width: 250px;">
-            <input type="text" id="emailSearchInput" class="form-input" placeholder="Search company, sender, or snippet..." aria-label="Search emails">
+          <div class="field" style="margin: 0; min-width: 350px; display: flex;">
+            <select id="emailDirectionSelect" class="form-input" style="border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; min-width: 160px; width: auto; background: rgba(255,255,255,0.03); color: var(--text-primary);" aria-label="Filter by direction">
+              <option value="all" style="background-color: var(--bg); color: var(--text-primary);">All directions</option>
+              <option value="sent" style="background-color: var(--bg); color: var(--text-primary);">Sent only</option>
+              <option value="received" style="background-color: var(--bg); color: var(--text-primary);">Received only</option>
+            </select>
+            <input type="text" id="emailSearchInput" class="form-input" placeholder="Search company, sender, or snippet..." aria-label="Search emails" style="border-top-left-radius: 0; border-bottom-left-radius: 0; flex-grow: 1;">
           </div>
           <div class="field" style="margin: 0; min-width: 150px;">
-            <select id="emailSortSelect" aria-label="Sort emails">
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
+            <select id="emailSortSelect" class="form-input" style="background: rgba(255,255,255,0.03); color: var(--text-primary);" aria-label="Sort emails">
+              <option value="newest" style="background-color: var(--bg); color: var(--text-primary);">Newest first</option>
+              <option value="oldest" style="background-color: var(--bg); color: var(--text-primary);">Oldest first</option>
             </select>
           </div>
         </div>
@@ -1826,8 +1831,10 @@
           <span id="bulk-selected-count" style="font-weight: 600; font-size: 14px; color: var(--text-primary);">0 selected</span>
         </div>
         <div style="display: flex; gap: 10px;">
-          <button class="button secondary" onclick="bulkArchiveEmails()" title="Archive selected in Gmail & Dashboard" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-primary); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive Selected</button>
-          <button class="button secondary" onclick="bulkDeleteEmails()" title="Move selected to Trash in Gmail" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); color: #f87171; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">🗑️ Delete Selected</button>
+          <button class="button secondary" onclick="bulkMarkAsRead()" title="Mark selected as Read" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-primary); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">👁️ Read</button>
+          <button class="button secondary" onclick="bulkMarkAsUnread()" title="Mark selected as Unread" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-primary); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">👁️‍🗨️ Unread</button>
+          <button class="button secondary" onclick="bulkArchiveEmails()" title="Archive selected in Gmail & Dashboard" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--text-primary); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive</button>
+          <button class="button secondary" onclick="bulkDeleteEmails()" title="Move selected to Trash in Gmail" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); color: #f87171; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">🗑️ Delete</button>
         </div>
       </div>
       <div id="inboxList" class="inbox-list">

@@ -6715,8 +6715,19 @@ const DEFAULT_THEME = initialTheme();
               })
             });
             if (res.ok) {
+              const data = await res.json();
               patternInput.value = "";
               window.loadRoutingRules();
+              if (data.affected_count !== undefined && data.affected_count > 0) {
+                if (typeof showToast === "function") {
+                  showToast(`Rule added! ${data.affected_count} old emails were retroactively updated.`, "success");
+                }
+                if (typeof loadEmails === "function") {
+                  loadEmails();
+                }
+              } else {
+                if (typeof showToast === "function") showToast("Rule added successfully.", "success");
+              }
             } else {
               const data = await res.json();
               alert(data.error || "Failed to add rule");
@@ -6876,7 +6887,11 @@ const DEFAULT_THEME = initialTheme();
           clearGmailBtn.disabled = true;
           clearGmailBtn.innerHTML = `<svg class="icon spin"><use href="#icon-refresh"></use></svg> Cleaning...`;
           try {
-            const res = await fetch("/api/gmail/clear", { method: "POST" });
+            const res = await fetch("/api/gmail/clear", { 
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ confirm: true })
+            });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             showToast("Emails cleared successfully.");
@@ -6898,52 +6913,6 @@ const DEFAULT_THEME = initialTheme();
       return senderStr.trim();
     };
 
-    const normalizeBrandName = (name) => {
-        if (!name || typeof name !== 'string') return "";
-        let clean = name.trim();
-        if (!clean || clean.toLowerCase() === 'null' || clean.toLowerCase() === 'none') return "";
-        
-        const map = {
-            "rechtspraak": "De Rechtspraak",
-            "de rechtspraak": "De Rechtspraak",
-            "bol": "Bol",
-            "bol.com": "Bol",
-            "nike": "NIKE",
-            "nike, inc.": "NIKE",
-            "nike inc": "NIKE",
-            "yardi": "Yardi",
-            "yardi systems": "Yardi",
-            "jaarbeurs": "Jaarbeurs",
-            "royal dutch jaarbeurs": "Jaarbeurs",
-            "déhora consultancy": "Déhora",
-            "dehora consultancy": "Déhora",
-            "déhora": "Déhora",
-            "dehora": "Déhora",
-            "excellence recruitment": "Excellence AG",
-            "excellence ag": "Excellence AG",
-            "het abc": "Het ABC",
-            "tool2match": "Tool2Match",
-            "gemeente amstelveen": "Gemeente Amstelveen",
-            "axioncontinu": "AxionContinu",
-            "hunkemoller": "Hunkemöller",
-            "hunkemöller": "Hunkemöller",
-            "linkedin trust & safety team": "LinkedIn",
-            "linkedin": "LinkedIn",
-            "gtecombv": "GTE",
-            "gte": "GTE"
-        };
-        
-        const lower = clean.toLowerCase();
-        if (map[lower]) return map[lower];
-        if (lower.includes("linkedin")) return "LinkedIn";
-        
-        clean = clean.replace(/^(?:Info|No-Reply|Noreply|Support|Helpdesk|Contact|Service|Team|Recruitment|Careers|News|Newsletter|Orders|Billing|Admin|Office|Receptuur)\s+/i, "").trim();
-        clean = clean.replace(/(\s+|,)+(Inc\.|Inc|B\.V\.|BV|LLC|Ltd\.|Ltd|GmbH|AG|Corp\.|Corp|Co\.|Co)$/i, "").trim();
-        if (clean === clean.toLowerCase() && clean.length > 1) {
-            clean = clean.charAt(0).toUpperCase() + clean.slice(1);
-        }
-        return clean;
-    };
 
     const _normStr = (str) => str ? str.toLowerCase().replace(/[^a-z0-9]/g, "") : "";
     let knownCompanies = new Map();
@@ -6986,7 +6955,6 @@ const DEFAULT_THEME = initialTheme();
            }
        }
        
-       senderKey = normalizeBrandName(senderKey);
        const normKey = _normStr(senderKey);
        if (normKey && knownCompanies.has(normKey)) {
            senderKey = knownCompanies.get(normKey);
@@ -6997,19 +6965,51 @@ const DEFAULT_THEME = initialTheme();
        return { displaySender: senderKey, initialsSource };
     };
 
-    async function loadEmails() {
+    let currentOffset = 0;
+    const LIMIT = 150;
+    let hasMoreEmails = false;
+    let isEmailsLoading = false;
+
+    async function loadEmails(reset = true) {
       if (!inboxList) return;
+      if (isEmailsLoading) return;
+      
+      if (reset) {
+          currentOffset = 0;
+          allEmails = [];
+      }
+      
+      isEmailsLoading = true;
       try {
-        const res = await fetch("/api/gmail/emails");
-        const data = await res.json();
-        allEmails = data.emails || [];
+        const searchInput = document.getElementById("emailSearchInput");
+        const searchVal = searchInput ? searchInput.value : "";
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        const directionSelect = document.getElementById("emailDirectionSelect");
+        const directionVal = directionSelect ? directionSelect.value : "all";
         
-        // Clean up LLM artifacts and normalize company names
-        allEmails.forEach(e => {
-            if (e.analysis && typeof e.analysis.company_name === 'string') {
-                e.analysis.company_name = normalizeBrandName(e.analysis.company_name);
-            }
+        const params = new URLSearchParams({
+            limit: LIMIT,
+            offset: currentOffset
         });
+        if (searchVal) params.append("search", searchVal);
+        if (activeCat !== "All") params.append("category", activeCat);
+        if (directionVal !== "all") params.append("direction", directionVal);
+        
+        const res = await fetch(`/api/gmail/emails?${params.toString()}`);
+        const data = await res.json();
+        
+        if (reset) {
+            allEmails = data.emails || [];
+            // Remove old load more button if exists
+            const oldBtn = document.getElementById('loadMoreEmailsBtn');
+            if (oldBtn) oldBtn.remove();
+        } else {
+            const newEmails = data.emails || [];
+              const existingIds = new Set(allEmails.map(e => e.message_id));
+              const uniqueNew = newEmails.filter(e => !existingIds.has(e.message_id));
+              allEmails = allEmails.concat(uniqueNew);
+        }
+        hasMoreEmails = data.has_more || false;
         
         knownCompanies = new Map();
         allEmails.forEach(e => {
@@ -7022,14 +7022,39 @@ const DEFAULT_THEME = initialTheme();
             }
         });
 
-        window.updateCategoryTabs();
+        if (data.category_counts) {
+            window.updateCategoryTabs(data.category_counts, data.total);
+        } else {
+            window.updateCategoryTabs();
+        }
 
-        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-        renderEmails(activeCat);
-        // Also trigger job render to apply badges
+        renderEmails(); // No filter arg needed, backend filters
+        
+        // Add Load More Button
+        let loadBtn = document.getElementById('loadMoreEmailsBtn');
+        if (hasMoreEmails) {
+            if (!loadBtn) {
+                loadBtn = document.createElement('button');
+                loadBtn.id = 'loadMoreEmailsBtn';
+                loadBtn.className = 'btn secondary small';
+                loadBtn.style.margin = '20px auto';
+                loadBtn.style.display = 'block';
+                loadBtn.textContent = 'Load More Emails';
+                loadBtn.addEventListener('click', () => {
+                    currentOffset += LIMIT;
+                    loadEmails(false);
+                });
+                inboxList.parentNode.appendChild(loadBtn);
+            }
+        } else if (loadBtn) {
+            loadBtn.remove();
+        }
+
         renderJobs();
       } catch (e) {
         inboxList.innerHTML = `<div class="error-state">Failed to load emails: ${e.message}</div>`;
+      } finally {
+        isEmailsLoading = false;
       }
     }
 
@@ -7085,7 +7110,7 @@ const DEFAULT_THEME = initialTheme();
         const affectedEmails = allEmails.filter(e => ids.includes(e.message_id));
         allEmails = allEmails.filter(e => !ids.includes(e.message_id));
         const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-        renderEmails(activeCat);
+        renderEmails();
         window.updateBulkToolbar();
 
         // 2. Schedule backend action
@@ -7140,7 +7165,7 @@ const DEFAULT_THEME = initialTheme();
                 allEmails = [...allEmails, ...affectedEmails];
                 allEmails.sort((a, b) => new Date(b.date) - new Date(a.date));
                 const currentCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(currentCat);
+                renderEmails();
                 window.updateBulkToolbar();
             }
         });
@@ -7153,7 +7178,7 @@ const DEFAULT_THEME = initialTheme();
         const affectedEmails = allEmails.filter(e => ids.includes(e.message_id));
         allEmails = allEmails.filter(e => !ids.includes(e.message_id));
         const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-        renderEmails(activeCat);
+        renderEmails();
         window.updateBulkToolbar();
 
         // 2. Schedule backend action
@@ -7208,7 +7233,7 @@ const DEFAULT_THEME = initialTheme();
                 allEmails = [...allEmails, ...affectedEmails];
                 allEmails.sort((a, b) => new Date(b.date) - new Date(a.date));
                 const currentCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(currentCat);
+                renderEmails();
                 window.updateBulkToolbar();
             }
         });
@@ -7224,6 +7249,47 @@ const DEFAULT_THEME = initialTheme();
         const checkboxes = document.querySelectorAll('.email-card-select:checked');
         const ids = Array.from(checkboxes).map(cb => cb.value);
         window.deleteEmails(ids);
+    };
+
+    window.bulkMarkAsRead = function() {
+        const checkboxes = document.querySelectorAll('.email-card-select:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        window.markAsRead(ids, true);
+    };
+
+    window.bulkMarkAsUnread = function() {
+        const checkboxes = document.querySelectorAll('.email-card-select:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        window.markAsRead(ids, false);
+    };
+
+    window.markAsRead = async function(ids, isRead) {
+        if (!ids || ids.length === 0) return;
+        
+        // Optimistic UI Update
+        allEmails.forEach(e => {
+            if (ids.includes(e.message_id)) {
+                e.read_status = isRead ? 1 : 0;
+            }
+        });
+        
+        const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
+        renderEmails();
+        window.updateBulkToolbar();
+        
+        try {
+            const res = await fetch('/api/gmail/email/read-status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message_ids: ids, is_read: isRead })
+            });
+            if (!res.ok) {
+                console.error("Failed to sync read status");
+                showToast("Failed to sync read status to Gmail", "error");
+            }
+        } catch (e) {
+            console.error("Error syncing read status:", e);
+        }
     };
 
     window.correctEmailCategory = async function(messageId, newCategory, selectElement) {
@@ -7247,17 +7313,17 @@ const DEFAULT_THEME = initialTheme();
                 
                 // Re-render
                 const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(activeCat);
+                renderEmails();
             } else {
                 showToast("Failed to correct category: " + data.error, "error");
                 // Re-render to restore previous UI state
                 const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-                renderEmails(activeCat);
+                renderEmails();
             }
         } catch (e) {
             showToast("Failed to correct category.", "error");
             const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-            renderEmails(activeCat);
+            renderEmails();
         }
     };
 
@@ -7270,18 +7336,16 @@ const DEFAULT_THEME = initialTheme();
         });
         updateBulkToolbar();
     };
-    window.updateCategoryTabs = function() {
-        const catGroupSets = {};
-        allEmails.forEach(email => {
-          const cat = (email.analysis && email.analysis.category) || "Other";
-          if (!catGroupSets[cat]) catGroupSets[cat] = new Set();
-          const { displaySender } = getEmailDisplayInfo(email);
-          catGroupSets[cat].add(displaySender);
-        });
-
-        const categoryCounts = { "All": allEmails.length };
-        for (const [cat, groupSet] of Object.entries(catGroupSets)) {
-          categoryCounts[cat] = groupSet.size;
+    window.updateCategoryTabs = function(globalCounts = null, totalAll = 0) {
+        let categoryCounts = { "All": totalAll };
+        if (globalCounts) {
+            categoryCounts = { "All": totalAll, ...globalCounts };
+        } else {
+            categoryCounts = { "All": allEmails.length };
+            allEmails.forEach(email => {
+              const cat = (email.analysis && email.analysis.category) || "Other";
+              categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+            });
         }
         
         document.querySelectorAll('.inbox-categories .career-lane-tab').forEach(tab => {
@@ -7297,7 +7361,7 @@ const DEFAULT_THEME = initialTheme();
         });
     };
 
-    function renderEmails(filterCategory) {
+    function renderEmails() {
       if (!window.jobAgentNavigateToLinkedJob) {
         window.jobAgentNavigateToLinkedJob = (jobTitle) => {
           const btn = document.querySelector('[data-app-page="jobs"]');
@@ -7320,10 +7384,6 @@ const DEFAULT_THEME = initialTheme();
           }
         };
       }
-      if (!inboxList) return;
-      inboxList.innerHTML = "";
-      
-      window.updateCategoryTabs();
       
       const searchInput = document.getElementById("emailSearchInput");
       if (searchInput && !searchInput.dataset.listenerAdded) {
@@ -7333,39 +7393,22 @@ const DEFAULT_THEME = initialTheme();
                  clearTimeout(window.emailSearchTimeout);
              }
              window.emailSearchTimeout = setTimeout(() => {
-                 const activeTab = document.querySelector('.career-lane-tabs.inbox-categories .career-lane-tab.active');
-                 const currentCategory = activeTab ? activeTab.dataset.category : "All";
-                 renderEmails(currentCategory);
+                 loadEmails(true);
              }, 300);
          });
       }
 
-      const searchText = (searchInput ? searchInput.value : "").toLowerCase();
-      
-      const filtered = allEmails.filter(e => {
-        const matchesCategory = filterCategory === "All" || (e.analysis && e.analysis.category === filterCategory);
-        if (!matchesCategory) return false;
-        
-        if (!searchText) return true;
-        
-        const sender = (e.sender || "").toLowerCase();
-        const recipient = (e.recipient || "").toLowerCase();
-        const cc = (e.cc || "").toLowerCase();
-        const company = (e.analysis && e.analysis.company ? e.analysis.company : "").toLowerCase();
-        const snippet = (e.analysis && e.analysis.snippet ? e.analysis.snippet : "").toLowerCase();
-        const subject = (e.subject || "").toLowerCase();
-        const body = (e.body || "").toLowerCase();
-        const linkedJob = (e.linked_job_title || "").toLowerCase();
-        
-        return sender.includes(searchText) || 
-               recipient.includes(searchText) ||
-               cc.includes(searchText) ||
-               company.includes(searchText) || 
-               snippet.includes(searchText) || 
-               subject.includes(searchText) ||
-               body.includes(searchText) ||
-               linkedJob.includes(searchText);
-      });
+      const directionSelect = document.getElementById("emailDirectionSelect");
+      if (directionSelect && !directionSelect.dataset.listenerAdded) {
+         directionSelect.dataset.listenerAdded = "true";
+         directionSelect.addEventListener("change", () => {
+             loadEmails(true);
+         });
+      }
+
+      if (!inboxList) return;
+      inboxList.innerHTML = ''; // Fix DOM duplication
+      const filtered = allEmails;
       
       if (filtered.length === 0) {
         inboxList.innerHTML = `
@@ -7381,8 +7424,8 @@ const DEFAULT_THEME = initialTheme();
       const sortOrder = sortSelect ? sortSelect.value : 'newest';
       
       filtered.sort((a, b) => {
-        const timeA = new Date(a.date).getTime();
-        const timeB = new Date(b.date).getTime();
+        const timeA = a.parsed_timestamp ? a.parsed_timestamp * 1000 : new Date(a.date).getTime();
+        const timeB = b.parsed_timestamp ? b.parsed_timestamp * 1000 : new Date(b.date).getTime();
         return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
       });
       
@@ -7415,32 +7458,27 @@ const DEFAULT_THEME = initialTheme();
         const { displaySender, initialsSource } = getEmailDisplayInfo(email);
         const initials = getInitials(initialsSource);
         
+        const isRead = email.read_status !== false && email.read_status !== 0;
+        const unreadIndicator = isRead ? "" : `<div style="width: 8px; height: 8px; background-color: var(--status-good); border-radius: 50%; display: inline-block; margin-right: 6px;" title="Unread"></div>`;
+        const fontWeight = isRead ? "normal" : "600";
+        
         const badgesHtml = [];
-        if (email.is_forwarded) {
-            badgesHtml.push(`<span class="email-flag is-forwarded"><svg class="icon"><path d="M14 7l5 5-5 5V9H5v-4h9v2z" fill="currentColor"/></svg> Forwarded</span>`);
+        if (email.is_outbound) {
+            badgesHtml.push(`<span class="email-flag is-outbound" style="background: rgba(14,165,233,0.15); color: #38bdf8; border: 1px solid rgba(14,165,233,0.3);">Sent</span>`);
+        } else {
+            badgesHtml.push(`<span class="email-flag is-inbound" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3);">Received</span>`);
         }
-        if (email.is_reply) {
-            badgesHtml.push(`<span class="email-flag is-reply"><svg class="icon"><path d="M10 7L5 12l5 5v-3h9V9h-9V7z" fill="currentColor"/></svg> Reply</span>`);
-        }
-        if (email.is_automated) {
-            badgesHtml.push(`<span class="email-flag is-automated"><svg class="icon"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v5l3 2" fill="none" stroke="currentColor" stroke-width="2"/></svg> Automated</span>`);
-        }
-        if (email.has_attachments) {
-            badgesHtml.push(`<span class="email-flag has-attachment"><svg class="icon"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" stroke-width="2"/></svg> Attachment</span>`);
-        }
-        if (email.has_calendar_invite) {
-            badgesHtml.push(`<span class="email-flag has-calendar"><svg class="icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/><line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/></svg> Calendar Invite</span>`);
-        }
+
 
         card.innerHTML = `
           <div style="display: flex; align-items: flex-start; padding-right: 12px; padding-top: 4px;">
             <input type="checkbox" class="email-card-select" value="${email.message_id}" onclick="event.stopPropagation()" onchange="updateBulkToolbar()" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--status-good);">
           </div>
           <div class="email-avatar ${safe(cat)}">${safe(initials)}</div>
-          <div class="email-body-content">
+          <div class="email-body-content" style="font-weight: ${fontWeight};">
             <div class="email-header" style="align-items: flex-start;">
               <div class="email-meta-left">
-                <span class="email-company-pill">${safe(displaySender)}</span>
+                ${unreadIndicator}<span class="email-company-pill">${safe(displaySender)}</span>
               </div>
               <div class="email-meta-right" style="display: flex; align-items: center; gap: 8px;">
                 <button class="email-btn-archive" onclick="event.stopPropagation(); archiveEmails(['${email.message_id}'])" title="Archive in Gmail & Dashboard" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">📦 Archive</button>
@@ -7458,6 +7496,8 @@ const DEFAULT_THEME = initialTheme();
                     <div onclick="correctEmailCategory('${email.message_id}', 'Personal', this)">Personal</div>
                     <div onclick="correctEmailCategory('${email.message_id}', 'Promotions', this)">Promotions</div>
                     <div onclick="correctEmailCategory('${email.message_id}', 'Other', this)">Other</div>
+                    <hr style="margin: 4px 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div onclick="markAsRead(['${email.message_id}'], ${!isRead})">Mark as ${isRead ? 'Unread' : 'Read'}</div>
                   </div>
                 </div>
               </div>
@@ -7551,6 +7591,17 @@ const DEFAULT_THEME = initialTheme();
                   badgeHtml = `<span class="email-group-badge mixed-categories" style="--badge-gradient: ${gradientStr};"><span>${group.length} emails</span></span>`;
               }
               
+              let directionBadgeHtml = '';
+              const allSent = group.every(e => e.is_outbound);
+              const allReceived = group.every(e => !e.is_outbound);
+              if (allSent) {
+                  directionBadgeHtml = `<span class="email-flag is-outbound" style="background: rgba(14,165,233,0.15); color: #38bdf8; border: 1px solid rgba(14,165,233,0.3); margin-left: 0;">Sent</span>`;
+              } else if (allReceived) {
+                  directionBadgeHtml = `<span class="email-flag is-inbound" style="background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); margin-left: 0;">Received</span>`;
+              } else {
+                  directionBadgeHtml = `<span class="email-flag mixed-direction" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); margin-left: 0;">Sent & Received</span>`;
+              }
+              
               container.innerHTML = `
                 <div class="email-group-header" onclick="this.parentElement.classList.toggle('expanded')">
                   <div style="display: flex; align-items: center; gap: 16px;">
@@ -7559,8 +7610,11 @@ const DEFAULT_THEME = initialTheme();
                     </div>
                     <div class="email-avatar" style="margin-top: 0; background: var(--surface-3);">${safe(initials)}</div>
                     <div class="email-group-title">
-                      <span>${safe(displaySender)}</span>
-                      ${badgeHtml}
+                      <strong>${safe(displaySender)}</strong>
+                      <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                        ${badgeHtml}
+                        ${directionBadgeHtml}
+                      </div>
                     </div>
                   </div>
                   <svg class="icon email-group-icon"><use href="#icon-trending-down"></use></svg>
@@ -7583,15 +7637,14 @@ const DEFAULT_THEME = initialTheme();
       btn.addEventListener("click", () => {
         categoryBtns.forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
-        renderEmails(btn.dataset.category);
+        loadEmails(true);
       });
     });
     
     const emailSortSelect = document.getElementById('emailSortSelect');
     if (emailSortSelect) {
         emailSortSelect.addEventListener('change', () => {
-            const activeCat = document.querySelector(".inbox-categories .career-lane-tab.active")?.dataset.category || "All";
-            renderEmails(activeCat);
+            renderEmails();
         });
     }
 
@@ -7611,10 +7664,10 @@ const DEFAULT_THEME = initialTheme();
         const companyEl = card.querySelector(".job-company");
         if (!titleEl || !companyEl) return;
         
-        const company = normalizeBrandName(companyEl.textContent).toLowerCase();
+        const company = (companyEl.textContent || "").trim().toLowerCase();
         
         // Find matching email
-        const matchingEmail = emails.find(e => e.analysis && e.analysis.company_name && normalizeBrandName(e.analysis.company_name).toLowerCase() === company);
+        const matchingEmail = emails.find(e => e.analysis && e.analysis.company_name && (e.analysis.company_name || "").trim().toLowerCase() === company);
         
         if (matchingEmail) {
           const oldBadge = titleEl.querySelector(".gmail-badge");

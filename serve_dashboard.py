@@ -48,6 +48,7 @@ CLEAN_EXPIRED_STATUS = "Not running"
 CLEAN_EXPIRED_PROCESS = None
 GMAIL_SYNC_STATUS = {"status": "idle", "new_emails": 0, "error": None}
 GMAIL_SYNC_CANCEL = False
+GMAIL_SYNC_LOCK = threading.Lock()
 OPERATIONAL_STORE_LOCK = threading.Lock()
 
 def _run_clean_expired_background(targets: list[str], scan_mode: str = "SKIP_ACTIVE"):
@@ -1084,23 +1085,68 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             try:
                 import sqlite3
                 db_path = self.user_workspace.root / "data" / "user_workspace" / "job_scout.db"
-                limit = self._query_int("limit", 2000)
+                limit = self._query_int("limit", 150)
                 offset = self._query_int("offset", 0)
+                search = self._query_value("search")
+                category = self._query_value("category")
+                direction = self._query_value("direction")
+                if category == "All": category = None
+                
                 with sqlite3.connect(db_path) as conn:
-                    try:
-                        from agent.gmail_service import GmailService
-                        GmailService(self.user_workspace.root).repair_existing_emails(conn)
-                    except Exception:
-                        pass
-                    rows = conn.execute("SELECT message_id, payload_json FROM emails WHERE COALESCE(is_archived, 0) = 0 ORDER BY COALESCE(parsed_timestamp, 0) DESC, date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-                    total = conn.execute("SELECT COUNT(*) FROM emails WHERE COALESCE(is_archived, 0) = 0").fetchone()[0]
+                    counts_rows = conn.execute("SELECT category, COUNT(*) FROM emails WHERE COALESCE(is_archived, 0) = 0 GROUP BY category").fetchall()
+                    category_counts = {r[0]: r[1] for r in counts_rows if r[0]}
+                    
+                    where_clauses = ["COALESCE(e.is_archived, 0) = 0"]
+                    params = []
+                    
+                    if category:
+                        where_clauses.append("e.category = ?")
+                        params.append(category)
+                        
+                    if direction == "sent":
+                        where_clauses.append("json_extract(e.payload_json, '$.is_outbound') = 1")
+                    elif direction == "received":
+                        where_clauses.append("(json_extract(e.payload_json, '$.is_outbound') = 0 OR json_extract(e.payload_json, '$.is_outbound') IS NULL)")
+                        
+                    if search:
+                        import re
+                        words = [w for w in re.split(r'\s+', search) if w]
+                        match_parts = []
+                        for w in words:
+                            clean_w = re.sub(r'[^a-zA-Z0-9_]', '', w)
+                            if clean_w:
+                                match_parts.append(f'"{clean_w}"*')
+                        if match_parts:
+                            params.append(" AND ".join(match_parts))
+                            where_clauses.append("e.rowid IN (SELECT rowid FROM emails_fts WHERE emails_fts MATCH ?)")
+                        
+                    where_str = " AND ".join(where_clauses)
+                    query = f"SELECT e.message_id, e.payload_json, e.category, e.parsed_timestamp, e.read_status FROM emails e WHERE {where_str} ORDER BY COALESCE(e.parsed_timestamp, 0) DESC, e.date DESC LIMIT ? OFFSET ?"
+                    count_query = f"SELECT COUNT(*) FROM emails e WHERE {where_str}"
+                    
+                    rows = conn.execute(query, params + [limit, offset]).fetchall()
+                    total = conn.execute(count_query, params).fetchone()[0]
+                    
                 emails = []
                 for row in rows:
                     if row[1]:
                         email_data = json.loads(row[1])
                         email_data["message_id"] = row[0]
+                        if row[2]:
+                            email_data["category"] = row[2]
+                        if row[3]:
+                            email_data["parsed_timestamp"] = row[3]
+                        if len(row) > 4:
+                            email_data["read_status"] = bool(row[4])
                         emails.append(email_data)
-                self._send_json({"emails": emails, "total": total})
+                self._send_json({
+                    "emails": emails, 
+                    "total": total, 
+                    "category_counts": category_counts, 
+                    "limit": limit, 
+                    "offset": offset, 
+                    "has_more": offset + len(emails) < total
+                })
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
             return
@@ -1190,7 +1236,9 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             })
             return
         if self._path_without_query() == "/api/gmail/sync-status":
-            self._send_json(GMAIL_SYNC_STATUS)
+            with GMAIL_SYNC_LOCK:
+                status_copy = dict(GMAIL_SYNC_STATUS)
+            self._send_json(status_copy)
             return
 
         if self._path_without_query() == "/api/gmail/rules":
@@ -1243,7 +1291,34 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                     )
                     conn.commit()
                     rule_id = cursor.lastrowid
-                    self._send_json({"ok": True, "rule": {"id": rule_id, "sender_pattern": pattern, "category": category, "created_at": created_at}})
+                    
+                # Retroactively update matching emails
+                affected_count = 0
+                import sqlite3
+                import re
+                db_path = self.user_workspace.root / "data" / "user_workspace" / "job_scout.db"
+                with sqlite3.connect(db_path) as mail_conn:
+                    senders = mail_conn.execute("SELECT DISTINCT sender FROM emails").fetchall()
+                    matching_senders = []
+                    for (s,) in senders:
+                        if not s: continue
+                        if pattern.startswith("^") or pattern.endswith("$"):
+                            if re.search(pattern, s, re.IGNORECASE):
+                                matching_senders.append(s)
+                        else:
+                            if pattern.lower() in s.lower():
+                                matching_senders.append(s)
+                                
+                    if matching_senders:
+                        placeholders = ",".join("?" * len(matching_senders))
+                        upd_cursor = mail_conn.execute(
+                            f"UPDATE emails SET category = ? WHERE sender IN ({placeholders})",
+                            [category] + matching_senders
+                        )
+                        affected_count = upd_cursor.rowcount
+                        mail_conn.commit()
+                
+                self._send_json({"ok": True, "affected_count": affected_count, "rule": {"id": rule_id, "sender_pattern": pattern, "category": category, "created_at": created_at}})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, status=500)
             return
@@ -1285,7 +1360,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             
             try:
                 from agent.gmail_service import GmailService
-                service = GmailService()
+                service = GmailService(self.user_workspace.root)
                 result = service.save_email_correction(message_id, corrected_category)
                 if result.get("ok"):
                     self._send_json(result)
@@ -1353,6 +1428,10 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
         if self._path_without_query() == "/api/gmail/clear":
             try:
+                payload = self._read_json_body()
+                if not payload or not payload.get("confirm"):
+                    self._send_json({"error": "Missing confirmation in payload", "ok": False}, status=400)
+                    return
                 import sqlite3
                 db_path = self.user_workspace.root / "data" / "user_workspace" / "job_scout.db"
                 with sqlite3.connect(db_path) as conn:
@@ -1361,6 +1440,19 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json({"ok": True, "message": "All synced emails cleared."})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+            return
+        if self._path_without_query() == "/api/gmail/email/read-status":
+            try:
+                payload = self._read_json_body()
+                msg_ids = payload.get("message_ids")
+                if not msg_ids and payload.get("message_id"):
+                    msg_ids = [payload.get("message_id")]
+                is_read = bool(payload.get("is_read", True))
+                from agent.gmail_service import GmailService
+                res = GmailService(self.user_workspace.root).set_read_status(msg_ids or [], is_read)
+                self._send_json(res, status=200 if res.get("ok", True) else 400)
+            except Exception as e:
+                self._send_json({"error": str(e), "ok": False}, status=500)
             return
         if self._path_without_query() == "/api/gmail/email/archive":
             try:
@@ -1392,31 +1484,38 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 days = int(payload.get("days", 7))
                 root_path = str(self.user_workspace.root)
 
-                if GMAIL_SYNC_STATUS.get("status") == "running":
-                    self._send_json({"status": "running", "new_emails": GMAIL_SYNC_STATUS.get("new_emails", 0)})
+                with GMAIL_SYNC_LOCK:
+                    is_running = GMAIL_SYNC_STATUS.get("status") == "running"
+                    new_emails = GMAIL_SYNC_STATUS.get("new_emails", 0)
+                if is_running:
+                    self._send_json({"status": "running", "new_emails": new_emails})
                     return
 
                 def _run_sync():
                     global GMAIL_SYNC_STATUS, GMAIL_SYNC_CANCEL
-                    GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "processed": 0, "total": 0, "error": None}
-                    GMAIL_SYNC_CANCEL = False
+                    with GMAIL_SYNC_LOCK:
+                        GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "processed": 0, "total": 0, "error": None}
+                        GMAIL_SYNC_CANCEL = False
                     
                     def _progress(current, total, new_cnt):
                         global GMAIL_SYNC_STATUS
-                        GMAIL_SYNC_STATUS["processed"] = current
-                        GMAIL_SYNC_STATUS["total"] = total
-                        GMAIL_SYNC_STATUS["new_emails"] = new_cnt
+                        with GMAIL_SYNC_LOCK:
+                            GMAIL_SYNC_STATUS["processed"] = current
+                            GMAIL_SYNC_STATUS["total"] = total
+                            GMAIL_SYNC_STATUS["new_emails"] = new_cnt
                         
                     try:
                         from agent.gmail_service import GmailService
                         service = GmailService(root_path)
                         res = service.sync_emails(days_back=days, cancel_check=lambda: GMAIL_SYNC_CANCEL, progress_callback=_progress)
-                        if "error" in res:
-                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
-                        else:
-                            GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
+                        with GMAIL_SYNC_LOCK:
+                            if "error" in res:
+                                GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
+                            else:
+                                GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
                     except Exception as exc:
-                        GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
+                        with GMAIL_SYNC_LOCK:
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
 
                 threading.Thread(target=_run_sync, daemon=True).start()
                 self._send_json({"status": "started", "new_emails": 0})
@@ -1428,25 +1527,31 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             try:
                 root_path = str(self.user_workspace.root)
 
-                if GMAIL_SYNC_STATUS.get("status") == "running":
-                    self._send_json({"status": "running", "new_emails": GMAIL_SYNC_STATUS.get("new_emails", 0)})
+                with GMAIL_SYNC_LOCK:
+                    is_running = GMAIL_SYNC_STATUS.get("status") == "running"
+                    new_emails = GMAIL_SYNC_STATUS.get("new_emails", 0)
+                if is_running:
+                    self._send_json({"status": "running", "new_emails": new_emails})
                     return
 
                 def _run_sync_test():
                     global GMAIL_SYNC_STATUS, GMAIL_SYNC_CANCEL
-                    GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "error": None}
-                    GMAIL_SYNC_CANCEL = False
+                    with GMAIL_SYNC_LOCK:
+                        GMAIL_SYNC_STATUS = {"status": "running", "new_emails": 0, "error": None}
+                        GMAIL_SYNC_CANCEL = False
                     try:
                         from agent.gmail_service import GmailService
                         service = GmailService(root_path)
                         # Call sync_emails with max_emails=1 for testing
                         res = service.sync_emails(days_back=7, max_emails=1, cancel_check=lambda: GMAIL_SYNC_CANCEL)
-                        if "error" in res:
-                            GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
-                        else:
-                            GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
+                        with GMAIL_SYNC_LOCK:
+                            if "error" in res:
+                                GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
+                            else:
+                                GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
                     except Exception as exc:
-                        GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
+                        with GMAIL_SYNC_LOCK:
+                            GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}
 
                 threading.Thread(target=_run_sync_test, daemon=True).start()
                 self._send_json({"status": "started", "new_emails": 0})
@@ -1456,7 +1561,8 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
         if self._path_without_query() == "/api/gmail/sync-cancel":
             global GMAIL_SYNC_CANCEL
-            GMAIL_SYNC_CANCEL = True
+            with GMAIL_SYNC_LOCK:
+                GMAIL_SYNC_CANCEL = True
             self._send_json({"ok": True, "message": "Cancellation requested."})
             return
 
