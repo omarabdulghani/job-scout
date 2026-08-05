@@ -1110,12 +1110,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                         
                     if search:
                         import re
-                        words = [w for w in re.split(r'\s+', search) if w]
+                        clean_search = re.sub(r'[^a-zA-Z0-9_]', ' ', search)
+                        words = [w for w in re.split(r'\s+', clean_search) if w]
                         match_parts = []
                         for w in words:
-                            clean_w = re.sub(r'[^a-zA-Z0-9_]', '', w)
-                            if clean_w:
-                                match_parts.append(f'"{clean_w}"*')
+                            match_parts.append(f'"{w}"*')
                         if match_parts:
                             params.append(" AND ".join(match_parts))
                             where_clauses.append("e.rowid IN (SELECT rowid FROM emails_fts WHERE emails_fts MATCH ?)")

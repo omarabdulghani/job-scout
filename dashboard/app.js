@@ -7307,6 +7307,7 @@ const DEFAULT_THEME = initialTheme();
                 // Update local array
                 const emailObj = allEmails.find(e => e.message_id === messageId);
                 if (emailObj) {
+                    emailObj.category = newCategory;
                     if (!emailObj.analysis) emailObj.analysis = {};
                     emailObj.analysis.category = newCategory;
                 }
@@ -7343,7 +7344,7 @@ const DEFAULT_THEME = initialTheme();
         } else {
             categoryCounts = { "All": allEmails.length };
             allEmails.forEach(email => {
-              const cat = (email.analysis && email.analysis.category) || "Other";
+              const cat = email.category || (email.analysis && email.analysis.category) || "Other";
               categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
             });
         }
@@ -7449,7 +7450,7 @@ const DEFAULT_THEME = initialTheme();
         const card = document.createElement("div");
         card.className = "email-card";
         
-        const cat = (email.analysis && email.analysis.category) || "Other";
+        const cat = email.category || (email.analysis && email.analysis.category) || "Other";
         let summaryText = (email.analysis && email.analysis.summary) || "";
         if (!summaryText) {
             summaryText = email.subject || email.snippet || "";
@@ -7550,7 +7551,7 @@ const DEFAULT_THEME = initialTheme();
               
               const catCounts = {};
               group.forEach(e => {
-                  const cat = (e.analysis && e.analysis.category) || 'Other';
+                  const cat = e.category || (e.analysis && e.analysis.category) || 'Other';
                   catCounts[cat] = (catCounts[cat] || 0) + 1;
               });
               
@@ -7673,7 +7674,7 @@ const DEFAULT_THEME = initialTheme();
           const oldBadge = titleEl.querySelector(".gmail-badge");
           if (oldBadge) oldBadge.remove();
           
-          const cat = matchingEmail.analysis.category;
+          const cat = matchingEmail.category || (matchingEmail.analysis && matchingEmail.analysis.category) || "Other";
           if (cat !== "Other" && cat !== "Promotions" && cat !== "Personal") {
               const badge = document.createElement("span");
               badge.className = `gmail-badge ${cat.toLowerCase()}`;

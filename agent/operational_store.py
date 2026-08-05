@@ -500,6 +500,20 @@ class OperationalStore:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
+            # Check if emails_fts is using the old content=emails schema
+            try:
+                fts_def = connection.execute("SELECT sql FROM sqlite_master WHERE name='emails_fts' AND type='table'").fetchone()
+                if fts_def:
+                    sql_text = fts_def[0].replace(" ", "")
+                    if "content=emails," in sql_text or "full_body" not in sql_text:
+                        connection.execute("DROP TRIGGER IF EXISTS emails_ai")
+                        connection.execute("DROP TRIGGER IF EXISTS emails_ad")
+                        connection.execute("DROP TRIGGER IF EXISTS emails_au")
+                        connection.execute("DROP TABLE IF EXISTS emails_fts")
+                        connection.execute("DROP VIEW IF EXISTS emails_fts_view")
+            except Exception:
+                pass
+
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS metadata (
@@ -609,31 +623,45 @@ class OperationalStore:
                     created_at TEXT NOT NULL
                 );
                 
+                CREATE VIEW IF NOT EXISTS emails_fts_view AS 
+                SELECT 
+                    rowid, 
+                    message_id, 
+                    subject, 
+                    sender, 
+                    company_name, 
+                    snippet,
+                    json_extract(payload_json, '$.recipient') AS recipient,
+                    json_extract(payload_json, '$.body') AS full_body
+                FROM emails;
+                
                 CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
                     message_id UNINDEXED, 
                     subject, 
                     sender, 
                     company_name, 
                     snippet, 
-                    content=emails, 
+                    recipient,
+                    full_body,
+                    content=emails_fts_view, 
                     content_rowid=rowid
                 );
                 
                 CREATE TRIGGER IF NOT EXISTS emails_ai AFTER INSERT ON emails BEGIN
-                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
-                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet);
+                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet, recipient, full_body) 
+                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet, json_extract(new.payload_json, '$.recipient'), json_extract(new.payload_json, '$.body'));
                 END;
                 
                 CREATE TRIGGER IF NOT EXISTS emails_ad AFTER DELETE ON emails BEGIN
-                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet) 
-                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet);
+                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet, recipient, full_body) 
+                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet, json_extract(old.payload_json, '$.recipient'), json_extract(old.payload_json, '$.body'));
                 END;
                 
                 CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
-                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet) 
-                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet);
-                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
-                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet);
+                  INSERT INTO emails_fts(emails_fts, rowid, message_id, subject, sender, company_name, snippet, recipient, full_body) 
+                  VALUES('delete', old.rowid, old.message_id, old.subject, old.sender, old.company_name, old.snippet, json_extract(old.payload_json, '$.recipient'), json_extract(old.payload_json, '$.body'));
+                  INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet, recipient, full_body) 
+                  VALUES (new.rowid, new.message_id, new.subject, new.sender, new.company_name, new.snippet, json_extract(new.payload_json, '$.recipient'), json_extract(new.payload_json, '$.body'));
                 END;
                 """
             )
@@ -654,10 +682,7 @@ class OperationalStore:
                 # Populate FTS if empty but emails exist
                 fts_count = connection.execute("SELECT COUNT(*) FROM emails_fts").fetchone()[0]
                 if fts_count == 0:
-                    connection.execute("""
-                        INSERT INTO emails_fts(rowid, message_id, subject, sender, company_name, snippet) 
-                        SELECT rowid, message_id, subject, sender, company_name, snippet FROM emails
-                    """)
+                    connection.execute("INSERT INTO emails_fts(emails_fts) VALUES('rebuild')")
             except Exception:
                 pass
             self._ensure_column(connection, "emails", "is_archived", "INTEGER DEFAULT 0")
