@@ -434,6 +434,17 @@ class LinkedInJobScout:
         "must be fluent in dutch",
         "vloeiend nederlands",
     }
+    DUTCH_AS_A_PLUS_MARKERS = {
+        "dutch is a plus",
+        "dutch would be a plus",
+        "dutch preferred",
+        "dutch is preferred",
+        "dutch is an advantage",
+        "dutch is nice to have",
+        "dutch nice to have",
+        "dutch is not required",
+        "dutch not required",
+    }
     DUTCH_COMMUNICATION_CONTEXT_MARKERS = {
         "dutch copywriting",
         "copywriting in dutch",
@@ -455,10 +466,12 @@ class LinkedInJobScout:
         "arbeidsrecht",
         "policy writing",
         "hr advisory",
-        "legal",
-        "compliance",
-        "recruitment",
-        "sales",
+        "legal counsel",
+        "legal advisor",
+        "regulatory compliance",
+        "candidate screening",
+        "client-facing sales",
+        "sales advisory",
     }
     PREOPEN_UNRELATED_TITLE_MARKERS = {
         "annotator",
@@ -5383,6 +5396,10 @@ class LinkedInJobScout:
 
     def _contextual_fluent_dutch_requirement(self, job: dict) -> str:
         combined_text = self._combined_job_text(job)
+        
+        if self._first_matching_marker(combined_text, self.DUTCH_AS_A_PLUS_MARKERS):
+            return ""
+
         fluent_marker = self._first_matching_marker(combined_text, self.FLUENT_DUTCH_MARKERS)
         if not fluent_marker:
             return ""
@@ -5421,11 +5438,8 @@ class LinkedInJobScout:
 
     def _hard_viability_marker_reason(self, job: dict) -> str:
         title = (job.get("title") or "").strip().lower()
-        listing_text = self._listing_text(job)
 
         marker = self._first_matching_marker(title, self.PREOPEN_UNRELATED_TITLE_MARKERS)
-        if not marker:
-            marker = self._first_matching_marker(listing_text, self.PREOPEN_UNRELATED_TITLE_MARKERS)
 
         if marker:
             return f"Role is clearly incompatible with the graduate-level opportunity funnel: {marker}"
