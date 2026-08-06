@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -1997,6 +1997,11 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
 
     def _load_dashboard_metadata(self) -> dict[str, Any]:
         dashboard_data = self._read_dashboard_data()
+        
+        # Build map to backfill historical missing fields from scraped jobs
+        active_jobs = dashboard_data.get("jobs", []) if isinstance(dashboard_data.get("jobs"), list) else []
+        job_map = {build_job_key(j): j for j in active_jobs}
+        
         dashboard_data["jobs"] = []
         state = DashboardUserStateStore(self.user_state_path).data
         workspace = UserWorkspace()
@@ -2004,6 +2009,14 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         personal = profile.get("personal") if isinstance(profile.get("personal"), dict) else {}
         dashboard_data["candidate_name"] = f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip() or "Candidate Name"
         manual_counts = {"unreviewed": 0, "applied": 0, "irrelevant": 0, "expired": 0}
+        velocity = {
+            "day": {"total": 0, "easy": 0, "ext": 0},
+            "week": {"total": 0, "easy": 0, "ext": 0},
+            "month": {"total": 0, "easy": 0, "ext": 0},
+        }
+        
+        now = datetime.now(timezone.utc)
+        
         total_jobs = int((dashboard_data.get("summary") or {}).get("total_jobs") or 0)
         saved_jobs = state.get("jobs", {}) if isinstance(state, dict) else {}
         for record in saved_jobs.values() if isinstance(saved_jobs, dict) else []:
@@ -2012,11 +2025,42 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
             status = str(record.get("status") or "unreviewed")
             if status in manual_counts:
                 manual_counts[status] += 1
+                
+            if status == "applied":
+                applied_at_str = record.get("applied_at") or record.get("updated_at")
+                if applied_at_str:
+                    try:
+                        applied_at = datetime.fromisoformat(applied_at_str.replace("Z", "+00:00"))
+                        delta_days = (now - applied_at).total_seconds() / 86400.0
+                        is_easy = bool(record.get("easy_apply", False))
+                        if not is_easy:
+                            job_key = record.get("job_key")
+                            if job_key in job_map:
+                                is_easy = bool(job_map[job_key].get("easy_apply", False))
+                                
+                        if delta_days <= 1.0:
+                            velocity["day"]["total"] += 1
+                            if is_easy: velocity["day"]["easy"] += 1
+                            else: velocity["day"]["ext"] += 1
+                            
+                        if delta_days <= 7.0:
+                            velocity["week"]["total"] += 1
+                            if is_easy: velocity["week"]["easy"] += 1
+                            else: velocity["week"]["ext"] += 1
+                            
+                        if delta_days <= 30.0:
+                            velocity["month"]["total"] += 1
+                            if is_easy: velocity["month"]["easy"] += 1
+                            else: velocity["month"]["ext"] += 1
+                    except Exception:
+                        pass
+                        
         manual_counts["unreviewed"] = max(
             0,
             total_jobs - manual_counts["applied"] - manual_counts["irrelevant"] - manual_counts["expired"],
         )
         dashboard_data.setdefault("summary", {})["by_manual_status"] = manual_counts
+        dashboard_data.setdefault("summary", {})["application_velocity"] = velocity
         dashboard_data.setdefault("filter_options", {})["manual_statuses"] = [
             {"value": "unreviewed", "label": "Unreviewed"},
             {"value": "applied", "label": "Applied"},

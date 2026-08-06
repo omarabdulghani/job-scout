@@ -291,6 +291,105 @@
           </div>
         </header>
 
+        <style>
+          .momentum-tracker {
+            display: none;
+            flex-direction: row;
+            gap: 16px;
+            margin-top: 24px;
+            margin-bottom: 24px;
+            align-items: center;
+            flex-wrap: wrap;
+          }
+          .momentum-tracker.visible {
+            display: flex;
+          }
+          .momentum-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .momentum-pill {
+            display: flex;
+            align-items: center;
+            background: var(--surface-2, #1e293b);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 8px 16px;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          }
+          .momentum-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+          }
+          .momentum-pill .period {
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-right: 14px;
+            padding-right: 14px;
+            border-right: 1px solid var(--line);
+          }
+          .momentum-pill .stats-group {
+            display: flex;
+            gap: 16px;
+            align-items: baseline;
+            color: var(--muted);
+          }
+          .momentum-pill .stat-item {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            font-size: 0.85rem;
+          }
+          .momentum-pill .stat-item strong {
+            color: var(--ink);
+            font-weight: 700;
+            font-size: 1.25rem;
+          }
+          .stat-item.easy strong {
+            color: var(--external-blue, #3b82f6);
+          }
+        </style>
+        <div id="momentumTracker" class="momentum-tracker">
+          <div class="momentum-label">
+            <svg class="icon icon-sm"><use href="#icon-activity"></use></svg> Momentum
+          </div>
+          <div class="momentum-pill">
+            <div class="period">🔥 24h</div>
+            <div class="stats-group">
+              <div class="stat-item"><strong><span id="momDayTotal">0</span></strong> Total</div>
+              <div class="stat-item easy"><strong><span id="momDayEasy">0</span></strong> Easy</div>
+              <div class="stat-item"><strong><span id="momDayExt">0</span></strong> Ext</div>
+            </div>
+          </div>
+          <div class="momentum-pill">
+            <div class="period">📈 7 Days</div>
+            <div class="stats-group">
+              <div class="stat-item"><strong><span id="momWeekTotal">0</span></strong> Total</div>
+              <div class="stat-item easy"><strong><span id="momWeekEasy">0</span></strong> Easy</div>
+              <div class="stat-item"><strong><span id="momWeekExt">0</span></strong> Ext</div>
+            </div>
+          </div>
+          <div class="momentum-pill">
+            <div class="period">🎯 30 Days</div>
+            <div class="stats-group">
+              <div class="stat-item"><strong><span id="momMonthTotal">0</span></strong> Total</div>
+              <div class="stat-item easy"><strong><span id="momMonthEasy">0</span></strong> Easy</div>
+              <div class="stat-item"><strong><span id="momMonthExt">0</span></strong> Ext</div>
+            </div>
+          </div>
+        </div>
         <section class="stats" aria-label="Dashboard summary">
           <div class="stat supporting-stat"><span>Total jobs</span><strong id="statTotal">0</strong><svg
               class="icon stat-icon">
@@ -327,10 +426,6 @@
           <div class="stat archive-stat"><span>Irrelevant</span><strong id="statIrrelevant">0</strong><svg
               class="icon stat-icon">
               <use href="#icon-archive"></use>
-            </svg></div>
-          <div class="stat archive-stat"><span>Expired</span><strong id="statExpired">0</strong><svg
-              class="icon stat-icon">
-              <use href="#icon-clock"></use>
             </svg></div>
         </section>
 

@@ -345,6 +345,16 @@ const DEFAULT_THEME = initialTheme();
       statusDot: document.getElementById("statusDot"),
       statusText: document.getElementById("statusText"),
       updatedAt: document.getElementById("updatedAt"),
+      momentumTracker: document.getElementById("momentumTracker"),
+      momDayTotal: document.getElementById("momDayTotal"),
+      momDayEasy: document.getElementById("momDayEasy"),
+      momDayExt: document.getElementById("momDayExt"),
+      momWeekTotal: document.getElementById("momWeekTotal"),
+      momWeekEasy: document.getElementById("momWeekEasy"),
+      momWeekExt: document.getElementById("momWeekExt"),
+      momMonthTotal: document.getElementById("momMonthTotal"),
+      momMonthEasy: document.getElementById("momMonthEasy"),
+      momMonthExt: document.getElementById("momMonthExt"),
       statTotal: document.getElementById("statTotal"),
       statActive: document.getElementById("statActive"),
       statApply: document.getElementById("statApply"),
@@ -354,7 +364,6 @@ const DEFAULT_THEME = initialTheme();
       statUnreviewed: document.getElementById("statUnreviewed"),
       statApplied: document.getElementById("statApplied"),
       statIrrelevant: document.getElementById("statIrrelevant"),
-      statExpired: document.getElementById("statExpired"),
       freshPanel: document.getElementById("freshPanel"),
       freshTitle: document.getElementById("freshTitle"),
       overallProgressContainer: document.getElementById("overallProgressContainer"),
@@ -3183,8 +3192,26 @@ const DEFAULT_THEME = initialTheme();
       );
       els.statApplied.textContent = String(manual.applied || 0);
       els.statIrrelevant.textContent = String(manual.irrelevant || 0);
-      els.statExpired.textContent = String(manual.expired || 0);
       els.updatedAt.textContent = "Updated: " + (formatDateTime(state.data.dashboard_updated_at) || "never");
+      
+      const velocity = summary.application_velocity;
+      if (velocity && els.momentumTracker) {
+        els.momentumTracker.classList.add("visible");
+        
+        if (els.momDayTotal) els.momDayTotal.textContent = velocity.day.total;
+        if (els.momDayEasy) els.momDayEasy.textContent = velocity.day.easy;
+        if (els.momDayExt) els.momDayExt.textContent = velocity.day.ext;
+        
+        if (els.momWeekTotal) els.momWeekTotal.textContent = velocity.week.total;
+        if (els.momWeekEasy) els.momWeekEasy.textContent = velocity.week.easy;
+        if (els.momWeekExt) els.momWeekExt.textContent = velocity.week.ext;
+        
+        if (els.momMonthTotal) els.momMonthTotal.textContent = velocity.month.total;
+        if (els.momMonthEasy) els.momMonthEasy.textContent = velocity.month.easy;
+        if (els.momMonthExt) els.momMonthExt.textContent = velocity.month.ext;
+      } else if (els.momentumTracker) {
+        els.momentumTracker.classList.remove("visible");
+      }
     }
 
     function renderFreshProgress() {

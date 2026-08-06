@@ -89,6 +89,7 @@ class DashboardUserStateStore:
             "location": clean_text(job.get("location")),
             "last_run_id": clean_text(job.get("run_id")),
             "last_run_label": clean_text(job.get("run_label")),
+            "easy_apply": bool(job.get("easy_apply")),
         }
         existing = self.data.get("jobs", {}).get(job_key, {})
         if isinstance(existing, dict):
@@ -102,6 +103,8 @@ class DashboardUserStateStore:
             ):
                 if field in existing:
                     record[field] = existing[field]
+            if "easy_apply" in existing and "easy_apply" not in job:
+                record["easy_apply"] = bool(existing["easy_apply"])
         if normalized_status == STATUS_APPLIED and not record.get("application_stage"):
             record["application_stage"] = APPLICATION_STAGE_APPLIED
             record["application_stage_label"] = APPLICATION_STAGE_LABELS[APPLICATION_STAGE_APPLIED]
@@ -151,6 +154,7 @@ class DashboardUserStateStore:
                 "location": clean_text(job.get("location")) or record.get("location", ""),
                 "last_run_id": clean_text(job.get("run_id")) or record.get("last_run_id", ""),
                 "last_run_label": clean_text(job.get("run_label")) or record.get("last_run_label", ""),
+                "easy_apply": bool(job.get("easy_apply", record.get("easy_apply", False))),
                 "application_stage": normalized_stage,
                 "application_stage_label": APPLICATION_STAGE_LABELS[normalized_stage],
                 "application_updated_at": timestamp,
@@ -246,6 +250,9 @@ class DashboardUserStateStore:
             job["applied_at"] = clean_text(record.get("applied_at")) if record else ""
             job["follow_up_at"] = clean_text(record.get("follow_up_at")) if record else ""
             job["application_notes"] = str(record.get("notes") or "") if record else ""
+            
+            if record and "easy_apply" in record:
+                job["easy_apply"] = bool(record["easy_apply"])
 
         summary = merged.setdefault("summary", {})
         if isinstance(summary, dict):
