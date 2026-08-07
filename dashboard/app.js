@@ -6802,17 +6802,24 @@ const DEFAULT_THEME = initialTheme();
         syncedItems.forEach(item => {
           const li = document.createElement('li');
           li.className = 'job-card';
-          li.style.padding = '12px';
+          li.style.padding = '14px 16px';
           li.style.marginBottom = '0';
+          li.style.display = 'flex';
+          li.style.flexDirection = 'column';
+          li.style.gap = '8px';
+          li.style.transition = 'transform 0.15s ease, box-shadow 0.15s ease';
+          li.onmouseenter = () => { li.style.transform = 'translateY(-2px)'; li.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; };
+          li.onmouseleave = () => { li.style.transform = 'none'; li.style.boxShadow = 'none'; };
 
           const catLower = (item.category || 'other').toLowerCase();
           
           li.innerHTML = `
-            <div class="job-card-header" style="margin-bottom: 4px;">
-              <h3 style="font-size: 1rem; margin: 0; line-height: 1.2;">${safe(item.subject || 'No Subject')}</h3>
-              <span class="badge ${catLower}">${item.category || 'Other'}</span>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+              <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--ink); margin: 0; line-height: 1.4; word-break: break-word;">${safe(item.subject || 'No Subject')}</h3>
+              <span class="tag ${catLower}" style="flex-shrink: 0; padding: 4px 8px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 9999px;">${item.category || 'Other'}</span>
             </div>
-            <div class="job-card-meta" style="font-size: 0.85rem; color: var(--muted);">
+            <div style="font-size: 0.85rem; color: var(--muted); margin: 0; display: flex; align-items: center; gap: 6px;">
+              <svg class="icon icon-sm"><use href="#icon-briefcase"></use></svg>
               ${safe(item.company_name || (item.sender ? item.sender.split('<')[0].replace(/"/g, '').trim() : 'Unknown Sender') || 'Unknown Sender')}
             </div>
           `;
@@ -6821,6 +6828,9 @@ const DEFAULT_THEME = initialTheme();
 
         overlay.classList.remove('hidden');
       }
+      
+      // Expose to window for testing the UI
+      window.testShowSyncModal = showSyncOverviewModal;
 
       async function checkSyncStatus() {
         try {
