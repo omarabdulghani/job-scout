@@ -590,6 +590,7 @@ Examples of Reasoning:
             processed_count = 0
             new_emails = 0
             loop_index = 0
+            synced_items_list = []
             
             with self._connect_db() as conn:
                 self.repair_existing_emails(conn)
@@ -816,6 +817,12 @@ Examples of Reasoning:
                                     parsed_ts
                                 ))
                                 conn.commit()
+                                synced_items_list.append({
+                                    "subject": subject,
+                                    "sender": sender,
+                                    "category": category,
+                                    "company_name": company,
+                                })
                                 new_emails += 1
                                 processed_count += 1
                     except Exception as loop_err:
@@ -824,7 +831,7 @@ Examples of Reasoning:
                         
             mail.close()
             mail.logout()
-            return {"status": "success", "new_emails": new_emails}
+            return {"status": "success", "new_emails": new_emails, "synced_items": synced_items_list}
             
         except Exception as e:
             try:
@@ -832,7 +839,7 @@ Examples of Reasoning:
                 mail.logout()
             except Exception:
                 pass
-            return {"error": str(e), "new_emails": new_emails, "status": "error"}
+            return {"error": str(e), "new_emails": new_emails, "status": "error", "synced_items": locals().get("synced_items_list", [])}
 
     def archive_emails(self, message_ids: list) -> dict:
         if not message_ids:

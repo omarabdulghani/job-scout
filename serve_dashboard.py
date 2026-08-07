@@ -1511,7 +1511,7 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                             if "error" in res:
                                 GMAIL_SYNC_STATUS = {"status": "error", "error": res["error"], "new_emails": res.get("new_emails", 0)}
                             else:
-                                GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "error": None}
+                                GMAIL_SYNC_STATUS = {"status": "completed", "new_emails": res.get("new_emails", 0), "synced_items": res.get("synced_items", []), "error": None}
                     except Exception as exc:
                         with GMAIL_SYNC_LOCK:
                             GMAIL_SYNC_STATUS = {"status": "error", "error": str(exc), "new_emails": 0}

@@ -6790,6 +6790,38 @@ const DEFAULT_THEME = initialTheme();
       let pollInterval = null;
       const stopSyncBtn = document.getElementById("stopSyncButton");
 
+      function showSyncOverviewModal(syncedItems) {
+        const overlay = document.getElementById('gmailSyncOverviewOverlay');
+        const title = document.getElementById('syncOverviewTitle');
+        const list = document.getElementById('syncOverviewList');
+        if (!overlay || !title || !list) return;
+
+        title.textContent = `${syncedItems.length} New Email${syncedItems.length === 1 ? '' : 's'} Found`;
+        list.innerHTML = '';
+
+        syncedItems.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'job-card';
+          li.style.padding = '12px';
+          li.style.marginBottom = '0';
+
+          const catLower = (item.category || 'other').toLowerCase();
+          
+          li.innerHTML = `
+            <div class="job-card-header" style="margin-bottom: 4px;">
+              <h3 style="font-size: 1rem; margin: 0; line-height: 1.2;">${safe(item.subject || 'No Subject')}</h3>
+              <span class="badge ${catLower}">${item.category || 'Other'}</span>
+            </div>
+            <div class="job-card-meta" style="font-size: 0.85rem; color: var(--muted);">
+              ${safe(item.company_name || (item.sender ? item.sender.split('<')[0].replace(/"/g, '').trim() : 'Unknown Sender') || 'Unknown Sender')}
+            </div>
+          `;
+          list.appendChild(li);
+        });
+
+        overlay.classList.remove('hidden');
+      }
+
       async function checkSyncStatus() {
         try {
           const res = await fetch("/api/gmail/sync-status");
@@ -6831,7 +6863,11 @@ const DEFAULT_THEME = initialTheme();
               
               await loadEmails();
               if (status.status === "completed") {
-                showToast(`Sync complete! ${status.new_emails || 0} new emails processed.`);
+                if (status.new_emails > 0 && status.synced_items && status.synced_items.length > 0) {
+                  showSyncOverviewModal(status.synced_items);
+                } else {
+                  showToast(`Sync complete! No new emails found.`);
+                }
               } else if (status.status === "error") {
                 showToast(`Sync issue: ${status.error || 'Unknown error'}`);
               }
